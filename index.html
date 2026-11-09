@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>I'M HERE</title>
+<script>window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/";</script>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Cesium.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.120.0/Build/Cesium/Widgets/widgets.css">
+<style>
+  html, body, #world { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
+  #places { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; gap: 10px; z-index: 5; }
+  button { font: 600 18px system-ui, sans-serif; padding: 14px 20px; border: 1px solid rgba(255,255,255,.35); border-radius: 12px; background: rgba(0,0,0,.55); color: #fff; cursor: pointer; }
+  #gate { position: fixed; inset: 0; z-index: 10; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; background: #05070b; color: #fff; text-align: center; }
+  #gate h1 { margin: 0; font-size: 40px; letter-spacing: .04em; }
+  #gate input { width: min(560px, 90vw); box-sizing: border-box; font-size: 18px; padding: 14px; border-radius: 10px; border: 1px solid #567; background: #101722; color: #fff; }
+  #msg { max-width: 640px; color: #ffb4a8; line-height: 1.4; }
+  .cesium-viewer-bottom { z-index: 4; }
+</style>
+</head>
+<body>
+<div id="world"></div>
+<div id="places" hidden>
+  <button data-place="bna">BNA</button>
+  <button data-place="nashville">Nashville</button>
+  <button data-place="lake">Old Hickory</button>
+</div>
+<form id="gate">
+  <h1>I'M HERE</h1>
+  <input id="key" placeholder="Paste Google key" autocomplete="off" spellcheck="false">
+  <button type="submit">Go</button>
+  <div id="msg"></div>
+</form>
+<script>
+(function () {
+  var STORE = "imhere.googleKey";
+  var PLACES = {
+    bna:       { lon: -86.655, lat: 36.185, height: 620,  heading: 200, pitch: -7 },
+    nashville: { lon: -86.760, lat: 36.135, height: 520,  heading: 5,   pitch: -12 },
+    lake:      { lon: -86.610, lat: 36.260, height: 420,  heading: 330, pitch: -10 }
+  };
+  var gate = document.getElementById("gate");
+  var input = document.getElementById("key");
+  var msg = document.getElementById("msg");
+  var places = document.getElementById("places");
+  var viewer = null;
+
+  function readKey() { try { return localStorage.getItem(STORE) || ""; } catch (e) { return ""; } }
+  function saveKey(k) { try { localStorage.setItem(STORE, k); } catch (e) {} }
+  function clearKey() { try { localStorage.removeItem(STORE); } catch (e) {} }
+
+  function showGate(text) {
+    msg.textContent = text || "";
+    gate.style.display = "flex";
+    places.hidden = true;
+  }
+
+  function goTo(name, seconds) {
+    var p = PLACES[name];
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, p.height),
+      orientation: {
+        heading: Cesium.Math.toRadians(p.heading),
+        pitch: Cesium.Math.toRadians(p.pitch),
+        roll: 0
+      },
+      duration: seconds
+    });
+  }
+
+  function explain(error) {
+    var status = error && error.statusCode;
+    if (status === 403 || status === 400) {
+      clearKey();
+      return "Google refused this key (" + status + "). Check that it was pasted whole and that Map Tiles API is enabled.";
+    }
+    if (status === 429) { return "Google's daily limit was reached (429). Try again later."; }
+    return "The 3D map did not load: " + ((error && error.message) || error || "unknown error");
+  }
+
+  async function start(key) {
+    gate.style.display = "none";
+    try {
+      if (!viewer) {
+        viewer = new Cesium.Viewer("world", {
+          globe: false,
+          baseLayer: false,
+          animation: false,
+          timeline: false,
+          geocoder: false,
+          homeButton: false,
+          sceneModePicker: false,
+          baseLayerPicker: false,
+          navigationHelpButton: false,
+          fullscreenButton: false,
+          infoBox: false,
+          selectionIndicator: false
+        });
+        viewer.scene.skyAtmosphere.show = true;
+      }
+      var tileset = await Cesium.Cesium3DTileset.fromUrl(
+        "https://tile.googleapis.com/v1/3dtiles/root.json?key=" + encodeURIComponent(key),
+        { showCreditsOnScreen: true, maximumScreenSpaceError: 8 }
+      );
+      viewer.scene.primitives.add(tileset);
+      saveKey(key);
+      places.hidden = false;
+      goTo("bna", 0);
+    } catch (error) {
+      showGate(explain(error));
+    }
+  }
+
+  places.addEventListener("click", function (event) {
+    var name = event.target.getAttribute("data-place");
+    if (name) { goTo(name, 3); }
+  });
+
+  gate.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var key = input.value.trim();
+    if (key) { start(key); } else { msg.textContent = "Paste the key first."; }
+  });
+
+  if (!window.Cesium) {
+    showGate("The 3D engine did not load. Check the connection and reload.");
+    return;
+  }
+  var saved = readKey();
+  if (saved) { start(saved); } else { showGate(""); }
+})();
+</script>
+</body>
+</html>
