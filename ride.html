@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>I'M HERE Ride</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://esm.sh/three@0.170.0",
+    "three/": "https://esm.sh/three@0.170.0/",
+    "3d-tiles-renderer": "https://esm.sh/3d-tiles-renderer@0.4?external=three",
+    "3d-tiles-renderer/plugins": "https://esm.sh/3d-tiles-renderer@0.4/plugins?external=three"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+  canvas { display: block; }
+  #note { position: fixed; inset: auto 0 96px 0; text-align: center; padding: 0 20px; font-size: 18px; line-height: 1.4; }
+  #credit { position: fixed; left: 10px; bottom: 8px; font-size: 13px; opacity: .85; }
+  a { color: #8ab4ff; }
+</style>
+</head>
+<body>
+<div id="note">Loading...</div>
+<div id="credit">Map data: Google. Flight data: adsb.lol</div>
+<script type="module">
+const STORE = "imhere.googleKey";
+const FEED = "https://api.adsb.lol/v2";
+const CENTER = { lat: 36.1245, lon: -86.6782 };
+const SEARCH_NM = 150;
+const POLL_MS = 4000;
+const LOST_MS = 60000;
+const FOLLOW_TAU = 2.0;
+const ANGLE_TAU = 2.5;
+const PREFERRED_TYPES = ["B737", "B738", "B739", "B38M", "B39M", "B733", "B734", "B735", "B736"];
+const FT = 0.3048, KT = 0.514444, FPM = 0.00508, G = 9.81;
+const M_PER_DEG_LAT = 110950;
+
+const note = document.getElementById("note");
+function say(text) { note.textContent = text; }
+function readKey() { try { return localStorage.getItem(STORE) || ""; } catch (e) { return ""; } }
+function radians(d) { return d * Math.PI / 180; }
+function wrap(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
+function metersPerDegLon(lat) { return 111320 * Math.cos(radians(lat)); }
+
+function setLocalFrame(matrix, place) {
+  const a = 6378137, e2 = 6.69437999014e-3;
+  const lat = radians(place.lat), lon = radians(place.lon);
+  const sLat = Math.sin(lat), cLat = Math.cos(lat), sLon = Math.sin(lon), cLon = Math.cos(lon);
+  const N = a / Math.sqrt(1 - e2 * sLat * sLat);
+  const px = (N + place.height) * cLat * cLon;
+  const py = (N + place.height) * cLat * sLon;
+  const pz = (N * (1 - e2) + place.height) * sLat;
+  const ex = -sLon, ey = cLon, ez = 0;
+  const ux = cLat * cLon, uy = cLat * sLon, uz = sLat;
+  const sx = sLat * cLon, sy = sLat * sLon, sz = -cLat;
+  matrix.set(
+    ex, ey, ez, -(ex * px + ey * py + ez * pz),
+    ux, uy, uz, -(ux * px + uy * py + uz * pz),
+    sx, sy, sz, -(sx * px + sy * py + sz * pz),
+    0, 0, 0, 1
+  );
+}
+
+async function getJson(url) {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) { throw new Error("feed answered " + response.status); }
+  return response.json();
+}
+
+function usable(ac) {
+  return typeof ac.lat === "number" && typeof ac.lon === "number" && typeof ac.gs === "number"
+    && typeof ac.track === "number" && typeof ac.alt_baro === "number"
+    && ac.alt_baro > 3000 && ac.gs > 150 && ac.t;
+}
+
+function report(ac) {
+  const feet = typeof ac.alt_geom === "number" ? ac.alt_geom : ac.alt_baro;
+  const rate = typeof ac.geom_rate === "number" ? ac.geom_rate
+    : (typeof ac.baro_rate === "number" ? ac.baro_rate : 0);
+  const age = (typeof ac.seen_pos === "number" ? ac.seen_pos : (ac.seen || 0)) * 1000;
+  return {
+    time: performance.now() - age,
+    lat: ac.lat, lon: ac.lon, height: feet * FT,
+    speed: ac.gs * KT, heading: radians(ac.track), climb: rate * FPM
+  };
+}
+
+function predict(r, now, ahead) {
+  const t = Math.min(30, (now - r.time) / 1000) + (ahead || 0);
+  const distance = r.speed * t;
+  return {
+    lat: r.lat + distance * Math.cos(r.heading) / M_PER_DEG_LAT,
+    lon: r.lon + distance * Math.sin(r.heading) / metersPerDegLon(r.lat),
+    height: r.height + r.climb * t
+  };
+}
+
+async function main() {
+  const key = readKey();
+  if (!key) { say("Enter your key once on the main page, then come back."); return; }
+  const THREE = await import("three");
+  const { VRButton } = await import("three/examples/jsm/webxr/VRButton.js");
+  const { DRACOLoader } = await import("three/examples/jsm/loaders/DRACOLoader.js");
+  const { TilesRenderer } = await import("3d-tiles-renderer");
+  const { GoogleCloudAuthPlugin, GLTFExtensionsPlugin } = await import("3d-tiles-renderer/plugins");
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType("local");
+  document.body.appendChild(renderer.domElement);
+  document.body.appendChild(VRButton.createButton(renderer));
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x9cc4e8);
+  scene.add(new THREE.AmbientLight(0xffffff, 3));
+
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 900000);
+  const rig = new THREE.Group();
+  rig.rotation.order = "YXZ";
+  rig.add(camera);
+  scene.add(rig);
+
+  // Eye level sits about a quarter of the way down the picture, in the windshield.
+  const texture = await new THREE.TextureLoader().loadAsync("cockpit.webp");
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const COCKPIT_DISTANCE = 1;
+  const COCKPIT_WIDTH = 2 * Math.tan(radians(55)) * COCKPIT_DISTANCE;
+  const COCKPIT_HEIGHT = COCKPIT_WIDTH * 941 / 1672;
+  const cockpit = new THREE.Mesh(
+    new THREE.PlaneGeometry(COCKPIT_WIDTH, COCKPIT_HEIGHT),
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false })
+  );
+  cockpit.position.set(0, -(0.5 - 0.245) * COCKPIT_HEIGHT, -COCKPIT_DISTANCE);
+  cockpit.renderOrder = 20;
+  cockpit.frustumCulled = false;
+  rig.add(cockpit);
+
+  const tiles = new TilesRenderer("https://tile.googleapis.com/v1/3dtiles/root.json");
+  tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key, autoRefreshToken: true }));
+  const draco = new DRACOLoader().setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
+  tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco }));
+  tiles.errorTarget = 16;
+  if (tiles.downloadQueue) { tiles.downloadQueue.maxJobs = 30; }
+  if (tiles.parseQueue) { tiles.parseQueue.maxJobs = 6; }
+  tiles.group.matrixAutoUpdate = false;
+  scene.add(tiles.group);
+
+  const earthToWorld = tiles.group.matrix;
+  const scoutPoint = new THREE.Vector3();
+  const scouts = [20, 60].map(function () {
+    const scout = new THREE.PerspectiveCamera(90, 1, 1, 900000);
+    scout.rotation.order = "YXZ";
+    tiles.setCamera(scout);
+    tiles.setResolution(scout, 1000, 1000);
+    return scout;
+  });
+  const SCOUT_SECONDS = [20, 60];
+
+  let candidates = [];
+  let chosenIndex = 0;
+  let target = null;       // latest report for the plane being followed
+  let label = "";
+  let lastHeard = 0;
+  let previousHeading = null;
+  let previousReportTime = 0;
+  let turnRate = 0;
+  const shown = { lat: CENTER.lat, lon: CENTER.lon, height: 3000, heading: 0, pitch: 0, bank: 0 };
+  let hasPosition = false;
+
+  function describe(ac) {
+    return (ac.flight ? ac.flight.trim() : ac.hex) + " " + ac.t + (ac.r ? " " + ac.r : "");
+  }
+
+  function accept(ac) {
+    const r = report(ac);
+    if (target && r.time <= target.time) { return; }
+    if (previousHeading !== null && r.time > previousReportTime) {
+      const seconds = (r.time - previousReportTime) / 1000;
+      if (seconds > 0.5 && seconds < 30) { turnRate = wrap(r.heading - previousHeading) / seconds; }
+    }
+    previousHeading = r.heading;
+    previousReportTime = r.time;
+    target = r;
+    lastHeard = performance.now();
+  }
+
+  function follow(ac) {
+    target = null;
+    previousHeading = null;
+    turnRate = 0;
+    hasPosition = false;
+    label = describe(ac);
+    accept(ac);
+    say("Riding " + label + ". Press ENTER VR. Trigger picks another plane.");
+  }
+
+  async function findPlanes() {
+    const data = await getJson(FEED + "/lat/" + CENTER.lat + "/lon/" + CENTER.lon + "/dist/" + SEARCH_NM);
+    const list = (data.ac || data.aircraft || []).filter(usable);
+    list.sort(function (a, b) {
+      const pa = PREFERRED_TYPES.includes(a.t) ? 0 : 1;
+      const pb = PREFERRED_TYPES.includes(b.t) ? 0 : 1;
+      return pa - pb || a.alt_baro - b.alt_baro;
+    });
+    candidates = list;
+    return list;
+  }
+
+  async function nextPlane() {
+    await findPlanes();
+    if (!candidates.length) { target = null; say("No airliners found near BNA right now."); return; }
+    chosenIndex = (chosenIndex + 1) % candidates.length;
+    follow(candidates[chosenIndex]);
+  }
+
+  try {
+    say("Looking for airliners near BNA...");
+    await findPlanes();
+    if (!candidates.length) { say("No airliners found near BNA right now."); }
+    else { chosenIndex = 0; follow(candidates[0]); }
+  } catch (error) {
+    say("The flight feed was blocked or unavailable: " + error.message + ". Tell Claude this exact message.");
+    return;
+  }
+
+  let currentHex = candidates.length ? candidates[0].hex : "";
+  async function poll() {
+    try {
+      if (!target || performance.now() - lastHeard > LOST_MS) {
+        await nextPlane();
+      } else {
+        currentHex = candidates[chosenIndex].hex;
+        const data = await getJson(FEED + "/hex/" + currentHex);
+        const ac = (data.ac || data.aircraft || [])[0];
+        if (ac && typeof ac.lat === "number" && typeof ac.gs === "number" && typeof ac.track === "number") {
+          if (typeof ac.alt_baro === "number") { accept(ac); }
+          else { lastHeard = 0; }     // it has landed; move to another plane
+        }
+      }
+    } catch (error) { /* keep flying on the last report and try again */ }
+    setTimeout(poll, POLL_MS);
+  }
+  setTimeout(poll, POLL_MS);
+
+  function pressTrigger() { nextPlane().catch(function () {}); }
+  for (const i of [0, 1]) {
+    const controller = renderer.xr.getController(i);
+    controller.addEventListener("selectstart", pressTrigger);
+    rig.add(controller);
+  }
+  renderer.domElement.addEventListener("click", function () {
+    if (!renderer.xr.isPresenting) { pressTrigger(); }
+  });
+
+  let activeCamera = camera;
+  tiles.setCamera(camera);
+  function useCamera(next) {
+    if (next === activeCamera) { return; }
+    tiles.deleteCamera(activeCamera);
+    tiles.setCamera(next);
+    activeCamera = next;
+  }
+
+  window.addEventListener("resize", function () {
+    if (renderer.xr.isPresenting) { return; }
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  let last = performance.now();
+  renderer.setAnimationLoop(function (now) {
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    last = now;
+    if (target) {
+      const wanted = predict(target, performance.now());
+      if (!hasPosition) {
+        shown.lat = wanted.lat; shown.lon = wanted.lon; shown.height = wanted.height;
+        shown.heading = target.heading;
+        hasPosition = true;
+      }
+      const follow1 = 1 - Math.exp(-dt / FOLLOW_TAU);
+      const turn1 = 1 - Math.exp(-dt / ANGLE_TAU);
+      shown.lat += (wanted.lat - shown.lat) * follow1;
+      shown.lon += (wanted.lon - shown.lon) * follow1;
+      shown.height += (wanted.height - shown.height) * follow1;
+      shown.heading = wrap(shown.heading + wrap(target.heading - shown.heading) * turn1);
+      const wantPitch = (target.speed > 1 ? Math.asin(Math.max(-0.3, Math.min(0.3, target.climb / target.speed))) : 0) + radians(2.5);
+      const limit = radians(28);
+      const wantBank = Math.max(-limit, Math.min(limit, Math.atan(target.speed * turnRate / G)));
+      shown.pitch += (wantPitch - shown.pitch) * turn1;
+      shown.bank += (wantBank - shown.bank) * turn1;
+
+      setLocalFrame(earthToWorld, shown);
+      tiles.group.matrixWorldNeedsUpdate = true;
+      tiles.group.updateMatrixWorld(true);
+      rig.rotation.set(shown.pitch, -shown.heading, -shown.bank);
+
+      const sin = Math.sin(shown.heading), cos = Math.cos(shown.heading);
+      scouts.forEach(function (scout, i) {
+        const distance = target.speed * SCOUT_SECONDS[i];
+        scout.position.set(distance * sin, 0, -distance * cos);
+        scout.rotation.set(-0.15, -shown.heading, 0);
+        scout.updateMatrixWorld(true);
+      });
+    }
+    if (renderer.xr.isPresenting) {
+      const xrCamera = renderer.xr.getCamera();
+      useCamera(xrCamera);
+      const eye = xrCamera.cameras[0];
+      if (eye && eye.viewport) { tiles.setResolution(xrCamera, eye.viewport.z, eye.viewport.w); }
+    } else {
+      useCamera(camera);
+      tiles.setResolutionFromRenderer(camera, renderer);
+    }
+    rig.updateMatrixWorld(true);
+    tiles.update();
+    renderer.render(scene, camera);
+  });
+}
+
+main().catch(function (error) {
+  say("Ride page failed to start: " + ((error && error.message) || error));
+});
+</script>
+</body>
+</html>
