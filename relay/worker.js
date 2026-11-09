@@ -24,3 +24,5 @@ export default {
     return new Response('{"error":"feeds unavailable"}', { status: 502, headers });
   }
 };
+
+// Flight relay for the I AM HERE prototype.
