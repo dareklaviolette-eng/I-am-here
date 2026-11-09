@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>I'M HERE VR</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://esm.sh/three@0.170.0",
+    "three/": "https://esm.sh/three@0.170.0/",
+    "3d-tiles-renderer": "https://esm.sh/3d-tiles-renderer@0.4?external=three",
+    "3d-tiles-renderer/plugins": "https://esm.sh/3d-tiles-renderer@0.4/plugins?external=three"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+  canvas { display: block; }
+  #note { position: fixed; inset: auto 0 96px 0; text-align: center; padding: 0 20px; font-size: 18px; line-height: 1.4; }
+  #credit { position: fixed; left: 10px; bottom: 8px; font-size: 13px; opacity: .85; }
+  a { color: #8ab4ff; }
+</style>
+</head>
+<body>
+<div id="note">Loading...</div>
+<div id="credit">Map data: Google</div>
+<script type="module">
+const STORE = "imhere.googleKey";
+const note = document.getElementById("note");
+function say(html) { note.innerHTML = html; }
+
+// height is meters above the WGS84 ellipsoid; heading is degrees clockwise from north.
+const PLACES = [
+  { lon: -86.655, lat: 36.185, height: 620, heading: 200 },
+  { lon: -86.760, lat: 36.135, height: 520, heading: 5 },
+  { lon: -86.610, lat: 36.260, height: 420, heading: 330 }
+];
+
+function readKey() { try { return localStorage.getItem(STORE) || ""; } catch (e) { return ""; } }
+
+// Returns the matrix that puts this point at the origin with X east, Y up and Z south.
+function localFrame(THREE, place) {
+  const a = 6378137, e2 = 6.69437999014e-3;
+  const lat = THREE.MathUtils.degToRad(place.lat);
+  const lon = THREE.MathUtils.degToRad(place.lon);
+  const sLat = Math.sin(lat), cLat = Math.cos(lat), sLon = Math.sin(lon), cLon = Math.cos(lon);
+  const N = a / Math.sqrt(1 - e2 * sLat * sLat);
+  const p = new THREE.Vector3(
+    (N + place.height) * cLat * cLon,
+    (N + place.height) * cLat * sLon,
+    (N * (1 - e2) + place.height) * sLat
+  );
+  const east = new THREE.Vector3(-sLon, cLon, 0);
+  const north = new THREE.Vector3(-sLat * cLon, -sLat * sLon, cLat);
+  const up = new THREE.Vector3(cLat * cLon, cLat * sLon, sLat);
+  const south = north.clone().negate();
+  const m = new THREE.Matrix4().set(
+    east.x, east.y, east.z, -east.dot(p),
+    up.x, up.y, up.z, -up.dot(p),
+    south.x, south.y, south.z, -south.dot(p),
+    0, 0, 0, 1
+  );
+  return m;
+}
+
+async function main() {
+  const key = readKey();
+  if (!key) {
+    say('Enter your key once on the <a href="./">main page</a>, then come back.');
+    return;
+  }
+  const THREE = await import("three");
+  const { VRButton } = await import("three/examples/jsm/webxr/VRButton.js");
+  const { DRACOLoader } = await import("three/examples/jsm/loaders/DRACOLoader.js");
+  const { TilesRenderer } = await import("3d-tiles-renderer");
+  const { GoogleCloudAuthPlugin, GLTFExtensionsPlugin } = await import("3d-tiles-renderer/plugins");
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  document.body.appendChild(renderer.domElement);
+  document.body.appendChild(VRButton.createButton(renderer));
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x9cc4e8);
+  scene.add(new THREE.AmbientLight(0xffffff, 3));
+
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 300000);
+  camera.rotation.x = -0.12;
+  const rig = new THREE.Group();
+  rig.add(camera);
+  scene.add(rig);
+
+  const tiles = new TilesRenderer("https://tile.googleapis.com/v1/3dtiles/root.json");
+  tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key, autoRefreshToken: true }));
+  const draco = new DRACOLoader().setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
+  tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco }));
+  tiles.errorTarget = 12;
+  tiles.group.matrixAutoUpdate = false;
+  tiles.addEventListener("load-error", function (event) {
+    say("A map piece failed to load: " + ((event.error && event.error.message) || "unknown error"));
+  });
+  scene.add(tiles.group);
+
+  let index = 0;
+  function goTo(i) {
+    index = (i + PLACES.length) % PLACES.length;
+    const place = PLACES[index];
+    tiles.group.matrix.copy(localFrame(THREE, place));
+    tiles.group.matrixWorldNeedsUpdate = true;
+    tiles.group.updateMatrixWorld(true);
+    rig.rotation.y = -THREE.MathUtils.degToRad(place.heading);
+  }
+  goTo(0);
+
+  for (const i of [0, 1]) {
+    const controller = renderer.xr.getController(i);
+    controller.addEventListener("selectstart", function () { goTo(index + 1); });
+    rig.add(controller);
+  }
+  renderer.domElement.addEventListener("click", function () {
+    if (!renderer.xr.isPresenting) { goTo(index + 1); }
+  });
+
+  let activeCamera = camera;
+  tiles.setCamera(camera);
+  function useCamera(next) {
+    if (next === activeCamera) { return; }
+    tiles.deleteCamera(activeCamera);
+    tiles.setCamera(next);
+    activeCamera = next;
+  }
+
+  window.addEventListener("resize", function () {
+    if (renderer.xr.isPresenting) { return; }
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  say("Press ENTER VR. Pull the trigger to change places.");
+  renderer.setAnimationLoop(function () {
+    if (renderer.xr.isPresenting) {
+      const xrCamera = renderer.xr.getCamera();
+      useCamera(xrCamera);
+      const eye = xrCamera.cameras[0];
+      if (eye && eye.viewport) { tiles.setResolution(xrCamera, eye.viewport.z, eye.viewport.w); }
+    } else {
+      useCamera(camera);
+      tiles.setResolutionFromRenderer(camera, renderer);
+    }
+    rig.updateMatrixWorld(true);
+    tiles.update();
+    renderer.render(scene, camera);
+  });
+}
+
+main().catch(function (error) {
+  say("VR page failed to start: " + ((error && error.message) || error));
+});
+</script>
+</body>
+</html>
