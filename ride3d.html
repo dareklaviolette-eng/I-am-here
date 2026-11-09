@@ -285,7 +285,7 @@ async function main() {
       try {
         const data = await getJson(url);
         feedIndex = index;
-        document.getElementById("credit").textContent = "Map data: Google. Flight data: " + FEEDS[index].name;
+        document.getElementById("credit").textContent = 'Map data: Google. Cockpit based on "Boeing 737-800 Cockpit" by hakai315, CC-BY-4.0, reduced. Flight data: ' + FEEDS[index].name;
         return data;
       } catch (error) {
         errors.push(FEEDS[index].name + ": " + error.message);
