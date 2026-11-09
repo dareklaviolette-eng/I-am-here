@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>I'M HERE Cockpit Approach</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://esm.sh/three@0.170.0",
+    "three/": "https://esm.sh/three@0.170.0/",
+    "3d-tiles-renderer": "https://esm.sh/3d-tiles-renderer@0.4?external=three",
+    "3d-tiles-renderer/plugins": "https://esm.sh/3d-tiles-renderer@0.4/plugins?external=three"
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+  canvas { display: block; }
+  #note { position: fixed; inset: auto 0 96px 0; text-align: center; padding: 0 20px; font-size: 18px; line-height: 1.4; }
+  #credit { position: fixed; left: 10px; bottom: 8px; font-size: 13px; opacity: .85; }
+  a { color: #8ab4ff; }
+</style>
+</head>
+<body>
+<div id="note">Loading...</div>
+<div id="credit">Map data: Google</div>
+<script type="module">
+const STORE = "imhere.googleKey";
+const note = document.getElementById("note");
+function say(html) { note.innerHTML = html; }
+function dms(d, m, s) { return d + m / 60 + s / 3600; }
+
+// FAA final approach segment data for BNA RNAV (GPS) Y RWY 20R.
+const THRESHOLD = { lat: dms(36, 8, 16.2320), lon: -dms(86, 40, 42.8335), height: 140.1 };
+const COURSE_POINT = { lat: dms(36, 6, 51.2060), lon: -dms(86, 41, 16.1835) };
+const CROSSING_HEIGHT = 60.4 * 0.3048;
+const GLIDE_TAN = Math.tan(3 * Math.PI / 180);
+const RUNWAY_RISE_PER_METER = (598.7 - 555.6) * 0.3048 / 2348;
+
+const START_DISTANCE = 6 * 1852;   // meters before the threshold
+const APPROACH_SPEED = 72;         // meters per second, about 140 knots
+const BRAKING = 2;                 // meters per second squared
+const EYE_HEIGHT = 5;              // meters above the runway at rollout
+const TOUCHDOWN_PAST_THRESHOLD = 300;
+
+const M_PER_DEG_LAT = 110950;
+const M_PER_DEG_LON = 111320 * Math.cos(THRESHOLD.lat * Math.PI / 180);
+const eastM = (COURSE_POINT.lon - THRESHOLD.lon) * M_PER_DEG_LON;
+const northM = (COURSE_POINT.lat - THRESHOLD.lat) * M_PER_DEG_LAT;
+const courseLength = Math.hypot(eastM, northM);
+const unitEast = eastM / courseLength, unitNorth = northM / courseLength;
+const HEADING = Math.atan2(unitEast, unitNorth);
+
+function readKey() { try { return localStorage.getItem(STORE) || ""; } catch (e) { return ""; } }
+
+// along is meters past the threshold; negative is still on approach.
+function positionAt(along) {
+  const ground = THRESHOLD.height + Math.max(0, along) * RUNWAY_RISE_PER_METER + EYE_HEIGHT;
+  const aimDistance = TOUCHDOWN_PAST_THRESHOLD - along;
+  const glide = THRESHOLD.height + EYE_HEIGHT + aimDistance * GLIDE_TAN;
+  const gap = glide - ground;
+  const softness = 15;
+  let above = gap;
+  if (gap <= -softness) { above = 0; }
+  else if (gap < softness) { above = (gap + softness) * (gap + softness) / (4 * softness); }
+  return {
+    lat: THRESHOLD.lat + along * unitNorth / M_PER_DEG_LAT,
+    lon: THRESHOLD.lon + along * unitEast / M_PER_DEG_LON,
+    height: ground + above
+  };
+}
+
+function earthPoint(THREE, place, target) {
+  const a = 6378137, e2 = 6.69437999014e-3;
+  const lat = THREE.MathUtils.degToRad(place.lat);
+  const lon = THREE.MathUtils.degToRad(place.lon);
+  const sLat = Math.sin(lat), cLat = Math.cos(lat), sLon = Math.sin(lon), cLon = Math.cos(lon);
+  const N = a / Math.sqrt(1 - e2 * sLat * sLat);
+  return target.set(
+    (N + place.height) * cLat * cLon,
+    (N + place.height) * cLat * sLon,
+    (N * (1 - e2) + place.height) * sLat
+  );
+}
+
+function setLocalFrame(THREE, matrix, place) {
+  const a = 6378137, e2 = 6.69437999014e-3;
+  const lat = THREE.MathUtils.degToRad(place.lat);
+  const lon = THREE.MathUtils.degToRad(place.lon);
+  const sLat = Math.sin(lat), cLat = Math.cos(lat), sLon = Math.sin(lon), cLon = Math.cos(lon);
+  const N = a / Math.sqrt(1 - e2 * sLat * sLat);
+  const px = (N + place.height) * cLat * cLon;
+  const py = (N + place.height) * cLat * sLon;
+  const pz = (N * (1 - e2) + place.height) * sLat;
+  const ex = -sLon, ey = cLon, ez = 0;
+  const ux = cLat * cLon, uy = cLat * sLon, uz = sLat;
+  const sx = sLat * cLon, sy = sLat * sLon, sz = -cLat;
+  matrix.set(
+    ex, ey, ez, -(ex * px + ey * py + ez * pz),
+    ux, uy, uz, -(ux * px + uy * py + uz * pz),
+    sx, sy, sz, -(sx * px + sy * py + sz * pz),
+    0, 0, 0, 1
+  );
+}
+
+async function main() {
+  const key = readKey();
+  if (!key) {
+    say('Enter your key once on the <a href="./">main page</a>, then come back.');
+    return;
+  }
+  const THREE = await import("three");
+  const { VRButton } = await import("three/examples/jsm/webxr/VRButton.js");
+  const { DRACOLoader } = await import("three/examples/jsm/loaders/DRACOLoader.js");
+  const { TilesRenderer } = await import("3d-tiles-renderer");
+  const { GoogleCloudAuthPlugin, GLTFExtensionsPlugin } = await import("3d-tiles-renderer/plugins");
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType("local");
+  document.body.appendChild(renderer.domElement);
+  document.body.appendChild(VRButton.createButton(renderer));
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x9cc4e8);
+  scene.add(new THREE.AmbientLight(0xffffff, 3));
+
+  const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 300000);
+  camera.rotation.x = -0.06;
+  const rig = new THREE.Group();
+  rig.add(camera);
+  rig.rotation.y = -HEADING;
+  scene.add(rig);
+
+  // Eye level sits about a quarter of the way down the picture, in the windshield.
+  const cockpitTexture = await new THREE.TextureLoader().loadAsync("cockpit.webp");
+  cockpitTexture.colorSpace = THREE.SRGBColorSpace;
+  const COCKPIT_WIDTH = 2 * Math.tan(55 * Math.PI / 180);
+  const COCKPIT_HEIGHT = COCKPIT_WIDTH * 941 / 1672;
+  const cockpit = new THREE.Mesh(
+    new THREE.PlaneGeometry(COCKPIT_WIDTH, COCKPIT_HEIGHT),
+    new THREE.MeshBasicMaterial({ map: cockpitTexture, transparent: true, depthTest: false, depthWrite: false, toneMapped: false })
+  );
+  cockpit.position.set(0, -(0.5 - 0.245) * COCKPIT_HEIGHT, -1);
+  cockpit.renderOrder = 20;
+  cockpit.frustumCulled = false;
+  rig.add(cockpit);
+
+  const tiles = new TilesRenderer("https://tile.googleapis.com/v1/3dtiles/root.json");
+  tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: key, autoRefreshToken: true }));
+  const draco = new DRACOLoader().setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
+  tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco }));
+  tiles.errorTarget = 14;
+  if (tiles.downloadQueue) { tiles.downloadQueue.maxJobs = 30; }
+  if (tiles.parseQueue) { tiles.parseQueue.maxJobs = 6; }
+  tiles.group.matrixAutoUpdate = false;
+  tiles.addEventListener("load-error", function (event) {
+    say("A map piece failed to load: " + ((event.error && event.error.message) || "unknown error"));
+  });
+  scene.add(tiles.group);
+
+  // A graded 60 degree wedge ahead of the viewer, plus two fixed scouts on the runway.
+  const WEDGE = [
+    { forward: 2000, side: 0, size: 1200 },
+    { forward: 4500, side: -1500, size: 1200 },
+    { forward: 4500, side: 1500, size: 1200 },
+    { forward: 9000, side: -3500, size: 600 },
+    { forward: 9000, side: 0, size: 600 },
+    { forward: 9000, side: 3500, size: 600 }
+  ];
+  const RUNWAY_SCOUTS = [
+    { point: -300, size: 1000 },
+    { point: 1500, size: 1000 }
+  ];
+  const LAST_SCOUT_POINT = 1800;
+  const MIN_WAIT = 4000, MAX_WAIT = 25000;
+  function makeScout(size) {
+    const scout = new THREE.PerspectiveCamera(90, 1, 1, 300000);
+    scout.rotation.order = "YXZ";
+    scout.rotation.y = -HEADING;
+    scout.rotation.x = -0.05;
+    tiles.setCamera(scout);
+    tiles.setResolution(scout, size, size);
+    return scout;
+  }
+  const wedgeScouts = WEDGE.map(function (w) { return makeScout(w.size); });
+  const runwayScouts = RUNWAY_SCOUTS.map(function (r) { return makeScout(r.size); });
+  const scratch = new THREE.Vector3();
+  function putScout(scout, pointAlong, side) {
+    const p = positionAt(Math.min(LAST_SCOUT_POINT, pointAlong));
+    p.lat += -side * unitEast / M_PER_DEG_LAT;
+    p.lon += side * unitNorth / M_PER_DEG_LON;
+    earthPoint(THREE, p, scratch).applyMatrix4(tiles.group.matrix);
+    scout.position.copy(scratch);
+    scout.updateMatrixWorld(true);
+  }
+  function moveScouts() {
+    WEDGE.forEach(function (w, i) { putScout(wedgeScouts[i], along + w.forward, w.side); });
+    RUNWAY_SCOUTS.forEach(function (r, i) { putScout(runwayScouts[i], r.point, 0); });
+  }
+
+  let along = -START_DISTANCE;
+  let speed = 0;
+  let waitStarted = 0;
+  const SPEEDS = [1, 2, 4, 8];
+  let speedIndex = 0;
+  const buttonsDown = {};
+
+  // On Quest controllers button 4 is X or A, and button 5 is Y or B.
+  function readSpeedButtons() {
+    const session = renderer.xr.getSession();
+    if (!session) { return; }
+    for (const source of session.inputSources) {
+      if (!source.gamepad) { continue; }
+      [[4, -1], [5, 1]].forEach(function (pair) {
+        const button = source.gamepad.buttons[pair[0]];
+        const id = source.handedness + pair[0];
+        const pressed = !!(button && button.pressed);
+        if (pressed && !buttonsDown[id]) {
+          speedIndex = Math.min(SPEEDS.length - 1, Math.max(0, speedIndex + pair[1]));
+        }
+        buttonsDown[id] = pressed;
+      });
+    }
+  }
+  let state = "ready";
+
+  function place() {
+    setLocalFrame(THREE, tiles.group.matrix, positionAt(along));
+    tiles.group.matrixWorldNeedsUpdate = true;
+    tiles.group.updateMatrixWorld(true);
+  }
+  place();
+
+  function press() {
+    if (state === "ready") {
+      state = "waiting";
+      waitStarted = performance.now();
+      say("Finishing the route download...");
+    } else {
+      state = "ready";
+      speed = 0;
+      speedIndex = 0;
+      along = -START_DISTANCE;
+      place();
+      say("Pull the trigger to start the approach.");
+    }
+  }
+
+  for (const i of [0, 1]) {
+    const controller = renderer.xr.getController(i);
+    controller.addEventListener("selectstart", press);
+    rig.add(controller);
+  }
+  renderer.domElement.addEventListener("click", function () {
+    if (!renderer.xr.isPresenting) { press(); }
+  });
+
+  let activeCamera = camera;
+  tiles.setCamera(camera);
+  function useCamera(next) {
+    if (next === activeCamera) { return; }
+    tiles.deleteCamera(activeCamera);
+    tiles.setCamera(next);
+    activeCamera = next;
+  }
+
+  window.addEventListener("resize", function () {
+    if (renderer.xr.isPresenting) { return; }
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  say("Press ENTER VR, then pull the trigger. The approach starts in a few seconds.");
+  let last = performance.now();
+  renderer.setAnimationLoop(function (now) {
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    last = now;
+    readSpeedButtons();
+    if (state === "waiting") {
+      const waited = now - waitStarted;
+      const stats = tiles.stats;
+      const quiet = stats && stats.downloading === 0 && stats.parsing === 0;
+      if ((quiet && waited > MIN_WAIT) || waited > MAX_WAIT) {
+        state = "flying";
+        speed = APPROACH_SPEED;
+        say("");
+      }
+    }
+    if (state === "flying") {
+      const scaled = dt * SPEEDS[speedIndex];
+      if (along >= TOUCHDOWN_PAST_THRESHOLD) { speed = Math.max(0, speed - BRAKING * scaled); }
+      along += speed * scaled;
+      if (speed === 0) { state = "stopped"; }
+      place();
+    }
+    if (renderer.xr.isPresenting) {
+      const xrCamera = renderer.xr.getCamera();
+      useCamera(xrCamera);
+      const eye = xrCamera.cameras[0];
+      if (eye && eye.viewport) { tiles.setResolution(xrCamera, eye.viewport.z, eye.viewport.w); }
+    } else {
+      useCamera(camera);
+      tiles.setResolutionFromRenderer(camera, renderer);
+    }
+    rig.updateMatrixWorld(true);
+    moveScouts();
+    tiles.update();
+    renderer.render(scene, camera);
+  });
+}
+
+main().catch(function (error) {
+  say("Approach page failed to start: " + ((error && error.message) || error));
+});
+</script>
+</body>
+</html>
