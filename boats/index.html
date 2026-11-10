@@ -133,7 +133,7 @@
   <div id="wrap3d"><div id="view3d"></div><div id="loading3d" hidden>Loading the 3D view&hellip;</div></div>
   <div id="mapWrap" hidden><div id="map"></div></div>
 </main>
-<div class="credit" id="credit3d">Map &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a> &middot; AIS: <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a></div>
+<div class="credit" id="credit3d">Imagery &copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics &middot; AIS: <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a></div>
 
 <button id="menuBtn" type="button" aria-haspopup="dialog" aria-controls="menu">&#9776; Menu</button>
 <div id="feedMsg" role="status" aria-live="polite" hidden></div>
@@ -948,8 +948,8 @@ const CAT_COLORS = {
 };
 // Map tiles: CARTO Voyager (free, CORS-enabled, OpenStreetMap data); OpenStreetMap's own tiles as the fallback.
 const TILE_SOURCES = [
-  { name: 'CARTO', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', subdomains: 'abcd',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' },
+  { name: 'Esri World Imagery', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', subdomains: '',
+    attribution: 'Imagery &copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics' },
   { name: 'OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', subdomains: '',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors' }
 ];
