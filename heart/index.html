@@ -1,0 +1,2105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>Ride through the heart - I'M HERE</title>
+<style>
+  :root { --ink:#f6ecea; --dim:#c9b3b0; --glass:rgba(24,10,12,.72); --line:rgba(255,220,214,.16); --accent:#ff5a5f; --blue:#7fa8ff; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; overflow:hidden; background:radial-gradient(120% 90% at 50% 30%, #3a1418 0%, #160709 55%, #080304 100%); color:var(--ink);
+    font:15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color:transparent; }
+  #stage { position:fixed; inset:0; touch-action:none; }
+  #stage canvas { display:block; width:100%; height:100%; }
+  button { font:inherit; color:var(--ink); background:rgba(255,255,255,.07); border:1px solid var(--line); border-radius:999px; padding:7px 13px; cursor:pointer; min-height:38px; }
+  button:hover { background:rgba(255,255,255,.13); }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button.on { background:rgba(255,90,95,.22); border-color:rgba(255,120,120,.55); }
+  .icon { width:40px; padding:0; display:inline-grid; place-items:center; }
+  .icon svg { width:18px; height:18px; fill:currentColor; }
+  #top { position:fixed; top:0; left:0; right:0; display:flex; gap:10px; align-items:center; justify-content:space-between; padding:calc(10px + env(safe-area-inset-top)) 12px 10px; pointer-events:none; }
+  #top > * { pointer-events:auto; }
+  .brand { font-size:13px; letter-spacing:.04em; color:var(--dim); white-space:nowrap; }
+  .brand b { color:var(--ink); font-weight:600; letter-spacing:.02em; }
+  .seg { display:flex; background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:3px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
+  .seg button { border:0; background:transparent; min-height:32px; padding:5px 14px; }
+  .seg button.on { background:rgba(255,90,95,.3); }
+  .tools { display:flex; gap:8px; align-items:center; }
+  .tools button { background:var(--glass); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
+  #vrslot button, #vrslot a { position:static !important; left:auto !important; bottom:auto !important; width:auto !important; padding:7px 13px !important; border-radius:999px !important;
+    border:1px solid var(--line) !important; background:var(--glass) !important; color:var(--ink) !important; font:13px system-ui, sans-serif !important; opacity:1 !important; min-height:38px; }
+  #bottom { position:fixed; left:0; right:0; bottom:0; padding:0 12px calc(12px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; }
+  #bottom > * { pointer-events:auto; }
+  #card { width:min(640px, 100%); background:var(--glass); border:1px solid var(--line); border-radius:16px; padding:12px 16px 12px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+  #card .row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  #card h2 { margin:0; font-size:18px; font-weight:650; }
+  #card .step { font-size:12px; color:var(--dim); white-space:nowrap; }
+  #card p { margin:4px 0 0; color:#ead9d6; font-size:14.5px; }
+  #rhythm { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12.5px; color:var(--dim); min-height:30px; }
+  #ecg { width:120px; height:30px; flex:none; }
+  #controls { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; width:min(640px, 100%); }
+  .hr { display:flex; align-items:center; gap:8px; background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:4px 14px; min-height:38px; font-size:13px; }
+  .hr input { width:120px; accent-color:var(--accent); }
+  .hr output { min-width:2.2em; text-align:right; font-variant-numeric:tabular-nums; color:var(--ink); }
+  #dots { display:flex; gap:6px; }
+  #dots button { width:12px; height:12px; min-height:0; padding:0; border-radius:50%; background:rgba(255,255,255,.18); border:0; }
+  #dots button.on { background:var(--accent); }
+  body.outside #dots { display:none; }
+  #dots button.done { background:rgba(255,140,140,.5); }
+  .ride-only, .out-only { display:contents; }
+  body.outside .ride-only { display:none; } body:not(.outside) .out-only { display:none; }
+  #labels { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+  .tag { position:absolute; transform:translate(-50%,-50%); font-size:12px; padding:2px 8px; border-radius:999px; background:rgba(20,8,10,.7); border:1px solid var(--line); white-space:nowrap; transition:opacity .2s; }
+  .tag.you { background:rgba(80,180,255,.25); border-color:rgba(140,210,255,.7); }
+  #loading { position:fixed; inset:0; display:grid; place-items:center; text-align:center; background:#0d0405; z-index:20; transition:opacity .5s; }
+  #loading .pulse { width:44px; height:44px; margin:0 auto 14px; border-radius:50%; background:var(--accent); animation:beat .857s infinite; }
+  @keyframes beat { 0%,100% { transform:scale(.8); opacity:.6 } 15% { transform:scale(1); opacity:1 } 30% { transform:scale(.85) } 45% { transform:scale(.95) } }
+  #flash { position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; transition:opacity .25s; z-index:5; }
+  dialog { max-width:min(560px, 92vw); color:var(--ink); background:#1d0b0d; border:1px solid var(--line); border-radius:16px; padding:20px 22px; }
+  dialog::backdrop { background:rgba(0,0,0,.6); }
+  dialog h3 { margin:0 0 8px; font-size:18px; } dialog h4 { margin:14px 0 4px; font-size:14px; color:var(--accent); text-transform:uppercase; letter-spacing:.06em; }
+  dialog p, dialog li { color:#e6d6d3; font-size:14.5px; margin:6px 0; }
+  dialog ul { padding-left:18px; margin:4px 0; }
+  .note { font-size:13px; color:var(--dim); }
+  @media (max-width:560px) {
+    .brand { display:none; }   /* phone: the I'M HERE label names the experience */
+    #card h2 { font-size:16px; } #card p { font-size:13.5px; }
+    .hr input { width:90px; }
+    #ecg { width:90px; }
+    .seg button { padding:5px 11px; }
+  }
+  @media (max-height:520px) { #card p { display:none; } #rhythm { display:none; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="labels"></div>
+<div id="flash"></div>
+<div id="top">
+  <div class="brand"><b>Ride through the heart</b></div>
+  <div class="seg" role="tablist" aria-label="View mode">
+    <button id="mRide" role="tab" aria-selected="false">Dive in</button>
+    <button id="mOut" class="on" role="tab" aria-selected="true">Outside</button>
+  </div>
+  <div class="tools">
+    <span id="vrslot"></span>
+    <button id="narr" class="icon on" title="Narration (on)" aria-label="Narration" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1zm3 5v2h2V9H7zm4 0v2h2V9h-2zm4 0v2h2V9h-2z"/></svg></button>
+    <button id="snd" class="icon" title="Heart sounds (off)" aria-label="Toggle heart sounds" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg></button>
+    <button id="infoBtn" class="icon" title="About this model" aria-label="About this model"><svg viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg></button>
+  </div>
+</div>
+<div id="bottom">
+  <div id="card" aria-live="polite">
+    <div class="row"><h2 id="stopTitle">Loading...</h2><span class="step" id="stepNo"></span></div>
+    <p id="stopText"></p>
+    <div id="rhythm"><canvas id="ecg" aria-hidden="true"></canvas><span id="phase"></span></div>
+  </div>
+  <div id="controls">
+    <div class="ride-only">
+      <button id="prev" class="icon" aria-label="Previous stop" title="Previous stop"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+      <button id="play" class="icon" aria-label="Pause ride" title="Pause / play"><svg viewBox="0 0 24 24"><path id="playPath" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg></button>
+      <button id="next" class="icon" aria-label="Next stop" title="Next stop"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg></button>
+    </div>
+    <label class="hr" title="Resting adult heart rate is usually 60-100 beats per minute">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="#ff5a5f" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.6 0 5.7 3.7 4.2 7.2C19.5 16.4 12 21 12 21z"/></svg>
+      <input id="bpm" type="range" min="40" max="180" step="1" value="70" aria-label="Heart rate in beats per minute">
+      <output id="bpmOut">70</output> bpm
+    </label>
+    <button id="slow" title="Slow motion">Slow-mo</button>
+    <div class="out-only">
+      <button id="xray" title="See inside: chambers and valves">X-ray</button>
+      <button id="lbl" class="on" title="Show labels">Labels</button>
+    </div>
+  </div>
+  <div id="dots" class="ride-only-dots" role="tablist" aria-label="Stops"></div>
+</div>
+<dialog id="info">
+  <h3>About this model</h3>
+  <p><b>This is an illustrative model, not a scan of any patient.</b> What is simulated or simplified, and where each part comes from: tap the <b>I'M HERE</b> mark in the bottom corner.</p>
+  <p><b>The I'M HERE vision:</b> build this same ride from a patient's own imaging (CT, MRI or echo), so their doctor can take them through <i>their</i> heart - to show a leaky valve, a narrowed coronary artery or a planned repair, together.</p>
+  <h4>What you are seeing</h4>
+  <ul>
+    <li>Blood path: venae cavae &rarr; right atrium &rarr; tricuspid valve &rarr; right ventricle &rarr; pulmonary valve &rarr; pulmonary artery &rarr; lungs &rarr; pulmonary veins &rarr; left atrium &rarr; mitral valve &rarr; left ventricle &rarr; aortic valve &rarr; aorta.</li>
+    <li>Each beat: the atria squeeze first, then the ventricles. Mitral and tricuspid valves close as the ventricles start squeezing ("lub"); aortic and pulmonary valves close as they relax ("dub"). Left-side valves close a moment before right-side ones, as in a real heart.</li>
+    <li>Cell colour shows oxygen: dark red (oxygen-poor) turns bright red in the lungs. Blood is never blue.</li>
+    <li>Coronary arteries (on the outside view) feed the heart muscle; they start just above the aortic valve.</li>
+  </ul>
+  <h4>How to use</h4>
+  <ul>
+    <li><b>Ride:</b> drag to look around; play/pause, previous/next stop; change the heart rate or use slow motion.</li>
+    <li><b>Outside:</b> drag to turn, pinch or scroll to zoom. X-ray shows the chambers (blue = oxygen-poor, red = oxygen-rich).</li>
+    <li><b>VR:</b> open in a headset browser and press Enter VR.</li>
+  </ul>
+  <p class="note">For education only - not for diagnosis or treatment decisions.</p>
+  <form method="dialog" style="text-align:right;margin-top:12px"><button>Close</button></form>
+</dialog>
+<div id="loading"><div><div class="pulse"></div><div id="loadMsg">Building the heart...</div></div></div>
+<!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
+<script id="imhere-mark">
+/* I'M HERE experience watermark (info card), v3. SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
+   Pasted inline into every prototype page between the IMHERE-MARK markers by
+   node /home/claude/shared/sync-mark.mjs <files...>  (artifact pages cannot share files).
+   Edit here, then re-run the sync. Self-contained: no network, no dependencies.
+
+   Founder's layout (final): one small top-left label (translucent navy, soft blur, 1px border, 8px radius/padding):
+   white title and subject, grey row labels, brighter values; the brand appears only here, not in page top bars.
+       I'M HERE  (faint watermark)      (i)  ×
+       subject · ID
+       • Location – Nashville International (BNA)
+       • Updated – Live | 3 hrs ago | Demo | Fixed | None
+       • Scene – Real | AI render | 3D render | ...
+       • Video – Live | Nov 9, 2026 | None
+   All four rows always shown (value "None" when missing). Only the word "Live" is green.
+   "Live" (Updated/Video) comes only from setLive()/video.live, which pages drive from real data freshness;
+   demo/simulated data never sets it. After ~6 s the card collapses to a small "I'M HERE" corner mark;
+   tapping the mark re-expands it. (i) opens the detail: live stats + provenance (source, last update,
+   live vs recorded/simulated, rendered vs actual imagery). In VR, xrPanel(THREE) is a small HUD panel low
+   in the corner of view, drawn the same way.
+
+   API
+     ImHereMark.init({ subject, id, location, position, scene, video, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.update({ ...same keys })
+        location  place name                                   e.g. 'Nashville International (BNA)'
+        position  value of the "Updated" row: 'Demo' | 'Fixed' | 'None' | { time: msEpoch } ("3 hrs ago"); "Live" while setLive(true)
+        scene     short value                                  e.g. 'Real', '3D render', 'AI render'
+        video     'None' | 'Live' (only for a truly live feed) | { date: msEpoch } (shown "Nov 9, 2026")
+        stats     [[label, value], ...]  shown in the (i) detail
+        tag       { text } status line for the detail ("Now: ...")
+        sceneNote plain sentence in the detail: AI-created/rendered vs actual imagery
+        items     provenance list: { kind, label, source, age, time, timeLabel, note, href, list: [{ text, time | age }] }
+                  kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
+        below     CSS selector(s): the card sits just under the lowest visible one (e.g. the page header)
+     ImHereMark.setLive(true|false)   Updated shows "Live" (green). Only while the data is really fresh.
+     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh HUD panel, kept up to date
+     ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
+   CSS variable --imh-h on <html>: height taken by the card (or the corner mark) + gap, so a page can push its
+   own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
+*/
+(function () {
+  'use strict';
+  if (window.ImHereMark) return;
+  var KINDS = {
+    live: ['LIVE', '#1f9d55'], recorded: ['RECORDED', '#3d82c9'], data: ['REAL DATA', '#2e8f5e'],
+    computed: ['CALCULATED', '#2b7f8c'], estimated: ['ESTIMATED', '#6f7f8f'], assumed: ['ASSUMED', '#6f7f8f'],
+    simulated: ['SIMULATED', '#c47a12'], sample: ['SAMPLE', '#c47a12'], illustrative: ['ILLUSTRATIVE', '#7d5cc4'], ai: ['AI-GENERATED', '#b44a8a']
+  };
+  var NAVY = 'rgba(20,30,50,0.6)', GREY = '#9fb0c0', VALUE = '#e8eef4', GREEN = '#3ddc84';
+  var FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  var COLLAPSE_MS = 6000;
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var CSS =
+    '.imh-box,.imh-mini{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imh-z,1500);' +
+    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.14);' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);font:11px/1.25 ' + FONT + ';' +
+    'letter-spacing:normal;text-align:left;text-shadow:none;pointer-events:auto;-webkit-tap-highlight-color:transparent}' +
+    '.imh-box[hidden],.imh-mini[hidden],.imh-src[hidden],.imh-box [hidden]{display:none}' +
+    '.imh-box{width:min(190px,45vw);padding:8px}' +
+    '.imh-box.imh-wide{width:min(300px,calc(100vw - 20px))}' +
+    '.imh-r1{display:flex;align-items:center;gap:5px;min-height:18px}' +
+    '.imh-brand{font-weight:300;font-size:11px;letter-spacing:.28em;flex:none;color:#fff;opacity:.3}' +   /* faint watermark, not a title */
+    '.imh-i,.imh-x{flex:none;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;' +
+    'color:#dfe7ee;user-select:none;-webkit-user-select:none;position:relative}' +
+    '.imh-i::after,.imh-x::after{content:"";position:absolute;inset:-7px}' +   /* bigger touch target */
+    '.imh-i{margin-left:auto;font:italic 700 10.5px/1 Georgia,serif;border:1.3px solid rgba(255,255,255,.55)}' +
+    '.imh-x{font-size:14px;line-height:1;background:rgba(255,255,255,.1)}' +
+    '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
+    '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
+    '.imh-r2{margin-top:2px;font-weight:600;font-size:11px;color:#fff;overflow-wrap:anywhere}' +
+    '.imh-rows{list-style:none;margin:3px 0 0;padding:0;color:' + GREY + ';font-size:11px;line-height:1.3}' +
+    '.imh-rows li{margin:0;padding:0 0 0 9px;position:relative;overflow-wrap:anywhere}' +
+    '.imh-rows li::before{content:"•";position:absolute;left:0;color:' + GREY + '}' +
+    '.imh-rows .imh-l{font-size:10px;color:' + GREY + '}' +
+    '.imh-rows .imh-v{color:' + VALUE + '}.imh-rows .imh-v.imh-g{color:' + GREEN + ';font-weight:700}' +
+    '.imh-src{margin-top:5px;max-height:min(46vh,360px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;' +
+    'border-top:1px solid rgba(255,255,255,.14);font-size:11px;line-height:1.3}' +
+    '.imh-ph{font-weight:700;font-size:11px;margin-top:5px;color:#fff}' +
+    '.imh-r3{display:flex;flex-wrap:wrap;gap:3px 12px;margin:4px 0 2px}' +
+    '.imh-st{display:flex;flex-direction:column;min-width:0}' +
+    '.imh-st i{font-style:normal;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:' + GREY + '}' +
+    '.imh-st b{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}' +
+    '.imh-it{border-bottom:1px solid rgba(255,255,255,.08);padding:5px 0 4px}' +
+    '.imh-k{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;padding:0 4px;border-radius:3px;color:#fff;margin-right:5px;vertical-align:1px}' +
+    '.imh-lb{font-weight:600}' +
+    '.imh-d{color:' + GREY + ';font-size:10.5px;margin-top:2px;white-space:pre-line}' +
+    '.imh-ls{margin:2px 0 0;padding:0;list-style:none;color:' + GREY + ';font-size:10.5px}' +
+    '.imh-ls li{display:flex;justify-content:space-between;gap:8px;margin:0;padding:0}.imh-ls li span:last-child{flex:none;font-variant-numeric:tabular-nums}' +
+    '.imh-ft{padding-top:5px;color:' + GREY + ';font-size:10px}' +
+    '.imh-box a{color:#a9d3ff}' +
+    '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
+    '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
+
+  var S = { subject: '', id: '', location: '', position: 'None', scene: '3D render', video: 'None', stats: [], tag: null,
+    sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
+  var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
+  var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function fmtAge(ms) {   // "3 s ago", "14 min ago", "3 hrs ago", "5 days ago", "7 yrs ago"
+    if (!(ms >= 0)) return ms < 0 ? 'just now' : '';
+    var s = Math.round(ms / 1000), n;
+    if (s < 2) return 'just now';
+    if (s < 90) return s + ' s ago';
+    if (s < 5400) return Math.round(s / 60) + ' min ago';
+    if (s < 172800) { n = Math.round(s / 3600); return n + (n === 1 ? ' hr' : ' hrs') + ' ago'; }
+    if (s < 63072000) { n = Math.round(s / 86400); return n.toLocaleString('en-US') + ' days ago'; }
+    return Math.round(s / 31557600) + ' yrs ago';
+  }
+  function fmtDate(ms) { var d = new Date(ms); return MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear(); }
+  function credText(c) { return typeof c === 'string' ? c : (c && c.text) || ''; }
+  function link(text, href) {
+    if (!href) return document.createTextNode(text);
+    var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
+  }
+  function line2() { return [S.subject, S.id].filter(function (x) { return x; }).join(' · '); }
+  function posText() {
+    if (S.live) return 'Live';
+    var p = S.position;
+    if (p && typeof p === 'object') return p.time ? fmtAge(Date.now() - p.time) : (p.text || 'None');
+    return p ? (String(p) === 'Live' ? 'None' : String(p)) : 'None';   // a plain "Live" string is never trusted
+  }
+  function videoText() {
+    var v = S.video;
+    if (v && typeof v === 'object') return v.live ? 'Live' : v.date ? fmtDate(v.date) : (v.text || 'None');
+    return v ? (String(v) === 'Live' ? 'None' : String(v)) : 'None';
+  }
+  function rows() { return [['Location', S.location || 'None'], ['Updated', posText()], ['Scene', S.scene || 'None'], ['Video', videoText()]]; }
+  function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
+  function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
+
+  function render() {
+    if (!S.mounted) return;
+    var R = rows();
+    var sig = JSON.stringify([line2(), R, S.dismissed, S.srcOpen, S.live]);
+    if (sig !== lastSig) {
+      lastSig = sig;
+      box.hidden = S.dismissed; mini.hidden = !S.dismissed; miniLive.hidden = !S.live;
+      box.classList.toggle('imh-wide', S.srcOpen);
+      r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
+      rowsEl.textContent = '';
+      R.forEach(function (r) {
+        var li = el('li'); li.appendChild(el('span', 'imh-l', r[0])); li.appendChild(document.createTextNode(' – '));
+        li.appendChild(el('span', 'imh-v' + (r[1] === 'Live' ? ' imh-g' : ''), r[1])); li.title = r[0] + ' – ' + r[1]; rowsEl.appendChild(li);
+      });
+      more.classList.toggle('imh-on', S.srcOpen);
+      more.setAttribute('aria-expanded', String(S.srcOpen));
+      box.setAttribute('aria-label', label());
+      src.hidden = !S.srcOpen;
+      drawXR();
+    }
+    renderSources(); place();
+  }
+  function renderSources() {
+    if (!S.mounted || !S.srcOpen) return;
+    var now = Date.now(), frag = document.createDocumentFragment();
+    var st = (S.stats || []).filter(Boolean);
+    if (st.length) {
+      var r3 = el('div', 'imh-r3');
+      st.forEach(function (s) { var d = el('div', 'imh-st'); d.appendChild(el('i', null, s[0])); d.appendChild(el('b', null, s[1] == null || s[1] === '' ? '–' : String(s[1]))); r3.appendChild(d); });
+      frag.appendChild(r3);
+    }
+    frag.appendChild(el('div', 'imh-ph', 'Where this comes from'));
+    var sc = el('div', 'imh-d'); sc.appendChild(el('b', null, 'Scene: ')); sc.appendChild(document.createTextNode(S.sceneNote || SCENE_NOTE_DEFAULT)); frag.appendChild(sc);
+    if (statusText()) frag.appendChild(el('div', 'imh-d', 'Now: ' + statusText()));
+    S.items.forEach(function (it) {
+      if (!it) return;
+      var k = KINDS[it.kind] || [String(it.kind || 'INFO').toUpperCase(), '#6f7f8f'];
+      var d = el('div', 'imh-it'), h = el('div'), kb = el('span', 'imh-k', k[0]);
+      kb.style.background = k[1]; h.appendChild(kb); h.appendChild(el('span', 'imh-lb', it.label || '')); d.appendChild(h);
+      var lines = [];
+      if (it.source) lines.push('Source: ' + it.source);
+      var age = it.time ? fmtAge(now - it.time) : it.age;
+      if (age) lines.push((it.time ? (it.timeLabel || 'Updated') + ' ' : '') + age);
+      if (it.note) lines.push(it.note);
+      if (lines.length) d.appendChild(el('div', 'imh-d', lines.join('\n')));
+      if (it.href) { var lk = el('div', 'imh-d'); lk.appendChild(link('More about this source', it.href)); d.appendChild(lk); }
+      if (it.list && it.list.length) {
+        var ul = el('ul', 'imh-ls'), max = 30;
+        it.list.slice(0, max).forEach(function (r) {
+          var li = el('li'); li.appendChild(el('span', null, r.text || ''));
+          li.appendChild(el('span', null, r.time ? fmtAge(now - r.time) : (r.age || ''))); ul.appendChild(li);
+        });
+        if (it.list.length > max) { var m = el('li'); m.appendChild(el('span', null, '+ ' + (it.list.length - max) + ' more')); ul.appendChild(m); }
+        d.appendChild(ul);
+      }
+      frag.appendChild(d);
+    });
+    var cr = S.credits.filter(credText);
+    if (cr.length) {
+      var ft = el('div', 'imh-ft'); ft.appendChild(document.createTextNode('Credits: '));
+      cr.forEach(function (c, i) { if (i) ft.appendChild(document.createTextNode(' · ')); ft.appendChild(link(credText(c), c.href)); });
+      frag.appendChild(ft);
+    }
+    var tmp = el('div'); tmp.appendChild(frag.cloneNode(true));
+    if (tmp.innerHTML === lastSrcSig) return;
+    lastSrcSig = tmp.innerHTML; src.textContent = ''; src.appendChild(frag);
+  }
+  function visible(e) {
+    if (!e || !e.getClientRects().length) return false;
+    var cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none';
+  }
+  var lastTop = null, lastH = null;
+  function place() {
+    if (!S.mounted) return;
+    var top = null;
+    S.below.forEach(function (sel) {
+      var list; try { list = document.querySelectorAll(sel); } catch (e) { return; }
+      for (var i = 0; i < list.length; i++) {
+        if (!visible(list[i])) continue;
+        var b = list[i].getBoundingClientRect();
+        if (b.bottom > 0 && b.bottom < innerHeight * 0.5) top = Math.max(top || 0, b.bottom + 6);
+      }
+    });
+    var t = top == null ? '' : Math.round(top) + 'px';
+    if (t !== lastTop) { lastTop = t; box.style.top = t; mini.style.top = t; }
+    // pages push their own top-left panels down by the compact card height (not the opened detail, which overlays)
+    var r = (S.dismissed ? mini : box).getBoundingClientRect(), h = S.srcOpen ? lastH : Math.round(r.height + 12) + 'px';   // +12: clear gap to any panel below
+    if (h && h !== lastH) { lastH = h; document.documentElement.style.setProperty('--imh-h', h); }
+  }
+  function expand() { collapseAt = Date.now() + COLLAPSE_MS; if (S.dismissed) { S.dismissed = false; render(); } }
+  function setDismissed(d, focus) {
+    S.dismissed = !!d; if (d) S.srcOpen = false; else collapseAt = Date.now() + COLLAPSE_MS;
+    render();
+    if (focus) try { (d ? mini : box).focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  }
+  function tick() {   // auto-collapse ~6 s after showing, unless the detail is open or the pointer/focus is on the card
+    if (!S.mounted || S.dismissed || S.srcOpen || hovering || box.contains(document.activeElement)) { collapseAt = Math.max(collapseAt, Date.now() + 1500); return; }
+    if (Date.now() >= collapseAt) setDismissed(true, false);
+  }
+  function stop(e) { e.stopPropagation(); }
+  function button(e, fn) {
+    e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0');
+    e.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); });
+    e.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fn(); } });
+  }
+  function mount() {
+    if (S.mounted) return;
+    if (!document.body) { document.addEventListener('DOMContentLoaded', mount); return; }
+    if (!document.getElementById('imh-style')) { var st = el('style', null, CSS); st.id = 'imh-style'; document.head.appendChild(st); }
+    box = el('div', 'imh-box'); box.id = 'imh-card'; box.setAttribute('role', 'region'); box.setAttribute('tabindex', '-1');
+    var r1 = el('div', 'imh-r1');
+    r1.appendChild(el('span', 'imh-brand', "I'M HERE"));
+    more = el('span', 'imh-i', 'i'); more.setAttribute('aria-label', 'Details: live stats, sources, last update, live or recorded'); more.title = 'Details and sources';
+    button(more, function () { S.srcOpen = !S.srcOpen; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); });
+    r1.appendChild(more);
+    var x = el('span', 'imh-x', '×'); x.setAttribute('aria-label', 'Hide the I\'M HERE card'); x.title = 'Hide';
+    button(x, function () { setDismissed(true, true); });
+    r1.appendChild(x); box.appendChild(r1);
+    r2 = el('div', 'imh-r2'); box.appendChild(r2);
+    rowsEl = el('ul', 'imh-rows'); box.appendChild(rowsEl);
+    var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
+    more.addEventListener('mouseenter', function () {
+      if (!S.srcOpen && window.matchMedia && matchMedia('(hover: hover)').matches) { hoverOpen = true; S.srcOpen = true; lastSrcSig = ''; render(); }
+    });
+    more.addEventListener('click', function (e) { if (hoverOpen) { hoverOpen = false; e.stopImmediatePropagation(); e.stopPropagation(); } }, true);   // pin, don't close
+    box.addEventListener('mouseenter', function () { hovering = true; });
+    box.addEventListener('mouseleave', function () { hovering = false; collapseAt = Math.max(collapseAt, Date.now() + 3000); if (hoverOpen) { hoverOpen = false; S.srcOpen = false; render(); } });
+    src = el('div', 'imh-src'); src.hidden = true; box.appendChild(src);
+    mini = el('div', 'imh-mini', "I'M HERE"); mini.id = 'imh-mark'; mini.hidden = true;
+    miniLive = el('span', 'imh-g', 'Live'); miniLive.hidden = true; mini.appendChild(miniLive);
+    mini.setAttribute('aria-label', "I'M HERE: show the info card"); mini.title = 'Show info';
+    button(mini, function () { setDismissed(false, true); });
+    ['pointerdown', 'pointermove', 'touchstart', 'touchmove', 'wheel', 'mousedown'].forEach(function (ev) {   // keep taps/scrolls off the 3D view underneath
+      box.addEventListener(ev, stop, { passive: true }); mini.addEventListener(ev, stop, { passive: true });
+    });
+    box.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.srcOpen) { S.srcOpen = false; render(); } });
+    document.body.appendChild(box); document.body.appendChild(mini);
+    S.mounted = true; collapseAt = Date.now() + COLLAPSE_MS;
+    document.documentElement.style.setProperty('--imh-z', String(S.z));
+    render();
+    addEventListener('resize', place);
+    setInterval(function () { render(); tick(); }, 1000);   // keeps "x ago" values current
+  }
+  function apply(o) {
+    if (!o) return;
+    ['subject', 'id', 'location', 'scene', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.position !== undefined) S.position = o.position;
+    if (o.video !== undefined) S.video = o.video;
+    if (o.stats) S.stats = [].concat(o.stats);
+    if (o.tag !== undefined) S.tag = o.tag;
+    if (o.items) S.items = [].concat(o.items);
+    if (o.credits) S.credits = [].concat(o.credits);
+    if (o.below) S.below = [].concat(o.below);
+    if (o.zIndex != null) S.z = +o.zIndex || 1500;
+  }
+
+  // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
+  function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  function drawXR() {
+    if (!xr) return;
+    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = 'rgba(20,30,50,0.78)'; rr(g, 3, 3, W - 6, H - 6, 22); g.fill();   // a bit denser in VR for legibility
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
+    g.textBaseline = 'alphabetic'; g.fillStyle = '#fff';
+    g.save(); g.globalAlpha = 0.3; g.font = '300 32px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '9px'; g.fillText("I'M HERE", 28, 54); g.restore();   // faint watermark
+    g.font = '600 30px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 98);
+    var y = 140;
+    rows().forEach(function (r) {
+      g.fillStyle = GREY; g.font = '400 26px ' + FONT; var lt = '•  ' + r[0] + ' – ';
+      g.fillText(lt, 28, y); var lw = g.measureText(lt).width;
+      g.font = (r[1] === 'Live' ? '700 ' : '400 ') + '28px ' + FONT; g.fillStyle = r[1] === 'Live' ? GREEN : VALUE;
+      g.fillText(fit(g, r[1], W - 56 - lw), 28 + lw, y); y += 38;
+    });
+    xr.tex.needsUpdate = true;
+  }
+  function xrPanel(THREE, o) {
+    o = o || {};
+    if (!xr) {
+      var c = document.createElement('canvas'); c.width = 512; c.height = 300;
+      var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+      xr = { canvas: c, tex: tex };
+    }
+    var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 300 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
+    m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
+    m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
+    drawXR(); return m;
+  }
+
+  window.ImHereMark = {
+    init: function (o) { apply(o); mount(); lastSig = ''; render(); return this; },
+    update: function (o) { apply(o); render(); return this; },
+    setLive: function (on) { on = !!on; if (on !== S.live) { S.live = on; render(); } return this; },
+    isLive: function () { return S.live; },
+    open: function () { if (!S.mounted) return; S.dismissed = false; S.srcOpen = true; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); },
+    close: function () { if (!S.mounted) return; S.srcOpen = false; render(); },
+    dismiss: function () { if (S.mounted) setDismissed(true, false); },
+    expand: function () { if (S.mounted) expand(); },
+    label: label, xrPanel: xrPanel,
+    items: function () { return S.items.slice(); }
+  };
+})();
+</script>
+<!-- IMHERE-MARK:END -->
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const A = (() => {
+// anatomy.js - pure maths for "Ride through the heart" (no DOM, no three.js).
+// Units: centimetres. Frame: +x = patient's LEFT, +y = superior (head), +z = anterior (chest).
+// A viewer looking from +z therefore sees the heart as a doctor facing the patient does.
+
+// ---------------------------------------------------------------- vectors
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const len = (a) => Math.hypot(a[0], a[1], a[2]);
+const nrm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
+const mix = (a, b, t) => a + (b - a) * t;
+const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+const perp = (v, n) => nrm(sub(v, mul(n, dot(v, n))));
+function basis(a, hint) {
+  const w = nrm(a);
+  let h = hint || [0, 1, 0];
+  if (Math.abs(dot(w, nrm(h))) > 0.95) h = [1, 0, 0];
+  const u = nrm(cross(h, w));
+  return [w, u, cross(w, u)];
+}
+
+// ---------------------------------------------------------------- noise
+function hash3(i, j, k) {
+  let h = (i * 374761393 + j * 668265263 + k * 1440662683) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = h ^ (h >>> 16);
+  return (h >>> 0) / 4294967295;
+}
+function vnoise(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+  const c = (a, b, d) => hash3(xi + a, yi + b, zi + d);
+  const x00 = mix(c(0, 0, 0), c(1, 0, 0), u), x10 = mix(c(0, 1, 0), c(1, 1, 0), u);
+  const x01 = mix(c(0, 0, 1), c(1, 0, 1), u), x11 = mix(c(0, 1, 1), c(1, 1, 1), u);
+  return mix(mix(x00, x10, v), mix(x01, x11, v), w) * 2 - 1;
+}
+function fbm(x, y, z) {
+  return 0.6 * vnoise(x, y, z) + 0.3 * vnoise(x * 2.03 + 7.1, y * 2.03 - 3.3, z * 2.03 + 1.7) + 0.1 * vnoise(x * 4.1 - 2.2, y * 4.1 + 5.5, z * 4.1 + 9.9);
+}
+// deterministic PRNG
+function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// ---------------------------------------------------------------- SDF primitives
+function ell(c, r, ax) { return { t: 0, c, r, ax: ax || null, br: Math.max(r[0], r[1], r[2]) }; }
+function cone(a, b, ra, rb) {
+  const ba = sub(b, a), l2 = dot(ba, ba), rr = ra - rb;
+  return { t: 1, a, b, ra, rb, ba, l2, rr, a2: l2 - rr * rr, il2: 1 / l2, c: lerp3(a, b, 0.5), br: Math.sqrt(l2) / 2 + Math.max(ra, rb) };
+}
+function sdPrim(p, q) {
+  const px = p[0], py = p[1], pz = p[2];
+  if (q.t === 0) {
+    let x = px - q.c[0], y = py - q.c[1], z = pz - q.c[2];
+    if (q.ax) { const X = x, Y = y, Z = z; const A = q.ax; x = X * A[0][0] + Y * A[0][1] + Z * A[0][2]; y = X * A[1][0] + Y * A[1][1] + Z * A[1][2]; z = X * A[2][0] + Y * A[2][1] + Z * A[2][2]; }
+    const r = q.r;
+    const k0 = Math.sqrt((x / r[0]) ** 2 + (y / r[1]) ** 2 + (z / r[2]) ** 2);
+    const k1 = Math.sqrt((x / (r[0] * r[0])) ** 2 + (y / (r[1] * r[1])) ** 2 + (z / (r[2] * r[2])) ** 2);
+    if (k1 < 1e-9) return -Math.min(r[0], r[1], r[2]);
+    return (k0 * (k0 - 1)) / k1;
+  }
+  // round cone (Inigo Quilez), scalar form
+  const ba = q.ba, l2 = q.l2;
+  const pax = px - q.a[0], pay = py - q.a[1], paz = pz - q.a[2];
+  const y = pax * ba[0] + pay * ba[1] + paz * ba[2], z = y - l2;
+  const xx = pax * l2 - ba[0] * y, xy = pay * l2 - ba[1] * y, xz = paz * l2 - ba[2] * y;
+  const x2 = xx * xx + xy * xy + xz * xz, y2 = y * y * l2, z2 = z * z * l2;
+  const k = Math.sign(q.rr) * q.rr * q.rr * x2;
+  if (Math.sign(z) * q.a2 * z2 > k) return Math.sqrt(x2 + z2) * q.il2 - q.rb;
+  if (Math.sign(y) * q.a2 * y2 < k) return Math.sqrt(x2 + y2) * q.il2 - q.ra;
+  return (Math.sqrt(x2 * q.a2 * q.il2) + y * q.rr) * q.il2 - q.ra;
+}
+const dist3 = (p, c) => Math.sqrt((p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2);
+const smin = (a, b, k) => { if (k <= 0) return Math.min(a, b); const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+const smax = (a, b, k) => -smin(-a, -b, k);
+
+// centripetal Catmull-Rom
+function crPoint(p0, p1, p2, p3, t) {
+  const d = (a, b) => Math.max(Math.sqrt(len(sub(b, a))), 1e-4);
+  const t0 = 0, t1 = t0 + d(p0, p1), t2 = t1 + d(p1, p2), t3 = t2 + d(p2, p3);
+  const tt = t1 + (t2 - t1) * t;
+  const L = (a, b, ta, tb) => lerp3(a, b, (tt - ta) / (tb - ta));
+  const A1 = L(p0, p1, t0, t1), A2 = L(p1, p2, t1, t2), A3 = L(p2, p3, t2, t3);
+  const B1 = L(A1, A2, t0, t2), B2 = L(A2, A3, t1, t3);
+  return L(B1, B2, t1, t2);
+}
+function catmull(pts, n) {
+  const P = [sub(mul(pts[0], 2), pts[1]), ...pts, sub(mul(pts[pts.length - 1], 2), pts[pts.length - 2])];
+  const out = [];
+  for (let i = 1; i < P.length - 2; i++) for (let j = 0; j < n; j++) out.push(crPoint(P[i - 1], P[i], P[i + 1], P[i + 2], j / n));
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+function chain(pts, r0, r1, n = 3) {
+  const d = catmull(pts, n);
+  let tot = 0; const acc = [0];
+  for (let i = 1; i < d.length; i++) { tot += len(sub(d[i], d[i - 1])); acc.push(tot); }
+  const prims = [];
+  for (let i = 0; i < d.length - 1; i++) prims.push(cone(d[i], d[i + 1], mix(r0, r1, acc[i] / tot), mix(r0, r1, acc[i + 1] / tot)));
+  return prims;
+}
+
+// A component = a set of primitives combined with min, then blended into the running SDF.
+function comp(name, prims, o = {}) {
+  let c = [0, 0, 0];
+  prims.forEach((q) => { c = add(c, q.c); });
+  c = mul(c, 1 / prims.length);
+  let br = 0;
+  prims.forEach((q) => { br = Math.max(br, len(sub(q.c, c)) + q.br); });
+  return { name, prims, k: o.k || 0, infl: o.infl || 0, sub: !!o.sub, noise: o.noise || 0, nf: o.nf || 2.2, cat: o.cat || name, bc: c, br };
+}
+function evalComps(p, comps) {
+  let acc = 1e9;
+  for (let ci = 0; ci < comps.length; ci++) {
+    const c = comps[ci];
+    const lb = dist3(p, c.bc) - c.br - c.infl - Math.abs(c.noise);
+    if (c.sub) { if (lb > c.k - acc) continue; } else if (lb > acc + c.k) continue;
+    let d = 1e9;
+    for (let i = 0; i < c.prims.length; i++) {
+      const q = c.prims[i];
+      if (dist3(p, q.c) - q.br > d) continue;
+      const v = sdPrim(p, q);
+      if (v < d) d = v;
+    }
+    d -= c.infl;
+    if (c.noise) d += c.noise * fbm(p[0] * c.nf, p[1] * c.nf * 0.55, p[2] * c.nf);
+    acc = c.sub ? smax(acc, -d, c.k) : smin(acc, d, c.k);
+  }
+  return acc;
+}
+// raw (unblended) distance of one named component
+function compDist(p, comps, name) {
+  let d = 1e9;
+  for (const c of comps) if (c.name === name || c.cat === name) for (const q of c.prims) d = Math.min(d, sdPrim(p, q) - c.infl);
+  return d;
+}
+
+// ---------------------------------------------------------------- anatomy (blood spaces)
+const LV_AX = nrm([0.42, -0.82, 0.38]);
+const LV_B = basis(LV_AX, [0, 0, 1]);
+const LV_C = [2.0, -2.3, 0.0];
+const RV_C = [-0.6, -1.6, 2.4];
+const RV_LONG = nrm([1.0, -0.85, 0.3]);
+const RV_SHORT = perp(sub(RV_C, LV_C), RV_LONG); // points away from septum (free wall)
+const RV_B = [RV_LONG, cross(RV_SHORT, RV_LONG), RV_SHORT];
+const RA_C = [-3.2, 0.7, 0.0];
+const LA_C = [0.7, 1.7, -3.0];
+
+const H = {
+  LV: { c: LV_C, ax: LV_AX, b: LV_B, r: [3.2, 1.8, 1.8] },
+  RV: { c: RV_C, ax: RV_LONG, b: RV_B, r: [3.0, 1.9, 1.45], short: RV_SHORT },
+  RA: { c: RA_C, r: [1.4, 2.0, 1.6] },
+  LA: { c: LA_C, r: [2.0, 1.25, 1.25] },
+  apex: add(LV_C, mul(LV_AX, 3.2 + 0.8)),
+  base: add(LV_C, mul(LV_AX, -3.2)),
+  center: [0.3, -0.3, -0.3],
+};
+const RA_IN = [-2.7, 0.2, 0.5], RV_IN = [-1.2, -1.2, 2.1];
+const LA_IN = [0.8, 1.0, -2.5], LV_IN = [1.5, -0.6, -0.9];
+const LVOT_IN = [1.3, -1.2, -0.2];
+const PV_C = [0.9, 2.0, 3.0];
+const AV_C = [-0.05, 0.85, 0.25];
+const ROOT_C = [-0.15, 1.6, 0.35];
+const BIF = [1.7, 4.8, -0.6];
+
+const P = {
+  svc: [[-3.4, 9.6, -0.1], [-3.3, 6.0, -0.05], [-3.15, 2.2, 0.0]],
+  ivc: [[-2.9, -9.0, -0.8], [-2.95, -4.0, -0.5], [-3.0, -0.7, -0.2]],
+  trunk: [PV_C, [1.6, 3.2, 2.2], [2.0, 4.1, 0.9], BIF],
+  rpa: [BIF, [0.0, 4.6, -2.1], [-2.8, 4.35, -2.4], [-5.5, 4.15, -2.4], [-9.5, 4.0, -2.3]],
+  lpa: [BIF, [3.2, 5.2, -1.5], [5.2, 5.0, -2.4], [9.5, 4.8, -2.8]],
+  rspv: [[-9.5, 2.2, -3.2], [-5.0, 2.45, -3.1], [-2.6, 2.2, -3.1], [-0.9, 2.0, -3.0]],
+  ripv: [[-9.5, 0.1, -3.5], [-5.0, 0.8, -3.5], [-2.6, 1.1, -3.4], [-0.9, 1.3, -3.2]],
+  lspv: [[9.5, 3.0, -2.9], [5.0, 2.8, -3.1], [3.2, 2.3, -3.1], [2.2, 2.0, -3.0]],
+  lipv: [[9.5, 0.8, -3.6], [5.0, 1.0, -3.7], [3.2, 1.2, -3.5], [2.2, 1.3, -3.2]],
+  aorta: [ROOT_C, [-0.45, 3.0, 0.5], [-0.75, 4.3, 0.55], [-0.55, 5.7, 0.3], [0.3, 6.9, -0.8], [1.6, 7.1, -2.7], [2.6, 5.9, -5.0], [2.8, 2.0, -5.8], [2.7, -3.0, -5.6], [2.6, -9.5, -5.2]],
+  brach: [[-0.3, 6.5, 0.0], [-0.9, 8.0, 0.3], [-1.3, 9.8, 0.4]],
+  lcca: [[0.6, 7.2, -1.2], [0.7, 8.4, -1.1], [0.7, 9.8, -1.0]],
+  lsub: [[1.3, 7.2, -2.1], [1.7, 8.4, -2.2], [2.1, 9.8, -2.3]],
+};
+H.paths = P;
+
+// valves: c = centre, n = direction of forward flow, R = annulus radius
+function valve(name, c, n, R, kind, sectors, ref, len_) {
+  n = nrm(n);
+  const e1 = perp(ref, n), e2 = cross(n, e1);
+  return { name, c, n, R, kind, sectors, e1, e2, L: len_ * R };
+}
+const deg = Math.PI / 180;
+const VALVES = {
+  TV: valve('TV', lerp3(RA_IN, RV_IN, 0.5), sub(RV_IN, RA_IN), 1.4, 'av', [[-55, 55], [55, 200], [200, 305]], sub(LV_C, lerp3(RA_IN, RV_IN, 0.5)), 0.95),
+  MV: valve('MV', lerp3(LA_IN, LV_IN, 0.5), sub(LV_IN, LA_IN), 1.3, 'av', [[-65, 65], [65, 295]], sub(AV_C, lerp3(LA_IN, LV_IN, 0.5)), 0.95),
+  PV: valve('PV', PV_C, [1.2, 2.6, -0.8], 1.05, 'sl', [[-60, 60], [60, 180], [180, 300]], [0, 0, 1], 0.85),
+  AV: valve('AV', AV_C, sub(AV_C, LVOT_IN), 1.0, 'sl', [[-60, 60], [60, 180], [180, 300]], [0, 0, 1], 0.85),
+};
+const valveDir = (v, th) => add(mul(v.e1, Math.cos(th)), mul(v.e2, Math.sin(th)));
+// coronary ostia sit in the right (anterior) and left aortic sinuses
+(function () {
+  const v = VALVES.AV;
+  const mids = [0, 120, 240].map((a) => a * deg);
+  const leftIdx = mids[1] && valveDir(v, mids[1])[0] > valveDir(v, mids[2])[0] ? 1 : 2;
+  const ost = (th) => add(add(v.c, mul(v.n, 0.85 * v.R)), mul(valveDir(v, th), v.R * 1.05));
+  H.ostiumR = ost(mids[0]);
+  H.ostiumL = ost(mids[leftIdx]);
+  H.ostiumRdir = valveDir(v, mids[0]);
+  H.ostiumLdir = valveDir(v, mids[leftIdx]);
+})();
+
+// papillary muscles (base on wall -> tip toward valve)
+const lvPerp = (v) => perp(v, LV_AX);
+const PM = {
+  LV_AL: { dir: lvPerp([1, 0.1, 0.8]) }, // anterolateral
+  LV_PM: { dir: lvPerp([-0.3, -0.6, -1]) }, // posteromedial
+};
+for (const k of ['LV_AL', 'LV_PM']) {
+  PM[k].base = add(add(LV_C, mul(LV_AX, 1.0)), mul(PM[k].dir, 1.75));
+  PM[k].tip = add(add(LV_C, mul(LV_AX, -0.5)), mul(PM[k].dir, 1.05));
+}
+PM.RV_A = { base: add(add(RV_C, mul(RV_LONG, 1.7)), mul(RV_SHORT, 1.35)), tip: add(add(RV_C, mul(RV_LONG, 0.95)), mul(RV_SHORT, 0.55)) };
+PM.RV_P = { base: add(add(RV_C, mul(RV_LONG, 1.3)), mul(RV_B[1], -1.6)), tip: add(add(RV_C, mul(RV_LONG, 0.7)), mul(RV_B[1], -0.95)) };
+PM.RV_S = { base: add(RV_C, mul(RV_SHORT, -0.95)), tip: add(add(RV_C, mul(RV_SHORT, -0.55)), mul(RV_LONG, -0.3)) };
+H.PM = PM;
+const moderator = cone(add(add(RV_C, mul(RV_LONG, 1.55)), mul(RV_SHORT, -1.1)), add(add(RV_C, mul(RV_LONG, 1.75)), mul(RV_SHORT, 1.6)), 0.2, 0.2);
+
+const E_LV = ell(LV_C, H.LV.r, LV_B), E_RV = ell(RV_C, H.RV.r, RV_B);
+const E_RA = ell(RA_C, H.RA.r), E_LA = ell(LA_C, H.LA.r);
+const E_LVsept = ell(LV_C, [H.LV.r[0] + 1.15, H.LV.r[1] + 1.15, H.LV.r[2] + 1.15], LV_B);
+
+const RIGHT = [
+  comp('RA', [E_RA], { cat: 'atrium' }),
+  comp('RAA', [ell([-2.4, 2.3, 1.7], [0.95, 0.6, 0.85]), cone([-2.85, 1.5, 0.7], [-2.4, 2.3, 1.7], 0.65, 0.5)], { k: 0.4, cat: 'atrium' }),
+  comp('SVC', chain(P.svc, 0.95, 0.95), { k: 0.5, cat: 'vein' }),
+  comp('IVC', chain(P.ivc, 1.1, 1.1), { k: 0.5, cat: 'vein' }),
+  comp('TVc', [cone(RA_IN, RV_IN, 1.45, 1.4)], { k: 0.45, cat: 'atrium' }),
+  comp('RV', [E_RV], { k: 0.45, noise: 0.07, nf: 2.6, cat: 'ventricle' }),
+  comp('sept', [E_LVsept], { k: 0.35, sub: true }),
+  comp('RVOT', [cone([-0.1, -0.9, 3.05], PV_C, 1.15, 1.05)], { k: 0.45, cat: 'ventricle' }),
+  comp('PA', chain(P.trunk, 1.2, 1.15), { k: 0.3, cat: 'artery' }),
+  comp('RPA', chain(P.rpa, 1.0, 0.92), { k: 0.25, cat: 'artery' }),
+  comp('LPA', chain(P.lpa, 1.0, 0.92), { k: 0.25, cat: 'artery' }),
+  comp('mod', [moderator], { k: 0.15, sub: true }),
+  comp('pmRA', [cone(PM.RV_A.base, PM.RV_A.tip, 0.45, 0.22)], { k: 0.25, sub: true }),
+  comp('pmRP', [cone(PM.RV_P.base, PM.RV_P.tip, 0.35, 0.18)], { k: 0.25, sub: true }),
+];
+const LEFT = [
+  comp('LA', [E_LA], { cat: 'atrium' }),
+  comp('LAA', [ell([2.3, 2.4, -1.3], [1.0, 0.55, 0.75]), cone([1.5, 1.9, -2.6], [2.2, 2.4, -1.5], 0.55, 0.45)], { k: 0.35, cat: 'atrium' }),
+  comp('RSPV', chain(P.rspv, 0.78, 0.82), { k: 0.4, cat: 'vein' }),
+  comp('RIPV', chain(P.ripv, 0.75, 0.8), { k: 0.4, cat: 'vein' }),
+  comp('LSPV', chain(P.lspv, 0.78, 0.82), { k: 0.4, cat: 'vein' }),
+  comp('LIPV', chain(P.lipv, 0.75, 0.8), { k: 0.4, cat: 'vein' }),
+  comp('MVc', [cone(LA_IN, LV_IN, 1.35, 1.3)], { k: 0.45, cat: 'atrium' }),
+  comp('LV', [E_LV], { k: 0.45, noise: 0.08, nf: 2.6, cat: 'ventricle' }),
+  comp('LVOT', [cone(LVOT_IN, AV_C, 1.1, 1.0)], { k: 0.45, cat: 'ventricle' }),
+  comp('ROOT', [ell(ROOT_C, [1.3, 1.25, 1.3])], { k: 0.4, cat: 'artery' }),
+  comp('AO', chain(P.aorta, 1.2, 1.05), { k: 0.35, cat: 'artery' }),
+  comp('BRACH', chain(P.brach, 0.62, 0.55), { k: 0.25, cat: 'artery' }),
+  comp('LCCA', chain(P.lcca, 0.42, 0.38), { k: 0.2, cat: 'artery' }),
+  comp('LSUB', chain(P.lsub, 0.48, 0.42), { k: 0.2, cat: 'artery' }),
+  comp('ostR', [cone(sub(H.ostiumR, mul(H.ostiumRdir, 0.4)), add(H.ostiumR, mul(H.ostiumRdir, 0.45)), 0.22, 0.2)], { k: 0.12, cat: 'artery' }),
+  comp('ostL', [cone(sub(H.ostiumL, mul(H.ostiumLdir, 0.4)), add(H.ostiumL, mul(H.ostiumLdir, 0.6)), 0.24, 0.22)], { k: 0.12, cat: 'artery' }),
+  comp('pmAL', [cone(PM.LV_AL.base, PM.LV_AL.tip, 0.5, 0.26)], { k: 0.3, sub: true }),
+  comp('pmPM', [cone(PM.LV_PM.base, PM.LV_PM.tip, 0.5, 0.26)], { k: 0.3, sub: true }),
+];
+// outer heart surface (epicardium + vessel walls): each blood space inflated by its wall thickness
+const WALL = { LV: 1.0, RV: 0.22, RA: 0.3, RAA: 0.25, LA: 0.3, LAA: 0.25, TVc: 0.55, MVc: 0.85, RVOT: 0.3, LVOT: 0.9, ROOT: 0.35 };
+const EPI = [];
+for (const c of [...RIGHT, ...LEFT]) {
+  if (c.sub || c.name.startsWith('ost')) continue;
+  const w = WALL[c.name] != null ? WALL[c.name] : c.cat === 'artery' ? 0.22 : 0.16;
+  const chamber = c.cat === 'ventricle' || c.cat === 'atrium';
+  EPI.push({ ...c, infl: w, k: c.name === 'RV' || c.name === 'RVOT' ? 0.3 : chamber ? 0.75 : 0.3, noise: 0 });
+}
+const sdfRight = (p) => evalComps(p, RIGHT);
+const sdfLeft = (p) => evalComps(p, LEFT);
+const sdfEpi = (p) => evalComps(p, EPI) + 0.025 * fbm(p[0] * 1.7, p[1] * 0.95, p[2] * 1.7);
+const GRID = { min: [-6.2, -7.0, -7.4], max: [6.6, 9.0, 5.6] };
+
+// ---------------------------------------------------------------- surface nets mesher
+function surfaceNets(f, min, max, h) {
+  const nx = Math.floor((max[0] - min[0]) / h) + 1, ny = Math.floor((max[1] - min[1]) / h) + 1, nz = Math.floor((max[2] - min[2]) / h) + 1;
+  const vals = new Float32Array(nx * ny * nz);
+  const idx = (i, j, k) => i + nx * (j + ny * k);
+  // narrow band: evaluate a coarse grid first, then only refine near the surface
+  const C = 4, band = 1.6 * Math.sqrt(3) * (C / 2) * h + 0.08;
+  const cx = Math.ceil((nx - 1) / C) + 1, cy = Math.ceil((ny - 1) / C) + 1, cz = Math.ceil((nz - 1) / C) + 1;
+  const coarse = new Float32Array(cx * cy * cz);
+  for (let k = 0; k < cz; k++) for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++) coarse[i + cx * (j + cy * k)] = f([min[0] + i * C * h, min[1] + j * C * h, min[2] + k * C * h], -1);
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const cv0 = coarse[Math.round(i / C) + cx * (Math.round(j / C) + cy * Math.round(k / C))];
+    vals[idx(i, j, k)] = Math.abs(cv0) > band ? cv0 : f([min[0] + i * h, min[1] + j * h, min[2] + k * h], idx(i, j, k));
+  }
+  const cellV = new Int32Array(nx * ny * nz).fill(-1);
+  const pos = [];
+  const corners = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+  const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const cv = new Float64Array(8);
+  for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    let mask = 0;
+    for (let c = 0; c < 8; c++) { const o = corners[c]; cv[c] = vals[idx(i + o[0], j + o[1], k + o[2])]; if (cv[c] < 0) mask |= 1 << c; }
+    if (mask === 0 || mask === 255) continue;
+    let sx = 0, sy = 0, sz = 0, n = 0;
+    for (const [a, b] of edges) {
+      if ((cv[a] < 0) === (cv[b] < 0)) continue;
+      const t = cv[a] / (cv[a] - cv[b]);
+      const A = corners[a], B = corners[b];
+      sx += A[0] + (B[0] - A[0]) * t; sy += A[1] + (B[1] - A[1]) * t; sz += A[2] + (B[2] - A[2]) * t; n++;
+    }
+    cellV[idx(i, j, k)] = pos.length / 3;
+    pos.push(min[0] + (i + sx / n) * h, min[1] + (j + sy / n) * h, min[2] + (k + sz / n) * h);
+  }
+  const tri = [];
+  const quad = (a, b, c, d, flip) => { if (a < 0 || b < 0 || c < 0 || d < 0) return; if (flip) tri.push(a, c, b, a, d, c); else tri.push(a, b, c, a, c, d); };
+  for (let k = 1; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const s0 = vals[idx(i, j, k)] < 0, s1 = vals[idx(i + 1, j, k)] < 0; if (s0 === s1) continue;
+    quad(cellV[idx(i, j - 1, k - 1)], cellV[idx(i, j, k - 1)], cellV[idx(i, j, k)], cellV[idx(i, j - 1, k)], !s0);
+  }
+  for (let k = 1; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
+    const s0 = vals[idx(i, j, k)] < 0, s1 = vals[idx(i, j + 1, k)] < 0; if (s0 === s1) continue;
+    quad(cellV[idx(i - 1, j, k - 1)], cellV[idx(i - 1, j, k)], cellV[idx(i, j, k)], cellV[idx(i, j, k - 1)], !s0);
+  }
+  for (let k = 0; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
+    const s0 = vals[idx(i, j, k)] < 0, s1 = vals[idx(i, j, k + 1)] < 0; if (s0 === s1) continue;
+    quad(cellV[idx(i - 1, j - 1, k)], cellV[idx(i, j - 1, k)], cellV[idx(i, j, k)], cellV[idx(i - 1, j, k)], !s0);
+  }
+  return { positions: new Float32Array(pos), indices: pos.length / 3 > 65535 ? new Uint32Array(tri) : new Uint16Array(tri), vals };
+}
+function gradient(f, p, e = 0.03) {
+  return nrm([f([p[0] + e, p[1], p[2]]) - f([p[0] - e, p[1], p[2]]), f([p[0], p[1] + e, p[2]]) - f([p[0], p[1] - e, p[2]]), f([p[0], p[1], p[2] + e]) - f([p[0], p[1], p[2] - e])]);
+}
+
+// ---------------------------------------------------------------- tissue colours (sRGB 0..1)
+const hex = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
+const COL = { ventricle: hex(0x7a2226), atrium: hex(0x93403f), artery: hex(0xcf9f92), vein: hex(0x6c3c58), fat: hex(0xd9b468) };
+const mixc = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+function nearestCat(p, comps) {
+  let best = 1e9, cat = 'ventricle', second = 1e9;
+  for (const c of comps) {
+    if (c.sub) continue;
+    let d = 1e9; for (const q of c.prims) d = Math.min(d, sdPrim(p, q));
+    d -= c.infl;
+    if (d < best) { if (cat !== c.cat) second = best; best = d; cat = c.cat; } else if (c.cat !== cat && d < second) second = d;
+  }
+  return { cat, best, second };
+}
+function epiColor(p) {
+  const { cat, best, second } = nearestCat(p, EPI);
+  let c = COL[cat];
+  // soft blend to the neighbour category at junctions
+  const n = 0.08 * fbm(p[0] * 3, p[1] * 3, p[2] * 3);
+  c = c.map((x) => clamp(x + n, 0, 1));
+  // epicardial fat in the AV (coronary) groove and interventricular grooves
+  const dLV = sdPrim(p, E_LV) - 1.0, dRV = sdPrim(p, E_RV) - 0.22;
+  const dV = Math.min(dLV, dRV), dA = Math.min(sdPrim(p, E_RA) - 0.3, sdPrim(p, E_LA) - 0.3, compDist(p, EPI, 'TVc'), compDist(p, EPI, 'MVc'));
+  let fat = Math.exp(-(((dV - dA) / 0.38) ** 2)) * (dV < 1.0 ? 1 : 0);
+  fat = Math.max(fat, Math.exp(-(((dLV - dRV) / 0.22) ** 2)) * (Math.max(dLV, dRV) < 0.6 ? 0.8 : 0));
+  fat *= cat === 'ventricle' || cat === 'atrium' ? 1 : 0.25;
+  fat *= 0.75 + 0.25 * vnoise(p[0] * 2.5, p[1] * 2.5, p[2] * 2.5);
+  c = mixc(c, COL.fat, clamp(fat * 0.8, 0, 0.7));
+  if (second - best < 0.3 && cat === 'artery') c = mixc(c, COL.atrium, 0.2);
+  return c;
+}
+const LUM = { ventricle: hex(0x9c3a3c), atrium: hex(0xb2575a), artery: hex(0xd8a39a), vein: hex(0xa36377) };
+function lumenColor(p, comps) {
+  const { cat } = nearestCat(p, comps);
+  const n = fbm(p[0] * 2.2, p[1] * 2.2, p[2] * 2.2);
+  return LUM[cat].map((x) => clamp(x * (0.88 + 0.22 * n), 0, 1));
+}
+
+// ---------------------------------------------------------------- beating heart: timing model
+// cycle time t in seconds, t = 0 at the start of atrial contraction (P wave)
+function cycleTimes(bpm) {
+  const RR = 60 / bpm, s = Math.sqrt(RR / 0.857);
+  const a = Math.min(0.11, 0.13 * RR); // atrial systole
+  const tAC = a + 0.03 * s; // AV valves close (S1) - ventricles start contracting
+  const tSO = tAC + 0.05 * s; // semilunar valves open (isovolumetric contraction over)
+  const tSC = tAC + 0.324 * Math.sqrt(RR); // semilunar valves close (S2)
+  const tAO = tSC + 0.07 * s; // AV valves open (isovolumetric relaxation over)
+  return { RR, s, a, tAC, tSO, tSC, tAO };
+}
+// valve open windows [open, close] in cycle seconds (close may exceed RR = wraps)
+function valveWindows(T) {
+  const { RR, s, tAC, tSO, tSC, tAO } = T;
+  return {
+    MV: [tAO, RR + tAC], // mitral closes first (M1) ...
+    TV: [tAO, RR + tAC + 0.015 * s], // ... then tricuspid (T1)
+    PV: [tSO - 0.01 * s, tSC + 0.02 * s], // pulmonary opens first, closes last (P2 after A2)
+    AV: [tSO, tSC],
+  };
+}
+const RAMP = { open: 0.04, close: 0.035 };
+function openness(t, win, T) {
+  const [o, c] = win;
+  const ro = RAMP.open * T.s, rc = RAMP.close * T.s;
+  let tt = t;
+  if (tt < o) tt += T.RR;
+  if (tt > c) return 0;
+  return smoothstep(o, o + ro, tt) * (1 - smoothstep(c - rc, c, tt));
+}
+function windowMid(win, T) {
+  const ro = RAMP.open * T.s, rc = RAMP.close * T.s;
+  let m = (win[0] + ro + win[1] - rc) / 2;
+  return ((m % T.RR) + T.RR) % T.RR;
+}
+const fill = (u) => 0.8 * (1 - Math.exp(-u / 0.09));
+// ventricular filling fraction V (1 = full, end diastole) and atrial volume fraction
+function volumes(t, T) {
+  const { RR, a, tAC, tSO, tSC, tAO } = T;
+  let V;
+  const Vd = fill(RR - tAO);
+  if (t < a) V = Vd + (1 - Vd) * smoothstep(0, a, t);
+  else if (t < tSO) V = 1;
+  else if (t < tSC) V = Math.pow(1 - (t - tSO) / (tSC - tSO), 1.8); // front-loaded ejection
+  else if (t < tAO) V = 0;
+  else V = fill(t - tAO);
+  let Va;
+  const afill = (u) => 1 - 0.45 * (1 - Math.exp(-u / 0.09));
+  const VaD = afill(RR - tAO);
+  if (t < a) Va = VaD * (1 - smoothstep(0, a, t));
+  else if (t < tAC) Va = 0;
+  else if (t < tAO) Va = smoothstep(tAC, tAO, t);
+  else Va = afill(t - tAO);
+  return { V, Va };
+}
+// complete heart state for a cycle time
+function heartState(t, bpm) {
+  const T = cycleTimes(bpm);
+  t = ((t % T.RR) + T.RR) % T.RR;
+  const W = valveWindows(T);
+  const { V, Va } = volumes(t, T);
+  const kV = 1 - V, kA = 1 - Va;
+  const open = { TV: openness(t, W.TV, T), MV: openness(t, W.MV, T), PV: openness(t, W.PV, T), AV: openness(t, W.AV, T) };
+  let phase;
+  if (t < T.a) phase = 'atria';
+  else if (t < T.tAC) phase = 'atria-end';
+  else if (t < T.tSO) phase = 'ivc';
+  else if (t < T.tSC) phase = 'eject';
+  else if (t < T.tAO) phase = 'ivr';
+  else phase = 'fill';
+  return { t, T, kV, kA, open, phase, k: [kV, kV, kA, kA], descent: kV * 0.9 };
+}
+const PHASE_TEXT = {
+  atria: 'Atria squeeze - topping up the ventricles',
+  'atria-end': 'Atria squeeze - topping up the ventricles',
+  ivc: 'All four valves shut - pressure building ("lub")',
+  eject: 'Ventricles squeeze - blood pushed to lungs and body',
+  ivr: 'All four valves shut - ventricles relaxing ("dub")',
+  fill: 'Ventricles relax and fill from the atria',
+};
+
+// ---------------------------------------------------------------- deformation (mirrored in GLSL)
+const CHAMBERS = [
+  { name: 'LV', c: LV_C, a: LV_AX, e: E_LV, R: 0.22, L: 0.05 },
+  { name: 'RV', c: RV_C, a: RV_LONG, e: E_RV, R: 0.2, L: 0.08 },
+  { name: 'LA', c: LA_C, a: [0, 1, 0], e: E_LA, R: 0.14, L: 0.14 },
+  { name: 'RA', c: RA_C, a: [0, 1, 0], e: E_RA, R: 0.14, L: 0.14 },
+];
+const DEFORM = { apex: H.apex, axis: LV_AX, len: 3.2 * 2 + 0.8, hc: H.center, fade0: 4.0, fade1: 7.5 };
+function chamberWeights(p) {
+  const w = CHAMBERS.map((ch) => 1 - smoothstep(-0.3, 2.2, sdPrim(p, ch.e)));
+  const s = w[0] + w[1] + w[2] + w[3];
+  return s > 1 ? w.map((x) => x / s) : w;
+}
+function deform(p, st, w) {
+  w = w || chamberWeights(p);
+  let d = [0, 0, 0];
+  for (let i = 0; i < 4; i++) {
+    const ch = CHAMBERS[i];
+    const q = sub(p, ch.c), ax = dot(q, ch.a), qa = mul(ch.a, ax), qr = sub(q, qa);
+    d = add(d, mul(add(mul(qr, -ch.R), mul(qa, -ch.L)), w[i] * st.k[i]));
+  }
+  const b = clamp(dot(sub(p, DEFORM.apex), mul(DEFORM.axis, -1)) / DEFORM.len, 0, 1) * (1 - smoothstep(DEFORM.fade0, DEFORM.fade1, len(sub(p, DEFORM.hc))));
+  return add(add(p, d), mul(DEFORM.axis, st.descent * b));
+}
+
+// ---------------------------------------------------------------- valve leaflet geometry
+// closed: leaflets meet along coaptation lines; open: pressed toward the wall, pointing downstream
+function leafletGeometry(v, U = 14, Vn = 7) {
+  const S = v.sectors.map(([a, b]) => [a * deg, b * deg]);
+  const closed = [], open = [], index = [], freeEdge = [];
+  const mid = S.length === 2 ? lerp3(add(v.c, mul(valveDir(v, S[0][0]), v.R)), add(v.c, mul(valveDir(v, S[0][1]), v.R)), 0.5) : v.c;
+  S.forEach(([t0, t1], li) => {
+    const base = closed.length / 3;
+    const c0 = add(v.c, mul(valveDir(v, t0), v.R)), c1 = add(v.c, mul(valveDir(v, t1), v.R));
+    for (let j = 0; j <= Vn; j++) for (let i = 0; i <= U; i++) {
+      const u = i / U, vv = j / Vn, th = mix(t0, t1, u);
+      const dir = valveDir(v, th);
+      const hinge = add(v.c, mul(dir, v.R));
+      const C = u < 0.5 ? lerp3(c0, mid, u * 2) : lerp3(mid, c1, u * 2 - 1);
+      let pc = lerp3(hinge, C, vv);
+      const belly = Math.sin(Math.PI * vv) * Math.pow(Math.sin(Math.PI * u), 0.7);
+      if (v.kind === 'av') pc = add(pc, add(mul(v.n, 0.28 * v.R * vv * vv), mul(v.n, -0.16 * v.R * belly)));
+      else pc = add(pc, add(mul(v.n, -0.42 * v.R * belly), mul(v.n, 0.12 * v.R * vv)));
+      const sh = v.kind === 'av' ? 0.16 : 0.06;
+      const po = add(add(v.c, mul(dir, v.R * (1 - sh * vv) * (1 - 0.06 * Math.sin(Math.PI * u)))), mul(v.n, v.L * vv));
+      closed.push(...pc); open.push(...po);
+      if (j === Vn) freeEdge.push({ leaflet: li, u, closed: pc, open: po });
+    }
+    for (let j = 0; j < Vn; j++) for (let i = 0; i < U; i++) {
+      const a = base + j * (U + 1) + i, b = a + 1, c = a + U + 1, d = c + 1;
+      index.push(a, b, d, a, d, c);
+    }
+  });
+  return { closed: new Float32Array(closed), open: new Float32Array(open), index, freeEdge };
+}
+// chordae tendineae: free-edge points -> nearest papillary tip
+function chordae(v) {
+  if (v.kind !== 'av') return [];
+  const tips = v.name === 'MV' ? [PM.LV_AL.tip, PM.LV_PM.tip] : [PM.RV_A.tip, PM.RV_P.tip, PM.RV_S.tip];
+  const g = leafletGeometry(v);
+  const out = [];
+  for (const fe of g.freeEdge) {
+    if (fe.u < 0.08 || fe.u > 0.92 || Math.round(fe.u * 14) % 2) continue;
+    let best = tips[0], bd = 1e9;
+    for (const t of tips) { const d = len(sub(t, fe.open)); if (d < bd) { bd = d; best = t; } }
+    out.push({ closed: fe.closed, open: fe.open, tip: best });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- the ride path
+// tags: stop ids, valve names, lung markers
+const LUNG = [[-8.0, 4.5, -1.7], [-10.4, 4.6, -0.9], [-12.6, 3.4, -1.0], [-13.0, 1.8, -2.4], [-11.2, 1.0, -3.6], [-8.6, 1.9, -3.4]];
+const PATH_KNOTS = [
+  { p: [-3.38, 8.7, -0.09] },
+  { p: [-3.32, 6.6, -0.06], stop: 'svc' },
+  { p: [-3.2, 3.6, -0.02] },
+  { p: [-3.05, 1.6, 0.1] },
+  { p: [-2.95, 0.75, 0.25], stop: 'ra' },
+  { p: [-2.55, 0.15, 0.62] },
+  { p: VALVES.TV.c, valve: 'TV' },
+  { p: [-1.3, -1.15, 2.0] },
+  { p: [-0.75, -1.55, 2.4], stop: 'rv' },
+  { p: [-0.3, -1.0, 2.85] },
+  { p: [0.35, 0.6, 3.1] },
+  { p: PV_C, valve: 'PV' },
+  { p: [1.55, 3.15, 2.25] },
+  { p: [1.95, 4.05, 0.95], stop: 'pa' },
+  { p: [1.45, 4.75, -0.75] },
+  { p: [0.0, 4.6, -2.1] },
+  { p: [-2.8, 4.35, -2.4] },
+  { p: [-5.5, 4.15, -2.4] },
+  { p: [-5.9, 4.13, -2.4], lung: 'start' },
+  { p: LUNG[0] }, { p: LUNG[1] }, { p: LUNG[2], stop: 'lung' }, { p: LUNG[3] }, { p: LUNG[4] }, { p: LUNG[5] },
+  { p: [-6.0, 2.42, -3.12], lung: 'end' },
+  { p: [-4.4, 2.5, -3.04], stop: 'pv' },
+  { p: [-2.6, 2.2, -3.1] },
+  { p: [-0.9, 2.0, -3.0] },
+  { p: [0.45, 1.75, -2.95], stop: 'la' },
+  { p: LA_IN },
+  { p: VALVES.MV.c, valve: 'MV' },
+  { p: [1.6, -0.7, -0.9] },
+  { p: [2.3, -2.1, -0.45] },
+  { p: [2.55, -3.0, 0.25], stop: 'lv' },
+  { p: [2.05, -2.45, 0.85] },
+  { p: [1.3, -1.2, 0.45] },
+  { p: [0.6, -0.15, 0.35] },
+  { p: AV_C, valve: 'AV' },
+  { p: [-0.25, 1.75, 0.4], stop: 'root' },
+  { p: [-0.5, 3.0, 0.5] },
+  { p: [-0.75, 4.3, 0.55] },
+  { p: [-0.55, 5.7, 0.3] },
+  { p: [0.3, 6.75, -0.75], stop: 'arch' },
+  { p: [1.6, 7.0, -2.7] },
+  { p: [2.6, 5.9, -5.0] },
+];
+const STOPS = {
+  svc: { title: 'Superior vena cava', text: 'Oxygen-poor blood from your head and arms flows down this large vein into the heart. Blood here is dark red - never actually blue.' },
+  ra: { title: 'Right atrium', text: 'A collecting chamber. Blood arrives from the upper body (above) and lower body (the inferior vena cava, below). A gentle squeeze tops up the ventricle.' },
+  rv: { title: 'Right ventricle', text: 'We passed the tricuspid valve - three leaflets held by cord-like "heart strings". This chamber pumps blood a short, low-pressure trip to the lungs.' },
+  pa: { title: 'Pulmonary artery', text: 'The pulmonary valve snaps shut behind us so blood cannot fall back. Unusually for an artery, it carries oxygen-poor blood - to the lungs.' },
+  lung: { title: 'Lungs (simplified)', text: 'In tiny vessels wrapped around air sacs, carbon dioxide leaves the blood and oxygen joins it. Watch the cells turn bright red.' },
+  pv: { title: 'Pulmonary vein', text: 'Fresh, oxygen-rich blood heads back to the heart. Four pulmonary veins enter the left atrium - with no valves at their openings.' },
+  la: { title: 'Left atrium', text: 'The left-side collecting chamber, sitting at the back of the heart. Ahead is the mitral valve, which has two leaflets.' },
+  lv: { title: 'Left ventricle', text: 'The main pump. Its wall is about 1 cm thick - roughly three times the right side - because it pushes blood around the whole body.' },
+  root: { title: 'Aortic valve & coronaries', text: 'Through the aortic valve. Just above it, two small openings lead to the coronary arteries, which feed the heart muscle itself.' },
+  arch: { title: 'Aortic arch', text: 'The body\'s largest artery. Branches overhead go to the head and arms; the rest curves down to feed every organ. End of the ride - each beat repeats it.' },
+};
+const STOP_ORDER = ['svc', 'ra', 'rv', 'pa', 'lung', 'pv', 'la', 'lv', 'root', 'arch'];
+
+function buildPath(step = 0.05) {
+  const pts = PATH_KNOTS.map((k) => k.p);
+  const per = 24;
+  const dense = catmull(pts, per);
+  const s = [0];
+  for (let i = 1; i < dense.length; i++) s.push(s[i - 1] + len(sub(dense[i], dense[i - 1])));
+  const knotS = PATH_KNOTS.map((_, i) => s[i * per]);
+  const total = s[s.length - 1];
+  const n = Math.ceil(total / step) + 1;
+  const P = new Float64Array(n * 3);
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const target = Math.min(i * step, total);
+    while (j < s.length - 2 && s[j + 1] < target) j++;
+    const t = (target - s[j]) / Math.max(s[j + 1] - s[j], 1e-9);
+    const q = lerp3(dense[j], dense[j + 1], clamp(t, 0, 1));
+    P[i * 3] = q[0]; P[i * 3 + 1] = q[1]; P[i * 3 + 2] = q[2];
+  }
+  const at = (ss) => {
+    const f = clamp(ss / step, 0, n - 1), i = Math.min(Math.floor(f), n - 2), t = f - i;
+    return [mix(P[i * 3], P[i * 3 + 3], t), mix(P[i * 3 + 1], P[i * 3 + 4], t), mix(P[i * 3 + 2], P[i * 3 + 5], t)];
+  };
+  const tangent = (ss) => nrm(sub(at(ss + 0.15), at(ss - 0.15)));
+  // parallel-transport frames for placing cells across the vessel
+  const N = [], B = [];
+  let nPrev = perp([0, 0, 1], tangent(0));
+  for (let i = 0; i < n; i++) {
+    const T = tangent(i * step);
+    let nn = perp(nPrev, T);
+    if (!isFinite(nn[0])) nn = perp([1, 0, 0], T);
+    N.push(nn); B.push(cross(T, nn)); nPrev = nn;
+  }
+  const frame = (ss) => { const i = clamp(Math.round(ss / step), 0, n - 1); return { N: N[i], B: B[i] }; };
+  const stops = {}, valves = {}, lung = {};
+  PATH_KNOTS.forEach((k, i) => { if (k.stop) stops[k.stop] = knotS[i]; if (k.valve) valves[k.valve] = knotS[i]; if (k.lung) lung[k.lung] = knotS[i]; });
+  const pool = (ss) => (ss < lung.start ? 'R' : ss > lung.end ? 'L' : 'lung');
+  return { total, step, n, at, tangent, frame, stops, valves, lung, knotS, pool };
+}
+const lungRadius = (path, ss) => {
+  const u = clamp((ss - path.lung.start) / (path.lung.end - path.lung.start), 0, 1);
+  return u < 0.5 ? mix(0.93, 0.55, smoothstep(0, 0.5, u)) : mix(0.55, 0.78, smoothstep(0.5, 1, u));
+};
+// oxygen saturation shown by cell colour: 0 = venous, 1 = arterial
+const oxygenAt = (path, ss) => smoothstep(path.lung.start + 2, path.lung.end - 2, ss);
+
+// ---------------------------------------------------------------- ride controller (beat-synchronised)
+// legs between stops; a leg that crosses a valve is timed so the crossing hits the middle of that valve's open window
+const easeG = (x, a = 0.35) => (x < a ? (x * x) / (a * (2 - a)) : (2 * x - a) / (2 - a));
+const easeH = (y, a = 0.35) => 1 - easeG(1 - y, a);
+const easeIO = (x) => x * x * x * (x * (x * 6 - 15) + 10);
+class Ride {
+  constructor(path, opts = {}) {
+    this.path = path;
+    this.order = opts.order || STOP_ORDER;
+    this.speed = opts.speed || 2.6;
+    this.dwell = opts.dwell != null ? opts.dwell : 4.5;
+    this.legs = [];
+    for (let i = 0; i < this.order.length - 1; i++) {
+      const s0 = path.stops[this.order[i]], s1 = path.stops[this.order[i + 1]];
+      let valve = null;
+      for (const [k, sv] of Object.entries(path.valves)) if (sv > s0 && sv < s1) valve = { name: k, s: sv };
+      this.legs.push({ s0, s1, valve });
+    }
+    this.goto(0);
+    this.paused = false;
+    this.crossings = [];
+  }
+  goto(i) { this.i = clamp(i, 0, this.order.length - 1); this.s = this.path.stops[this.order[this.i]]; this.state = 'dwell'; this.t = 0; this.v = 0; }
+  get stopId() { return this.order[this.i]; }
+  get atEnd() { return this.i === this.order.length - 1 && this.state === 'dwell'; }
+  next(ctx) {
+    if (this.state === 'dwell') { if (this.i >= this.order.length - 1) this.goto(0); else this.startLeg(ctx); }
+    else this.goto(this.i + 1);
+  }
+  prev() { if (this.state === 'dwell') this.goto(this.i - 1); else this.goto(this.i); }
+  startLeg(ctx) {
+    const leg = this.legs[this.i];
+    this.leg = leg; this.t = 0;
+    if (leg.valve) this.startPre(this.s, ctx); else { this.state = 'move'; this.from = this.s; this.T = Math.max(1.5, (leg.s1 - this.s) / this.speed * 1.4); }
+  }
+  // approach a valve: we "pursue" a target moment (the middle of the valve's open window, counted in heartbeats),
+  // so the crossing lands mid-window whatever the heart rate, even if the rate changes on the way
+  startPre(from, ctx) {
+    const leg = this.leg;
+    this.state = 'pre'; this.from = from; this.t = 0; this.phiPrev = ctx.phi;
+    const RR = 60 / ctx.bpm;
+    const est = (0.8 * (leg.valve.s - from)) / this.speed;
+    const m = ctx.mid(leg.valve.name, ctx.bpm) / RR;
+    let n = Math.floor(ctx.phi + est / RR);
+    if (n + m < ctx.phi + est / RR) n += 1;
+    this.nCycle = n;
+    this.ramp = Math.max(0.15, 0.35 * ((n + m - ctx.phi) * RR));
+  }
+  update(dt, ctx) {
+    if (this.paused) { if (this.state === 'pre') this.needResched = true; return this.s; }
+    if (this.needResched && this.state === 'pre') { this.needResched = false; this.t = 0; this.phiPrev = ctx.phi; this.ramp = 0.4; }
+    const sPrev = this.s;
+    this.t += dt;
+    if (this.state === 'dwell') {
+      if (ctx.realDt != null) this.t += ctx.realDt - dt; // dwell is measured in real seconds, even in slow motion
+      if (ctx.auto && this.t > this.dwell && this.i < this.order.length - 1) this.startLeg(ctx);
+    } else if (this.state === 'move') {
+      const x = clamp(this.t / this.T, 0, 1);
+      this.s = mix(this.from, this.leg.s1, easeIO(x));
+      if (x >= 1) this.arrive();
+    } else if (this.state === 'pre') {
+      const RR = 60 / ctx.bpm, vs = this.leg.valve.s;
+      const dist = vs - this.s;
+      let target = this.nCycle + ctx.mid(this.leg.valve.name, ctx.bpm) / RR;
+      const minPhase = dist / (this.speed * 2.2) / RR;
+      while (target - this.phiPrev < minPhase) { this.nCycle += 1; target += 1; }
+      const remain = target - this.phiPrev, dphi = ctx.phi - this.phiPrev;
+      const ramp = smoothstep(0, 1, this.t / this.ramp);
+      const vNow = dist / (remain * RR); // pursuit speed (cm/s)
+      if (dphi >= remain) {
+        // crossing: carry the leftover time into the exit leg so speed is continuous
+        this.crossings.push({ valve: this.leg.valve.name, phi: target });
+        const over = (ctx.phi - target) * RR;
+        this.state = 'post';
+        const post = this.leg.s1 - vs;
+        this.Tpost = Math.max(0.3, (post * (2 / (2 - 0.35))) / Math.max(vNow, 0.3));
+        this.t = over;
+        this.s = mix(vs, this.leg.s1, easeH(clamp(this.t / this.Tpost, 0, 1)));
+      } else {
+        this.s += dist * (dphi / remain) * ramp;
+      }
+      this.phiPrev = ctx.phi;
+    } else if (this.state === 'post') {
+      const y = clamp(this.t / this.Tpost, 0, 1);
+      this.s = mix(this.leg.valve.s, this.leg.s1, easeH(y));
+      if (y >= 1) this.arrive();
+    }
+    this.v = dt > 0 ? (this.s - sPrev) / dt : 0;
+    return this.s;
+  }
+  arrive() { this.i += 1; this.s = this.path.stops[this.order[this.i]]; this.state = 'dwell'; this.t = 0; }
+}
+
+// ---------------------------------------------------------------- blood-flow speed for the cells (cm/s)
+function cellSpeed(ss, path, st) {
+  const v = path.valves;
+  if (ss < v.TV) return 3 + 9 * st.open.TV;
+  if (ss < v.PV) return 2 + 16 * st.open.PV + 4 * st.open.TV;
+  if (ss < path.lung.end) return 4 + 6 * st.open.PV;
+  if (ss < v.MV) return 3 + 9 * st.open.MV;
+  if (ss < v.AV) return 2 + 18 * st.open.AV + 4 * st.open.MV;
+  return 4 + 22 * st.open.AV;
+}
+// cells may not cross a closed valve: returns the clamped new position
+function advanceCell(ss, ds, path, st) {
+  const ns = ss + ds;
+  for (const k of ['TV', 'PV', 'MV', 'AV']) {
+    const sv = path.valves[k];
+    if (ss < sv && ns >= sv && st.open[k] < 0.25) return Math.min(ns, sv - 0.06);
+  }
+  return ns;
+}
+
+// ---------------------------------------------------------------- coronary arteries (follow the real grooves on the surface)
+function surfaceAlong(origin, dir, f = sdfEpi, maxD = 9) {
+  let prev = 0, fp = f(origin);
+  if (fp > 0) return null;
+  for (let d = 0.15; d <= maxD; d += 0.15) {
+    const v = f(add(origin, mul(dir, d)));
+    if (v > 0) {
+      let a = prev, b = d;
+      for (let i = 0; i < 12; i++) { const m = (a + b) / 2; if (f(add(origin, mul(dir, m))) > 0) b = m; else a = m; }
+      return add(origin, mul(dir, (a + b) / 2));
+    }
+    prev = d;
+  }
+  return null;
+}
+function projectToSurface(p, f = sdfEpi) {
+  let q = p;
+  for (let i = 0; i < 8; i++) { const d = f(q); const g = gradient(f, q, 0.02); q = sub(q, mul(g, d)); }
+  return q;
+}
+function interventricularGrooves() {
+  const dLV = (p) => sdPrim(p, E_LV) - 1.0, dRV = (p) => sdPrim(p, E_RV) - 0.22;
+  const ant = [], post = [];
+  const u = LV_B[1], w = LV_B[2];
+  for (let t = -2.9; t <= 2.9; t += 0.3) {
+    const o = add(LV_C, mul(LV_AX, t));
+    const S = [];
+    for (let a = 0; a < 90; a++) {
+      const th = (a / 90) * Math.PI * 2;
+      const dir = add(mul(u, Math.cos(th)), mul(w, Math.sin(th)));
+      const p = surfaceAlong(o, dir);
+      S.push(p ? { p, f: dLV(p) - dRV(p) } : null);
+    }
+    const found = [];
+    for (let a = 0; a < 90; a++) {
+      const A = S[a], B = S[(a + 1) % 90];
+      if (A && B && Math.sign(A.f) !== Math.sign(B.f)) { const tt = A.f / (A.f - B.f); found.push(lerp3(A.p, B.p, tt)); }
+    }
+    if (found.length >= 2) {
+      found.sort((x, y) => y[2] - x[2]);
+      ant.push(found[0]); post.push(found[found.length - 1]);
+    }
+  }
+  return { ant, post };
+}
+function ringAround(v, th0, th1, steps, back = 0.35) {
+  const out = [];
+  for (let i = 0; i <= steps; i++) {
+    const th = mix(th0, th1, i / steps);
+    const p = surfaceAlong(sub(v.c, mul(v.n, back)), valveDir(v, th));
+    if (p && len(sub(p, v.c)) < v.R + 2.4) out.push(p);
+  }
+  return out;
+}
+const angOf = (v, p) => { const d = sub(p, v.c); return Math.atan2(dot(d, v.e2), dot(d, v.e1)); };
+function resample(pts, step) {
+  const d = catmull(pts, 6);
+  const out = [d[0]];
+  let acc = 0;
+  for (let i = 1; i < d.length; i++) { acc += len(sub(d[i], d[i - 1])); if (acc >= step) { out.push(d[i]); acc = 0; } }
+  if (len(sub(out[out.length - 1], d[d.length - 1])) > step * 0.3) out.push(d[d.length - 1]); else out[out.length - 1] = d[d.length - 1];
+  return out;
+}
+function buildCoronaries() {
+  const lift = (p, r) => add(p, mul(gradient(sdfEpi, p), r * 0.55));
+  const g = interventricularGrooves();
+  const lad = g.ant.filter((p) => p[2] > 0.5), pda = g.post.filter((p) => p[2] < 1.5);
+  const apex = surfaceAlong(H.apex.map((x, i) => x - LV_AX[i] * 1.2), LV_AX);
+  // right coronary: around the tricuspid ring on the free-wall side, from the aorta to the crux
+  const TV = VALVES.TV, MV = VALVES.MV;
+  const thAo = angOf(TV, H.ostiumR);
+  const crux = pda.length ? pda[0] : null;
+  let thCx = crux ? angOf(TV, crux) : thAo + Math.PI * 1.3;
+  // go the long way round, through angle pi (away from the septum)
+  let a0 = thAo, a1 = thCx;
+  const through = (x0, x1) => { const mid = (x0 + x1) / 2; return Math.cos(mid) < 0; };
+  if (!through(a0, a1)) { if (a1 > a0) a1 -= Math.PI * 2; else a1 += Math.PI * 2; }
+  const rcaRing = ringAround(TV, a0 + 0.25 * Math.sign(a1 - a0), a1, 22);
+  const rca = [H.ostiumR, ...rcaRing.slice(0, rcaRing.length - 1), ...(crux ? [crux] : [])];
+  // left main -> LAD down the anterior groove; circumflex round the mitral ring on the lateral side
+  const ladTop = lad[0];
+  const lcxStartTh = angOf(MV, ladTop);
+  let c0 = lcxStartTh, c1 = lcxStartTh + Math.PI * 0.95;
+  if (Math.cos((c0 + c1) / 2) > 0) c1 = lcxStartTh - Math.PI * 0.95;
+  const lcxRing = ringAround(MV, c0 + 0.15 * Math.sign(c1 - c0), c1, 16);
+  const bif = lerp3(ladTop, lcxRing[0], 0.5);
+  const lm = [H.ostiumL, projectToSurface(lerp3(H.ostiumL, bif, 0.5)), projectToSurface(bif)];
+  const ladPts = [projectToSurface(bif), ...lad, ...(apex ? [apex] : [])];
+  // branches: a diagonal off the LAD, an obtuse marginal off the circumflex, an acute marginal off the RCA
+  const branch = (from, toward, n) => {
+    const out = [from];
+    for (let i = 1; i <= n; i++) out.push(projectToSurface(lerp3(from, toward, i / n)));
+    return out;
+  };
+  const lv = (t, ang, r = 3.2) => add(add(LV_C, mul(LV_AX, t)), add(mul(LV_B[1], Math.cos(ang) * r), mul(LV_B[2], Math.sin(ang) * r)));
+  const ladMid = lad[Math.floor(lad.length * 0.3)] || ladTop;
+  const lateral = perp([1, -0.2, 0.2], LV_AX);
+  const diag = branch(ladMid, add(add(LV_C, mul(LV_AX, 1.6)), mul(lateral, 3)), 6);
+  const lcxMid = lcxRing[Math.floor(lcxRing.length * 0.45)];
+  const om = branch(lcxMid, add(add(LV_C, mul(LV_AX, 2.0)), mul(perp(sub(lcxMid, LV_C), LV_AX), 3)), 6);
+  const rcaMarg = rcaRing[Math.floor(rcaRing.length * 0.5)];
+  const am = branch(rcaMarg, add(RV_C, mul(RV_LONG, 2.0)), 5);
+  void lv;
+  const vessels = [
+    { name: 'Left main', pts: lm, r0: 0.24, r1: 0.22 },
+    { name: 'LAD', pts: ladPts, r0: 0.2, r1: 0.07 },
+    { name: 'Circumflex', pts: [projectToSurface(bif), ...lcxRing], r0: 0.19, r1: 0.09 },
+    { name: 'RCA', pts: rca, r0: 0.22, r1: 0.12 },
+    { name: 'PDA', pts: [...pda, ...(apex ? [lerp3(pda[pda.length - 1] || apex, apex, 0.6)] : [])], r0: 0.13, r1: 0.06 },
+    { name: 'Diagonal', pts: diag, r0: 0.12, r1: 0.05 },
+    { name: 'Obtuse marginal', pts: om, r0: 0.12, r1: 0.05 },
+    { name: 'Acute marginal', pts: am, r0: 0.1, r1: 0.05 },
+  ].filter((v) => v.pts.length >= 2);
+  for (const v of vessels) {
+    const rs = resample(v.pts, 0.35);
+    v.pts = rs.map((p, i) => (i === 0 && (v.name === 'Left main' || v.name === 'RCA') ? p : lift(projectToSurface(p), mix(v.r0, v.r1, i / (rs.length - 1)))));
+  }
+  return vessels;
+}
+
+// ---------------------------------------------------------------- generic tube (variable radius)
+function tubeGeometry(pts, radius, radial = 10, closed = false) {
+  const n = pts.length;
+  const pos = [], nor = [], idx = [];
+  let nPrev = null;
+  for (let i = 0; i < n; i++) {
+    const T = nrm(sub(pts[Math.min(i + 1, n - 1)], pts[Math.max(i - 1, 0)]));
+    let N = nPrev ? perp(nPrev, T) : perp(Math.abs(T[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], T);
+    const B = cross(T, N); nPrev = N;
+    const r = typeof radius === 'function' ? radius(i / (n - 1), i) : radius;
+    for (let j = 0; j <= radial; j++) {
+      const a = (j / radial) * Math.PI * 2;
+      const d = add(mul(N, Math.cos(a)), mul(B, Math.sin(a)));
+      pos.push(...add(pts[i], mul(d, r))); nor.push(...d);
+    }
+  }
+  for (let i = 0; i < n - 1; i++) for (let j = 0; j < radial; j++) {
+    const a = i * (radial + 1) + j, b = a + radial + 1;
+    idx.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  void closed;
+  return { positions: new Float32Array(pos), normals: new Float32Array(nor), indices: idx };
+}
+
+// ---------------------------------------------------------------- synthetic ECG (for the rhythm strip)
+function ecg(t, T) {
+  const g = (c, w, a) => a * Math.exp(-(((t - c) / w) ** 2));
+  const g2 = (c, w, a) => a * Math.exp(-(((t - T.RR - c) / w) ** 2));
+  const qrs = T.tAC - 0.035 * T.s;
+  const tw = T.tSC - 0.07 * T.s;
+  return g(T.a * 0.35, 0.025, 0.12) + g(qrs - 0.018, 0.008, -0.12) + g(qrs, 0.011, 1) + g(qrs + 0.02, 0.01, -0.25) + g(tw, 0.045 * T.s, 0.28) + g2(T.a * 0.35, 0.025, 0.12);
+}
+
+return { add, sub, mul, dot, len, nrm, cross, lerp3, clamp, mix, smoothstep, basis, vnoise, fbm, rng, sdPrim, smin, smax, catmull, evalComps, compDist, H, VALVES, valveDir, RIGHT, LEFT, EPI, sdfRight, sdfLeft, sdfEpi, GRID, surfaceNets, gradient, epiColor, lumenColor, cycleTimes, valveWindows, openness, windowMid, volumes, heartState, PHASE_TEXT, CHAMBERS, DEFORM, chamberWeights, deform, leafletGeometry, chordae, PATH_KNOTS, STOPS, STOP_ORDER, buildPath, lungRadius, oxygenAt, easeG, easeH, easeIO, Ride, cellSpeed, advanceCell, surfaceAlong, projectToSurface, buildCoronaries, tubeGeometry, ecg };
+})();
+
+const $ = (id) => document.getElementById(id);
+const isMobile = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 600;
+const tick = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+
+function fatal(msg) {
+  $('loadMsg').textContent = msg;
+  const p = $('loading').querySelector('.pulse'); if (p) p.style.display = 'none';
+}
+
+// ------------------------------------------------------------------ shared vertex deformation (mirrors A.deform)
+const U = {
+  uC: { value: A.CHAMBERS.map((c) => v3(c.c)) },
+  uA: { value: A.CHAMBERS.map((c) => v3(c.a)) },
+  uRL: { value: A.CHAMBERS.map((c) => new THREE.Vector2(c.R, c.L)) },
+  uK: { value: [0, 0, 0, 0] },
+  uApex: { value: v3(A.DEFORM.apex) },
+  uAxis: { value: v3(A.DEFORM.axis) },
+  uLen: { value: A.DEFORM.len },
+  uDescent: { value: 0 },
+  uHC: { value: v3(A.DEFORM.hc) },
+  uFade: { value: new THREE.Vector2(A.DEFORM.fade0, A.DEFORM.fade1) },
+};
+const GLSL = `
+attribute vec4 aw;
+uniform vec3 uC[4]; uniform vec3 uA[4]; uniform vec2 uRL[4]; uniform float uK[4];
+uniform vec3 uApex; uniform vec3 uAxis; uniform float uLen; uniform float uDescent; uniform vec3 uHC; uniform vec2 uFade;
+vec3 heartDeform(vec3 p) {
+  vec3 d = vec3(0.0);
+  for (int i = 0; i < 4; i++) {
+    vec3 q = p - uC[i]; float ax = dot(q, uA[i]); vec3 qa = uA[i] * ax; vec3 qr = q - qa;
+    d += aw[i] * uK[i] * (-qr * uRL[i].x - qa * uRL[i].y);
+  }
+  float b = clamp(dot(p - uApex, -uAxis) / uLen, 0.0, 1.0) * (1.0 - smoothstep(uFade.x, uFade.y, length(p - uHC)));
+  return p + d + uAxis * (uDescent * b);
+}
+`;
+function deformable(mat) {
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\n' + GLSL)
+      .replace('#include <project_vertex>', 'transformed = heartDeform(transformed);\n#include <project_vertex>');
+  };
+  mat.customProgramCacheKey = () => 'heartDeform1';
+  return mat;
+}
+function addWeights(g) {
+  const p = g.attributes.position.array, n = p.length / 3, w = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) w.set(A.chamberWeights([p[i * 3], p[i * 3 + 1], p[i * 3 + 2]]), i * 4);
+  g.setAttribute('aw', new THREE.BufferAttribute(w, 4));
+  return g;
+}
+function addColors(g, fn) {
+  const p = g.attributes.position.array, c = new Float32Array(p.length), col = new THREE.Color();
+  for (let i = 0; i < p.length; i += 3) {
+    const s = fn([p[i], p[i + 1], p[i + 2]]);
+    col.setRGB(s[0], s[1], s[2], THREE.SRGBColorSpace);
+    c[i] = col.r; c[i + 1] = col.g; c[i + 2] = col.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+}
+function geomFrom(positions, indices, normals) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  g.setIndex(Array.isArray(indices) ? indices : new THREE.BufferAttribute(indices, 1));
+  if (normals) g.setAttribute('normal', new THREE.BufferAttribute(normals, 3)); else g.computeVertexNormals();
+  return g;
+}
+function mergeTubes(list) {
+  let pos = [], nor = [], idx = [], off = 0;
+  for (const t of list) {
+    pos.push(...t.positions); nor.push(...t.normals);
+    for (const i of t.indices) idx.push(i + off);
+    off += t.positions.length / 3;
+  }
+  return geomFrom(new Float32Array(pos), idx, new Float32Array(nor));
+}
+
+async function main() {
+  // ---------------------------------------------------------------- renderer & scene
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: !isMobile, alpha: true, powerPreference: 'high-performance' });
+  } catch (e) {
+    fatal('Sorry - this device or browser could not start 3D graphics (WebGL).');
+    return;
+  }
+  renderer.setPixelRatio(Math.min(devicePixelRatio, isMobile ? 1.75 : 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType('local');
+  $('stage').appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.02, 400);
+  const dolly = new THREE.Group();
+  dolly.add(camera);
+  scene.add(dolly);
+  const heart = new THREE.Group();
+  scene.add(heart);
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const hemi = new THREE.HemisphereLight(0xffeeee, 0x2a0c0c, 0.7); scene.add(hemi);
+  const key = new THREE.DirectionalLight(0xfff1ea, 2.2); key.position.set(8, 12, 14); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xff9c8a, 1.2); rim.position.set(-10, 4, -12); scene.add(rim);
+  const headlamp = new THREE.PointLight(0xffe0d4, 10, 0, 1.2);
+  camera.add(headlamp);
+  const rideFog = new THREE.FogExp2(0x2a0507, 0.075);
+
+  // ---------------------------------------------------------------- build the anatomy
+  const msg = (t) => { $('loadMsg').textContent = t; };
+  const h = isMobile ? 0.26 : 0.19;
+  msg('Shaping the heart muscle...'); await tick();
+  const sEpi = A.surfaceNets(A.sdfEpi, A.GRID.min, A.GRID.max, h);
+  const epiVals = sEpi.vals;
+  msg('Hollowing out the chambers...'); await tick();
+  const sR = A.surfaceNets((p, i) => (i >= 0 && epiVals[i] > 0.3 ? 1 : A.sdfRight(p)), A.GRID.min, A.GRID.max, h);
+  const sL = A.surfaceNets((p, i) => (i >= 0 && epiVals[i] > 0.3 ? 1 : A.sdfLeft(p)), A.GRID.min, A.GRID.max, h);
+  msg('Colouring tissue...'); await tick();
+
+  const gEpi = geomFrom(sEpi.positions, sEpi.indices); addWeights(gEpi); addColors(gEpi, A.epiColor);
+  const gR = geomFrom(sR.positions, sR.indices); addWeights(gR); addColors(gR, (p) => A.lumenColor(p, A.RIGHT));
+  const gL = geomFrom(sL.positions, sL.indices); addWeights(gL); addColors(gL, (p) => A.lumenColor(p, A.LEFT));
+
+  const epiMat = deformable(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.5, clearcoat: 0.7, clearcoatRoughness: 0.3, side: THREE.DoubleSide, envMapIntensity: 0.6 }));
+  const lumenMat = deformable(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.38, clearcoat: 1, clearcoatRoughness: 0.22, side: THREE.DoubleSide, envMapIntensity: 0.35 }));
+  const xrayR = deformable(new THREE.MeshStandardMaterial({ color: 0x4f74e8, roughness: 0.5, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+  const xrayL = deformable(new THREE.MeshStandardMaterial({ color: 0xe0393f, roughness: 0.5, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+  const epi = new THREE.Mesh(gEpi, epiMat);
+  const lumR = new THREE.Mesh(gR, lumenMat), lumL = new THREE.Mesh(gL, lumenMat);
+  for (const m of [epi, lumR, lumL]) { m.frustumCulled = false; heart.add(m); }
+
+  // valves: leaflets morph between closed and open shapes
+  msg('Fitting the valves...'); await tick();
+  const leafMat = deformable(new THREE.MeshPhysicalMaterial({ color: 0xf1ddcc, roughness: 0.45, clearcoat: 0.6, side: THREE.DoubleSide, sheen: 0.5, sheenColor: new THREE.Color(0xffe8dc) }));
+  const ringMat = deformable(new THREE.MeshStandardMaterial({ color: 0xe9cdb8, roughness: 0.6 }));
+  const valveMesh = {}, chordList = [];
+  const valveGroup = new THREE.Group(); heart.add(valveGroup);
+  for (const v of Object.values(A.VALVES)) {
+    const lg = A.leafletGeometry(v);
+    const g = geomFrom(lg.closed, lg.index);
+    const go = geomFrom(lg.open, lg.index);
+    g.morphAttributes.position = [go.attributes.position];
+    g.morphAttributes.normal = [go.attributes.normal];
+    addWeights(g);
+    const m = new THREE.Mesh(g, leafMat); m.frustumCulled = false;
+    valveMesh[v.name] = m; valveGroup.add(m);
+    const ring = [];
+    for (let i = 0; i <= 48; i++) ring.push(A.add(v.c, A.mul(A.valveDir(v, (i / 48) * Math.PI * 2), v.R * 1.02)));
+    const tg = A.tubeGeometry(ring, 0.08, 6);
+    const rg = geomFrom(tg.positions, tg.indices, tg.normals); addWeights(rg);
+    const rm = new THREE.Mesh(rg, ringMat); rm.frustumCulled = false; valveGroup.add(rm);
+    for (const c of A.chordae(v)) chordList.push({ ...c, valve: v.name, wc: A.chamberWeights(c.closed), wt: A.chamberWeights(c.tip) });
+  }
+  const chordPos = new Float32Array(chordList.length * 6);
+  const chordGeo = new THREE.BufferGeometry(); chordGeo.setAttribute('position', new THREE.BufferAttribute(chordPos, 3));
+  const chords = new THREE.LineSegments(chordGeo, new THREE.LineBasicMaterial({ color: 0xeadccd, transparent: true, opacity: 0.85 }));
+  chords.frustumCulled = false; valveGroup.add(chords);
+
+  // coronary arteries
+  msg('Tracing the coronary arteries...'); await tick();
+  const coronaries = A.buildCoronaries();
+  const corGeo = mergeTubes(coronaries.map((c) => A.tubeGeometry(c.pts, (u) => A.mix(c.r0, c.r1, u), 8)));
+  addWeights(corGeo);
+  const corMesh = new THREE.Mesh(corGeo, deformable(new THREE.MeshPhysicalMaterial({ color: 0xb0201f, roughness: 0.35, clearcoat: 0.8 })));
+  corMesh.frustumCulled = false; heart.add(corMesh);
+
+  // ride path, lungs (abstracted), blood cells
+  const path = A.buildPath();
+  const radAt = new Float32Array(path.n);
+  for (let i = 0; i < path.n; i++) {
+    const s = i * path.step, p = path.at(s), pool = path.pool(s);
+    const r = pool === 'lung' ? A.lungRadius(path, s) : -(pool === 'R' ? A.sdfRight(p) : A.sdfLeft(p));
+    radAt[i] = A.clamp(r, 0.2, 1.4) * 0.8;
+  }
+  const radiusAt = (s) => radAt[A.clamp(Math.round(s / path.step), 0, path.n - 1)];
+
+  const lungGroup = new THREE.Group(); heart.add(lungGroup);
+  {
+    const pts = [];
+    for (let s = path.lung.start - 0.35; s <= path.lung.end + 0.35; s += 0.12) pts.push(path.at(s));
+    const tg = A.tubeGeometry(pts, (u) => A.lungRadius(path, A.mix(path.lung.start - 0.35, path.lung.end + 0.35, u)) + 0.03, 20);
+    const lm = new THREE.Mesh(geomFrom(tg.positions, tg.indices, tg.normals), new THREE.MeshPhysicalMaterial({ color: 0xd98a90, emissive: 0x3a0c12, roughness: 0.5, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false }));
+    lungGroup.add(lm);
+    const R = A.rng(7), mats = [];
+    for (let s = path.lung.start + 0.8; s < path.lung.end - 0.8; s += 0.3) {
+      const c = path.at(s), T = path.tangent(s), fr = path.frame(s), r = A.lungRadius(path, s);
+      for (let k = 0; k < 4; k++) {
+        const a = R() * Math.PI * 2;
+        const d = A.add(A.mul(fr.N, Math.cos(a)), A.mul(fr.B, Math.sin(a)));
+        const size = 0.22 + R() * 0.24;
+        const p = A.add(A.add(c, A.mul(d, r + size * 0.9 + R() * 0.25)), A.mul(T, (R() - 0.5) * 0.3));
+        mats.push(new THREE.Matrix4().compose(v3(p), new THREE.Quaternion(), new THREE.Vector3(size, size, size)));
+      }
+    }
+    const alv = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 18, 12), new THREE.MeshPhysicalMaterial({ color: 0xf4c9cb, emissive: 0x401018, roughness: 0.55, transparent: true, opacity: 0.8, sheen: 1, sheenColor: new THREE.Color(0xffd9e0) }), mats.length);
+    mats.forEach((m, i) => alv.setMatrixAt(i, m));
+    lungGroup.add(alv);
+  }
+
+  const NC = isMobile ? 420 : 720;
+  const prof = [];
+  for (let i = 0; i <= 12; i++) { const x = Math.sin((i / 12) * Math.PI / 2); prof.push(new THREE.Vector2(Math.max(x, 0.001), 0.5 * Math.sqrt(Math.max(1 - x * x, 0)) * (0.207 + 2.003 * x * x - 1.123 * x ** 4))); }
+  for (let i = 12; i >= 0; i--) { const x = Math.sin((i / 12) * Math.PI / 2); prof.push(new THREE.Vector2(Math.max(x, 0.001), -0.5 * Math.sqrt(Math.max(1 - x * x, 0)) * (0.207 + 2.003 * x * x - 1.123 * x ** 4))); }
+  const cellGeo = new THREE.LatheGeometry(prof, 22);
+  const cells = new THREE.InstancedMesh(cellGeo, new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.42, clearcoat: 0.4, emissive: 0x200204 }), NC);
+  cells.frustumCulled = false;
+  cells.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  heart.add(cells);
+  const cs = new Float32Array(NC), ca = new Float32Array(NC), cr = new Float32Array(NC), rx = new Float32Array(NC), ry = new Float32Array(NC), sx = new Float32Array(NC), sy = new Float32Array(NC);
+  const rnd = A.rng(42);
+  for (let i = 0; i < NC; i++) { ca[i] = rnd() * Math.PI * 2; cr[i] = Math.sqrt(rnd()) * 0.92; rx[i] = rnd() * 6; ry[i] = rnd() * 6; sx[i] = (rnd() - 0.5) * 3; sy[i] = (rnd() - 0.5) * 3; cs[i] = -1; }
+  const deoxy = new THREE.Color(0x5a0c1a), oxy = new THREE.Color(0xd8141f);
+  const dummy = new THREE.Object3D(), tmpC = new THREE.Color();
+
+  // "you are here" marker for the outside view
+  const marker = new THREE.Mesh(new THREE.SphereGeometry(0.35, 20, 14), new THREE.MeshBasicMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.9, depthTest: false }));
+  marker.renderOrder = 999; heart.add(marker);
+
+  // VR caption (only shown inside a headset, where the HTML card is invisible)
+  const capCanvas = document.createElement('canvas'); capCanvas.width = 1024; capCanvas.height = 256;
+  const capTex = new THREE.CanvasTexture(capCanvas); capTex.colorSpace = THREE.SRGBColorSpace;
+  const caption = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({ map: capTex, transparent: true, depthTest: false }));
+  caption.position.set(0, -0.35, -1.3); caption.renderOrder = 1000; caption.visible = false;
+  dolly.add(caption);
+  // I'M HERE watermark + source card (shared/imhere-mark.js, inlined in the page). Nothing here is live.
+  const MARK = window.ImHereMark;
+  const markItems = (bpm) => [
+    { kind: 'illustrative', label: 'Heart model', source: 'Procedurally generated typical adult heart, built in this page. Not a scan of any patient.',
+      note: 'Sizes and shapes are approximate and simplified for teaching. For education only - not for diagnosis or treatment decisions.' },
+    { kind: 'simulated', label: 'Heartbeat and valves', source: `Simulated cardiac cycle at ${bpm} bpm (your setting), textbook timing; not a recording` },
+    { kind: 'illustrative', label: 'Blood cells and flow', source: 'Cells drawn about 150× larger than life; colour shows oxygen (dark red = oxygen-poor)' },
+    { kind: 'illustrative', label: 'Lungs', source: 'Shown as a single simplified loop' },
+    { kind: 'simulated', label: 'ECG trace and heart sounds', source: 'Generated in the page to match the simulated beat; not recorded from a person' },
+  ];
+  function refreshMark() {
+    if (!MARK) return;
+    const ride_ = S.mode === 'ride';
+    MARK.update({ subject: 'Heart', id: ride_ ? $('stepNo').textContent : (S.xray ? 'X-ray' : 'Outside view'),
+      location: ride_ ? $('stopTitle').textContent : 'Outside the heart', position: 'Fixed', scene: '3D render', video: 'None',
+      tag: { text: 'Illustrative model', kind: 'illustrative' },
+      sceneNote: 'Computer-rendered model: not AI-generated, and not a scan, medical image or video of any patient.',
+      stats: [['Rate', S.bpm + ' bpm'], ['Motion', S.slow ? 'Slow-mo' : 'Real speed'], ['Blood', ride_ ? (/(left|pulmonary vein|aort)/i.test($('stopTitle').textContent) ? 'Oxygen-rich' : 'Oxygen-poor') : '–']],
+      items: markItems(S.bpm) });
+  }
+  if (MARK) MARK.init({ subject: 'Heart', below: ['#top'] });
+  function drawCaption(title, text) {
+    const g = capCanvas.getContext('2d');
+    g.clearRect(0, 0, 1024, 256);
+    g.fillStyle = 'rgba(20,6,8,0.78)'; if (g.roundRect) { g.beginPath(); g.roundRect(8, 8, 1008, 240, 36); g.fill(); } else g.fillRect(8, 8, 1008, 240);
+    g.fillStyle = '#fff'; g.font = '600 54px system-ui, sans-serif'; g.fillText(title, 40, 84);
+    g.fillStyle = '#ead9d6'; g.font = '34px system-ui, sans-serif';
+    const words = text.split(' '); let line = '', y = 140;
+    for (const w of words) { if (g.measureText(line + w).width > 940) { g.fillText(line, 40, y); line = ''; y += 44; if (y > 230) break; } line += w + ' '; }
+    if (y <= 230) g.fillText(line, 40, y);
+    capTex.needsUpdate = true;
+  }
+
+  // ---------------------------------------------------------------- state & UI
+  const ride = new A.Ride(path);
+  const S = { snap: true, mode: 'outside', intro: true, bpm: 70, slow: false, phi: 0.62, xray: false, labels: true, sound: false, lookYaw: 0, lookPitch: 0, lastDrag: -10, time: 0 };
+  const midOf = (name, bpm) => { const T = A.cycleTimes(bpm); return A.windowMid(A.valveWindows(T)[name], T); };
+  const ctx = (realDt) => ({ phi: S.phi, bpm: S.bpm, auto: !ride.paused, mid: midOf, realDt });
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08;
+  controls.target.set(0.4, 0.8, -0.6);
+  controls.minDistance = 6; controls.maxDistance = 70;
+  controls.enabled = false;
+
+  const dots = $('dots');
+  A.STOP_ORDER.forEach((id, i) => {
+    const b = document.createElement('button');
+    b.setAttribute('aria-label', 'Go to stop ' + (i + 1) + ': ' + A.STOPS[id].title); b.title = A.STOPS[id].title;
+    b.addEventListener('click', () => { flash(); ride.goto(i); });
+    dots.appendChild(b);
+  });
+  let shownStop = null, spokenStop = null, dive = null;
+  const INTRO_TEXT = 'This is your tour through the heart and the cardiovascular system. In front of you is a typical adult heart, ' +
+    'beating about seventy times a minute. In a moment we will dive in through the superior vena cava, the large vein that returns blood ' +
+    'from the upper body, and follow the blood through all four chambers, the lungs, and out into the aorta.';
+  const DIVE_TEXT = 'Entering the superior vena cava. Blood from the head and arms is carried down into the right atrium.';
+
+  // ---------------------------------------------------------------- narration (Web Speech API; silent text-only fallback)
+  const NARR = { ok: 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function', on: true, voice: null, speaking: false, last: '', started: false };
+  function pickVoice() {
+    if (!NARR.ok) return null;
+    const vs = speechSynthesis.getVoices().filter((v) => /^en([-_]|$)/i.test(v.lang));
+    const score = (v) => (/natural|neural|premium|enhanced|online/i.test(v.name) ? 6 : 0) + (/Google UK English Male|Daniel|Arthur|Guy|Ryan|Aaron|Oliver|Alex/i.test(v.name) ? 3 : 0) +
+      (/en[-_]GB/i.test(v.lang) ? 2 : /en[-_]US/i.test(v.lang) ? 1 : 0) + (/novelty|whisper|bells|bubbles|zarvox|trinoids|bad news|good news|jester|organ|cellos|boing|albert/i.test(v.name) ? -10 : 0);
+    return vs.sort((x, y) => score(y) - score(x))[0] || null;
+  }
+  if (NARR.ok) { NARR.voice = pickVoice(); try { speechSynthesis.addEventListener('voiceschanged', () => { NARR.voice = pickVoice(); }); } catch (e) { /* old API */ } }
+  function say(text) {
+    NARR.last = text; NARR.started = false;
+    if (!NARR.ok || !NARR.on) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      if (NARR.voice) { u.voice = NARR.voice; u.lang = NARR.voice.lang; } else u.lang = 'en-GB';
+      u.rate = 0.9; u.pitch = 0.95;   // calm, slightly slow
+      u.onstart = () => { NARR.speaking = true; NARR.started = true; };
+      u.onend = u.onerror = () => { NARR.speaking = false; };
+      speechSynthesis.speak(u);
+    } catch (e) { NARR.ok = false; }   // no speech here: text only
+  }
+  // browsers only allow speech after a tap/click: replay the current line on the first gesture if it never started
+  const unlock = () => { if (NARR.ok && NARR.on && !NARR.started && NARR.last) say(NARR.last); };
+  addEventListener('pointerdown', unlock, { once: true }); addEventListener('keydown', unlock, { once: true });
+  function setNarration(on) {
+    NARR.on = on; $('narr').classList.toggle('on', on); $('narr').setAttribute('aria-pressed', String(on)); $('narr').title = 'Narration (' + (on ? 'on' : 'off') + ')';
+    if (!on) { if (NARR.ok) speechSynthesis.cancel(); NARR.speaking = false; } else if (NARR.last) say(NARR.last);
+  }
+  function refreshCard(force) {
+    if (S.mode === 'outside') {
+      const key0 = dive ? 'dive' : S.intro ? 'intro' : 'outside';
+      if (shownStop === key0 && !force) return;
+      shownStop = key0;
+      $('stepNo').textContent = '';
+      if (dive) { $('stopTitle').textContent = 'Diving in'; $('stopText').textContent = DIVE_TEXT; return; }
+      if (S.intro) { $('stopTitle').textContent = 'Your heart tour'; $('stopText').textContent = INTRO_TEXT; say(INTRO_TEXT); return; }
+      $('stopTitle').textContent = 'Outside view';
+      $('stopText').textContent = S.xray
+        ? 'X-ray: blue spaces carry oxygen-poor blood (right side), red spaces oxygen-rich blood (left side). Watch the valves open and close.'
+        : 'Drag to turn the heart; pinch or scroll to zoom. The red vessels on the surface are the coronary arteries that feed the heart muscle.';
+      return;
+    }
+    const id = ride.stopId;
+    const key2 = id + ride.state + (ride.atEnd ? 'end' : '');
+    if (key2 === shownStop && !force) return;
+    shownStop = key2;
+    const st = A.STOPS[id];
+    $('stopTitle').textContent = st.title;
+    $('stepNo').textContent = 'Stop ' + (ride.i + 1) + ' of ' + A.STOP_ORDER.length;
+    $('stopText').textContent = st.text + (ride.atEnd ? ' Press next to ride again.' : '');
+    [...dots.children].forEach((b, i) => { b.className = i === ride.i ? 'on' : i < ride.i ? 'done' : ''; });
+    drawCaption(st.title, st.text);
+    if (ride.state === 'dwell' && spokenStop !== id) { spokenStop = id; say(st.title + '. ' + st.text); }   // same words as on screen
+  }
+  function setPlayIcon() {
+    $('playPath').setAttribute('d', ride.paused ? 'M7 5v14l11-7z' : 'M6 5h4v14H6zm8 0h4v14h-4z');
+    $('play').setAttribute('aria-label', ride.paused ? 'Play ride' : 'Pause ride');
+  }
+  function flash() { S.snap = true; const f = $('flash'); f.style.opacity = '0.85'; setTimeout(() => { f.style.opacity = '0'; }, 120); }
+  $('play').addEventListener('click', () => { ride.paused = !ride.paused; setPlayIcon(); });
+  $('next').addEventListener('click', () => {
+    if (ride.paused || ride.state !== 'dwell') { flash(); ride.goto(ride.atEnd ? 0 : ride.i + 1); }
+    else ride.next(ctx());
+  });
+  $('prev').addEventListener('click', () => { flash(); ride.prev(); });
+  $('bpm').addEventListener('input', (e) => { S.bpm = +e.target.value; $('bpmOut').textContent = S.bpm; refreshMark(); });
+  refreshMark(); setInterval(refreshMark, 1000);
+  $('slow').addEventListener('click', () => { S.slow = !S.slow; $('slow').classList.toggle('on', S.slow); $('slow').setAttribute('aria-pressed', S.slow); });
+  $('xray').addEventListener('click', () => { S.xray = !S.xray; $('xray').classList.toggle('on', S.xray); applyMode(); refreshCard(true); });
+  $('lbl').addEventListener('click', () => { S.labels = !S.labels; $('lbl').classList.toggle('on', S.labels); });
+  $('infoBtn').addEventListener('click', () => { const d = $('info'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); d.scrollTop = 0; });
+  $('mRide').addEventListener('click', () => { if (S.mode === 'outside') startDive(); });
+  $('mOut').addEventListener('click', () => { dive = null; S.intro = false; setMode('outside'); });
+  $('narr').addEventListener('click', () => setNarration(!NARR.on));
+  addEventListener('keydown', (e) => {
+    if (e.target && e.target.tagName === 'INPUT') return;
+    if (e.key === ' ') { e.preventDefault(); $('play').click(); }
+    else if (e.key === 'ArrowRight') $('next').click();
+    else if (e.key === 'ArrowLeft') $('prev').click();
+  });
+
+  // heart sounds (WebAudio, generated on demand)
+  let actx = null;
+  $('snd').addEventListener('click', () => {
+    S.sound = !S.sound;
+    $('snd').classList.toggle('on', S.sound); $('snd').setAttribute('aria-pressed', S.sound); $('snd').title = 'Heart sounds (' + (S.sound ? 'on' : 'off') + ')';
+    if (S.sound && !actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
+    if (actx && actx.state === 'suspended') actx.resume();
+  });
+  function thump(f, dur, gain) {
+    if (!actx || actx.state !== 'running') return;
+    const now = actx.currentTime;
+    for (const [mulF, g0] of [[1, gain], [2.1, gain * 0.35]]) {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f * mulF * 1.5, now); o.frequency.exponentialRampToValueAtTime(f * mulF, now + 0.04);
+      g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(g0, now + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      o.connect(g).connect(actx.destination); o.start(now); o.stop(now + dur + 0.05);
+    }
+  }
+
+  // drag to look around while riding
+  let drag = null;
+  renderer.domElement.addEventListener('pointerdown', (e) => { if (S.mode === 'ride') { drag = { x: e.clientX, y: e.clientY, yaw: S.lookYaw, pitch: S.lookPitch }; renderer.domElement.setPointerCapture(e.pointerId); } });
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const k = 2.4 / Math.min(innerWidth, innerHeight);
+    S.lookYaw = A.clamp(drag.yaw + (e.clientX - drag.x) * k, -2.8, 2.8);
+    S.lookPitch = A.clamp(drag.pitch + (e.clientY - drag.y) * k, -1.3, 1.3);
+    S.lastDrag = S.time;
+  });
+  const endDrag = () => { drag = null; };
+  renderer.domElement.addEventListener('pointerup', endDrag);
+  renderer.domElement.addEventListener('pointercancel', endDrag);
+
+  // outside-view labels
+  const anchors = [
+    ['Aorta', A.H.paths.aorta[4]], ['Pulmonary artery', [2.2, 3.6, 2.3]], ['Superior vena cava', [-3.3, 6.2, 0.9]], ['Inferior vena cava', [-2.95, -4.8, 0.3]],
+    ['Right atrium', [-3.2, 1.6, 1.9]], ['Right ventricle', A.add(A.H.RV.c, A.mul(A.H.RV.short, 1.9))], ['Left ventricle', [4.4, -2.6, 0.6]],
+    ['Left atrium', [2.6, 2.6, -1.0]], ['Pulmonary veins', [5.0, 1.9, -3.4]],
+    ['LAD coronary', coronaries.find((c) => c.name === 'LAD')?.pts[8]], ['Right coronary', coronaries.find((c) => c.name === 'RCA')?.pts[12]],
+  ].filter((a) => a[1]);
+  const valveAnchors = Object.values(A.VALVES).map((v) => [{ TV: 'Tricuspid valve', MV: 'Mitral valve', PV: 'Pulmonary valve', AV: 'Aortic valve' }[v.name], v.c]);
+  const tagEls = [];
+  for (const [name] of [...anchors, ...valveAnchors, ['You are here']]) {
+    const d = document.createElement('div'); d.className = 'tag' + (name === 'You are here' ? ' you' : ''); d.textContent = name; d.style.display = 'none';
+    $('labels').appendChild(d); tagEls.push(d);
+  }
+  const allAnchors = [...anchors.map((a) => ({ p: a[1], valve: false })), ...valveAnchors.map((a) => ({ p: a[1], valve: true })), { p: null, you: true }];
+
+  // ---------------------------------------------------------------- modes
+  function applyMode() {
+    const ride_ = S.mode === 'ride';
+    const xr = renderer.xr.isPresenting;
+    epi.visible = !ride_;
+    epi.material.transparent = S.xray; epi.material.opacity = S.xray ? 0.18 : 1; epi.material.depthWrite = !S.xray; epi.material.needsUpdate = true;
+    epi.renderOrder = S.xray ? 10 : 0;
+    lumR.visible = lumL.visible = ride_ || S.xray;
+    lumR.material = ride_ ? lumenMat : xrayR; lumL.material = ride_ ? lumenMat : xrayL;
+    valveGroup.visible = ride_ || S.xray;
+    cells.visible = ride_ || S.xray;
+    corMesh.visible = !ride_;
+    lungGroup.visible = ride_;
+    marker.visible = !ride_ && !xr;
+    scene.fog = ride_ ? rideFog : null;
+    scene.environmentIntensity = ride_ ? 0.35 : 1;
+    headlamp.intensity = ride_ ? 10 : 0;
+    hemi.intensity = ride_ ? 1.1 : 0.7;
+    camera.fov = ride_ ? 72 : 40; camera.updateProjectionMatrix();
+    caption.visible = ride_ && xr;
+    if (xr) {
+      scene.background = new THREE.Color(ride_ ? 0x2a0507 : 0x140607);
+      if (ride_) { heart.scale.setScalar(1); heart.position.set(0, 0, 0); }
+      else { heart.scale.setScalar(0.03); heart.position.set(-0.4 * 0.03, -0.1, -0.75); }
+    } else { scene.background = null; heart.scale.setScalar(1); heart.position.set(0, 0, 0); heart.rotation.set(0, 0, 0); }
+  }
+  function setMode(m) {
+    S.mode = m;
+    document.body.classList.toggle('outside', m === 'outside');
+    $('mRide').classList.toggle('on', m === 'ride'); $('mOut').classList.toggle('on', m === 'outside');
+    $('mRide').textContent = m === 'ride' ? 'Ride' : 'Dive in'; $('mOut').textContent = m === 'ride' ? 'Back outside' : 'Outside';
+    $('mRide').setAttribute('aria-selected', m === 'ride'); $('mOut').setAttribute('aria-selected', m === 'outside');
+    if (m === 'outside') {
+      dolly.position.set(0, 0, 0); dolly.quaternion.identity();
+      camera.rotation.set(0, 0, 0);
+      const dist = 30 / Math.min(1, (innerWidth / innerHeight) * 1.25);
+      camera.position.set(controls.target.x + dist * 0.18, controls.target.y + dist * 0.12, controls.target.z + dist);
+      controls.enabled = !renderer.xr.isPresenting; controls.update();
+    } else {
+      controls.enabled = false; camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
+      S.lookYaw = 0; S.lookPitch = 0; S.snap = true;
+    }
+    tagEls.forEach((t) => { t.style.display = 'none'; });
+    applyMode(); refreshCard(true);
+  }
+  const markXR = MARK ? MARK.xrPanel(THREE) : null;   // the I'M HERE card: small HUD tag low in the corner of view in VR
+  if (markXR) { markXR.visible = false; camera.add(markXR); }
+  renderer.xr.addEventListener('sessionstart', () => { if (markXR) markXR.visible = true; });
+  renderer.xr.addEventListener('sessionend', () => { if (markXR) markXR.visible = false; });
+  renderer.xr.addEventListener('sessionstart', () => { controls.enabled = false; camera.position.set(0, 0, 0); applyMode(); });
+  renderer.xr.addEventListener('sessionend', () => { setMode(S.mode); });
+
+  // WebXR button only when the browser has WebXR at all (otherwise it would be a link away from the page)
+  if (navigator.xr && window.isSecureContext) {
+    // only when a headset is actually available: no "VR NOT SUPPORTED" clutter in the phone/desktop top bar
+    navigator.xr.isSessionSupported('immersive-vr').then((ok) => { if (ok) $('vrslot').appendChild(VRButton.createButton(renderer)); }).catch(() => { /* VR unavailable: silently skip */ });
+  }
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight); sizeEcg();
+  });
+
+  // rhythm strip
+  const ecgC = $('ecg'), eg = ecgC.getContext('2d');
+  function sizeEcg() { const r = ecgC.getBoundingClientRect(); ecgC.width = Math.max(1, r.width * devicePixelRatio); ecgC.height = Math.max(1, r.height * devicePixelRatio); }
+  sizeEcg();
+  function drawEcg(t, T) {
+    const W = ecgC.width, Hh = ecgC.height; if (W < 4) return;
+    eg.clearRect(0, 0, W, Hh);
+    eg.strokeStyle = 'rgba(255,255,255,.08)'; eg.lineWidth = 1;
+    eg.beginPath(); eg.moveTo(0, Hh * 0.68); eg.lineTo(W, Hh * 0.68); eg.stroke();
+    eg.strokeStyle = '#ff6b6f'; eg.lineWidth = 1.6 * devicePixelRatio; eg.beginPath();
+    for (let i = 0; i <= 120; i++) { const tt = (i / 120) * T.RR; const y = Hh * 0.68 - A.ecg(tt, T) * Hh * 0.58; if (i) eg.lineTo((i / 120) * W, y); else eg.moveTo(0, y); }
+    eg.stroke();
+    const x = (t / T.RR) * W;
+    eg.fillStyle = '#fff'; eg.beginPath(); eg.arc(x, Hh * 0.68 - A.ecg(t, T) * Hh * 0.58, 2.6 * devicePixelRatio, 0, Math.PI * 2); eg.fill();
+  }
+
+  // ---------------------------------------------------------------- per-frame update
+  const clock = new THREE.Clock();
+  const qTarget = new THREE.Quaternion(), mTmp = new THREE.Matrix4();
+  let up = new THREE.Vector3(0, 0, 1);
+  let prevT = 0, lastPhase = '';
+  const vTmp = new THREE.Vector3();
+
+  function updateCells(st, dt, sCam) {
+    const ride_ = S.mode === 'ride';
+    const lo = ride_ ? Math.max(0, sCam - 2.5) : 0, hi = ride_ ? Math.min(path.total, sCam + 15) : path.total;
+    for (let i = 0; i < NC; i++) {
+      let s = cs[i];
+      if (s < 0) s = A.mix(lo, hi, rnd());
+      else s = A.advanceCell(s, A.cellSpeed(s, path, st) * dt * (ride_ ? 1 : 0.6), path, st);
+      if (s > hi) s = ride_ ? lo + rnd() * 1.2 : rnd() * 3;
+      else if (s < lo) s = hi - rnd() * 1.2;
+      cs[i] = s;
+      const base = path.at(s), fr = path.frame(s), R = radiusAt(s) * cr[i];
+      let p = A.add(base, A.add(A.mul(fr.N, Math.cos(ca[i]) * R), A.mul(fr.B, Math.sin(ca[i]) * R)));
+      if (path.pool(s) !== 'lung') p = A.deform(p, st);
+      dummy.position.set(p[0], p[1], p[2]);
+      dummy.rotation.set(rx[i] + S.time * sx[i], ry[i] + S.time * sy[i], 0);
+      dummy.scale.setScalar(ride_ ? 0.085 : path.pool(s) === 'lung' ? 0 : 0.16);
+      dummy.updateMatrix();
+      cells.setMatrixAt(i, dummy.matrix);
+      tmpC.copy(deoxy).lerp(oxy, A.oxygenAt(path, s));
+      cells.setColorAt(i, tmpC);
+    }
+    cells.instanceMatrix.needsUpdate = true;
+    if (cells.instanceColor) cells.instanceColor.needsUpdate = true;
+  }
+
+  // ---------------------------------------------------------------- the dive: outside -> superior vena cava -> ride
+  // Slow and smooth (about 10 s on screens, 16 s in a headset), no spins, level horizon in VR. "Back outside" is always there.
+  const P0 = path.at(0), P1 = path.at(1.4), tan0 = v3(P1).sub(v3(P0)).normalize();
+  const qRide0 = (() => { const u = new THREE.Vector3(0, 0, 1); u.addScaledVector(tan0, -u.dot(tan0)).normalize();
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(v3(P0), v3(P1), u)); })();
+  const ease = (x) => x * x * (3 - 2 * x);
+  function startDive() {
+    if (dive || S.mode !== 'outside') return;
+    const xr = renderer.xr.isPresenting;
+    S.intro = false; controls.enabled = false;
+    dive = { t: 0, T: xr ? 16 : 10, xr, p0: camera.position.clone(), q0: camera.quaternion.clone(),
+      approach: v3(P0).addScaledVector(tan0, -9), hs0: heart.scale.x, hp0: heart.position.clone(), hr0: heart.rotation.y,
+      svc0: v3(P0).applyMatrix4(heart.matrixWorld) };
+    shownStop = null; say(DIVE_TEXT);
+  }
+  function diveStep(dt) {
+    dive.t += dt; const u = Math.min(1, dive.t / dive.T), e = ease(u);
+    if (!dive.xr) {   // camera flies along a smooth curve to the vessel opening and turns to look down it
+      const a1 = dive.p0.clone().lerp(dive.approach, e), a2 = dive.approach.clone().lerp(v3(P0), e);
+      camera.position.copy(a1.lerp(a2, e));
+      camera.quaternion.copy(dive.q0).slerp(qRide0, ease(Math.min(1, u * 1.25)));
+    } else {          // headset: you stay put; the heart grows slowly around you until you are inside the vein
+      const s = dive.hs0 * Math.pow(1 / dive.hs0, e);
+      heart.rotation.y = dive.hr0 * (1 - ease(Math.min(1, u * 2)));
+      heart.scale.setScalar(s); heart.updateMatrixWorld(true);
+      const target = dive.svc0.clone().lerp(new THREE.Vector3(0, 0, 0), e);          // where the vein opening should be
+      const now = v3(P0).applyMatrix4(heart.matrixWorld);
+      heart.position.add(target.sub(now));
+    }
+    if (u >= 1) { dive = null; flash(); ride.goto(0); spokenStop = null; S.snap = !renderer.xr.isPresenting; setMode('ride'); }
+  }
+  let introT = 0;   // auto-dive once the intro has been on screen (and spoken) for a while
+  function introStep(dt) {
+    if (S.mode !== 'outside' || !S.intro || dive) return;
+    introT += dt;
+    if (introT > 9 && (!NARR.speaking || introT > 40)) startDive();
+  }
+
+  // ---------------------------------------------------------------- VR console (point a controller / pinch at a button)
+  function setupVRConsole() {
+    const W = 1024, H = 160, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const btns = [
+      [() => (S.mode === 'ride' ? 'Back outside' : 'Dive in'), () => { if (S.mode === 'ride') { dive = null; S.intro = false; setMode('outside'); } else startDive(); }],
+      [() => 'Previous', () => { if (S.mode === 'ride') { flash(); ride.prev(); } }],
+      [() => 'Next', () => { if (S.mode === 'ride') $('next').click(); }],
+      [() => 'Narration: ' + (NARR.on ? 'on' : 'off'), () => setNarration(!NARR.on)],
+    ];
+    let hover = -1, sig = '';
+    function draw() {
+      const ns = btns.map((b) => b[0]()).join('|') + hover; if (ns === sig) return; sig = ns;
+      const g = c.getContext('2d'); g.clearRect(0, 0, W, H);
+      g.fillStyle = 'rgba(24,10,12,0.85)'; g.beginPath(); g.roundRect ? g.roundRect(0, 0, W, H, 26) : g.rect(0, 0, W, H); g.fill();
+      const bw = (W - 40) / btns.length;
+      btns.forEach((b, i) => { const x = 20 + i * bw;
+        g.fillStyle = i === hover ? 'rgba(255,90,95,0.45)' : 'rgba(255,255,255,0.1)';
+        g.beginPath(); g.roundRect ? g.roundRect(x + 6, 20, bw - 12, 120, 18) : g.rect(x + 6, 20, bw - 12, 120); g.fill();
+        g.fillStyle = '#fff'; g.font = '600 34px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(b[0](), x + bw / 2, 80); });
+      tex.needsUpdate = true;
+    }
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6 * H / W), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    panel.renderOrder = 9000; panel.frustumCulled = false; panel.visible = false;
+    panel.position.set(0, -0.45, -0.6); panel.rotation.x = -0.75;   // a console you glance down at; travels with you, not with your head
+    dolly.add(panel); draw();
+    const ray = new THREE.Raycaster(), m4 = new THREE.Matrix4();
+    const hit = (ctrl) => {
+      m4.identity().extractRotation(ctrl.matrixWorld);
+      ray.ray.origin.setFromMatrixPosition(ctrl.matrixWorld); ray.ray.direction.set(0, 0, -1).applyMatrix4(m4);
+      const h = ray.intersectObject(panel)[0]; if (!h || !h.uv) return -1;
+      const i = Math.floor((h.uv.x * W - 20) / ((W - 40) / btns.length)); return i >= 0 && i < btns.length ? i : -1;
+    };
+    const ctrls = [0, 1].map((i) => {
+      const ctrl = renderer.xr.getController(i); dolly.add(ctrl);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
+        new THREE.LineBasicMaterial({ color: 0xff8f93, transparent: true, opacity: 0.6, depthTest: false, fog: false }));
+      line.renderOrder = 9001; line.frustumCulled = false; ctrl.add(line);
+      ctrl.addEventListener('select', () => { const b = hit(ctrl); if (b >= 0) btns[b][1](); sig = ''; draw(); });
+      return ctrl;
+    });
+    renderer.xr.addEventListener('sessionstart', () => { panel.visible = true; });
+    renderer.xr.addEventListener('sessionend', () => { panel.visible = false; });
+    setInterval(() => { if (!renderer.xr.isPresenting) return; let h = -1; for (const ct of ctrls) if (h < 0) h = hit(ct); hover = h; draw(); }, 100);
+    return { panel, btns, hit, ctrls };
+  }
+  const vrConsole = setupVRConsole();
+
+  function frame() {
+    const rawDt = Math.min(clock.getDelta(), 0.05);
+    const dt = rawDt * (S.slow ? 0.3 : 1);
+    S.time += dt;
+    S.phi += dt * S.bpm / 60;
+    const T = A.cycleTimes(S.bpm);
+    const t = (S.phi - Math.floor(S.phi)) * T.RR;
+    const st = A.heartState(t, S.bpm);
+    // heart sounds at valve closures
+    if (S.sound && actx) {
+      const crossed = (x) => (prevT <= t ? prevT < x && t >= x : prevT < x || t >= x);
+      if (crossed(T.tAC)) thump(55, 0.16, 0.5);
+      if (crossed(T.tSC)) thump(80, 0.11, 0.38);
+    }
+    prevT = t;
+    // shader uniforms
+    for (let i = 0; i < 4; i++) U.uK.value[i] = st.k[i];
+    U.uDescent.value = st.descent;
+    for (const k of Object.keys(valveMesh)) valveMesh[k].morphTargetInfluences[0] = st.open[k];
+    if (valveGroup.visible) {
+      chordList.forEach((c, i) => {
+        const a = A.deform(A.lerp3(c.closed, c.open, st.open[c.valve]), st, c.wc), b = A.deform(c.tip, st, c.wt);
+        chordPos.set(a, i * 6); chordPos.set(b, i * 6 + 3);
+      });
+      chordGeo.attributes.position.needsUpdate = true;
+    }
+    // ride
+    // the ride waits at a stop until the narrator has finished reading it
+    if (S.mode === 'ride' && !(NARR.speaking && ride.state === 'dwell' && !ride.paused)) ride.update(dt, ctx(rawDt));
+    if (dive) diveStep(rawDt); else introStep(rawDt);
+    const sCam = ride.s;
+    const pCam = A.deform(path.at(sCam), st);
+    if (S.mode === 'ride') {
+      const ahead = A.deform(path.at(Math.min(sCam + 1.4, path.total)), st);
+      const f = new THREE.Vector3(ahead[0] - pCam[0], ahead[1] - pCam[1], ahead[2] - pCam[2]).normalize();
+      up.addScaledVector(f, -up.dot(f));
+      if (up.lengthSq() < 1e-4) up.set(0, 1, 0).addScaledVector(f, -f.y);
+      up.normalize();
+      const eye = v3(pCam);
+      if (renderer.xr.isPresenting) {
+        const yaw = Math.atan2(-f.x, -f.z);
+        qTarget.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      } else {
+        mTmp.lookAt(eye, vTmp.set(ahead[0], ahead[1], ahead[2]), up);
+        qTarget.setFromRotationMatrix(mTmp);
+      }
+      dolly.position.copy(eye);
+      if (S.snap) { dolly.quaternion.copy(qTarget); S.snap = false; }
+      else if (renderer.xr.isPresenting) {   // VR comfort: yaw only (level horizon), smoothed and capped at 30 deg/s
+        const qs = dolly.quaternion.clone().slerp(qTarget, 1 - Math.exp(-rawDt * 2));
+        dolly.quaternion.rotateTowards(qs, (30 * Math.PI / 180) * rawDt);
+      } else dolly.quaternion.slerp(qTarget, 1 - Math.exp(-rawDt * 4));
+      if (!renderer.xr.isPresenting) {
+        if (!drag && S.time - S.lastDrag > 2.5) { S.lookYaw *= Math.exp(-rawDt * 0.8); S.lookPitch *= Math.exp(-rawDt * 0.8); }
+        camera.rotation.set(-S.lookPitch * 0.6, -S.lookYaw, 0, 'YXZ');
+      }
+      // fog brightens in the lungs
+      const inLung = path.pool(sCam) === 'lung' ? 1 : 0;
+      rideFog.color.setHex(inLung ? 0x4a1a22 : 0x2a0507);
+      renderer.setClearColor(rideFog.color, renderer.xr.isPresenting ? 1 : 1);
+    } else {
+      renderer.setClearColor(0x000000, 0);
+      if (dive) { /* the dive drives the camera / heart */ }
+      else if (!renderer.xr.isPresenting) controls.update();
+      else heart.rotation.y += rawDt * 0.12;   // slow turntable in VR (comfortable: the object turns, not you)
+      marker.position.set(pCam[0], pCam[1], pCam[2]);
+      marker.scale.setScalar(1 + 0.25 * Math.sin(S.time * 6));
+    }
+    if (cells.visible) updateCells(st, dt, sCam);
+    // UI
+    refreshCard(false);
+    if (st.phase !== lastPhase) { $('phase').textContent = A.PHASE_TEXT[st.phase]; lastPhase = st.phase; }
+    drawEcg(t, T);
+    // labels
+    const showTags = S.mode === 'outside' && S.labels && !renderer.xr.isPresenting;
+    const camPos = camera.position, center = controls.target;
+    allAnchors.forEach((a, i) => {
+      const el = tagEls[i];
+      if (!showTags || (a.valve && !S.xray)) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
+      const p = a.you ? pCam : A.deform(a.p, st);
+      vTmp.set(p[0], p[1], p[2]);
+      const facing = vTmp.clone().sub(center).normalize().dot(camPos.clone().sub(center).normalize());
+      vTmp.project(camera);
+      if (vTmp.z > 1) { el.style.display = 'none'; return; }
+      el.style.display = '';
+      el.style.left = ((vTmp.x + 1) / 2) * innerWidth + 'px';
+      el.style.top = ((1 - vTmp.y) / 2) * innerHeight + (a.you ? -22 : 0) + 'px';
+      el.style.opacity = a.you || S.xray || facing > -0.15 ? '1' : '0.35';
+    });
+    renderer.render(scene, camera);
+  }
+
+  setMode('outside');   // start outside: the whole beating heart, a short intro, then a slow dive in
+  setPlayIcon();
+  $('loading').style.opacity = '0';
+  setTimeout(() => { $('loading').style.display = 'none'; }, 600);
+  renderer.setAnimationLoop(frame);
+}
+
+main().catch((e) => { console.warn(e); fatal('Sorry - something went wrong while building the heart.'); });
+
+</script>
+</body>
+</html>
