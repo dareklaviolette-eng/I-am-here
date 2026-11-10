@@ -26,7 +26,7 @@ export default {
     if (path === "/ais/probe") {
       // Diagnostic: open aisstream for up to 12 s over Los Angeles and report what came back.
       if (!env || !env.AISSTREAM_KEY) return new Response(JSON.stringify({ ok: false, why: "no key" }), { headers });
-      const out = { ok: false, opened: false, messages: 0, types: {}, first: null, closed: null };
+      const out = { ok: false, opened: false, messages: 0, types: {}, first: null, closed: null, dataKind: null, decodeError: null };
       try {
         const reply = await fetch(AIS_UPSTREAM, { headers: { Upgrade: "websocket", "User-Agent": "imhere-prototype" } });
         const ws = reply.webSocket;
@@ -34,11 +34,14 @@ export default {
         ws.accept(); out.opened = true;
         ws.send(JSON.stringify({ APIKey: env.AISSTREAM_KEY, BoundingBoxes: [[[33.3, -118.6], [34.0, -117.9]]] }));
         await new Promise((resolve) => {
-          const t = setTimeout(resolve, 12000);
-          ws.addEventListener("message", (e) => {
+          const t = setTimeout(resolve, 20000);
+          ws.addEventListener("message", async (e) => {
             out.messages++;
-            let text = typeof e.data === "string" ? e.data : new TextDecoder().decode(e.data);
-            if (!out.first) out.first = text.slice(0, 300);
+            const d = e.data; out.dataKind = out.dataKind || (typeof d === "string" ? "string" : (d && d.constructor && d.constructor.name) || typeof d);
+            let text = "";
+            try { text = typeof d === "string" ? d : (d instanceof ArrayBuffer || ArrayBuffer.isView(d)) ? new TextDecoder().decode(d) : (d && typeof d.text === "function") ? await d.text() : String(d); }
+            catch (x) { out.decodeError = String(x && x.message || x); }
+            if (out.first === null) out.first = text.slice(0, 300);
             try { const j = JSON.parse(text); const k = j.MessageType || (j.error ? "error" : "other"); out.types[k] = (out.types[k] || 0) + 1; } catch (x) {}
             if (out.messages >= 25) { clearTimeout(t); resolve(); }
           });
