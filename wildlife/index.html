@@ -1437,7 +1437,8 @@ if (innerWidth > 760) $('#panel').classList.add('open');
 
 // ================= frame loop =================
 const clock = new THREE.Clock(); let infoT = 0, miniT = 0, markT = 0, errShown = false;
-const mLook = new THREE.Matrix4(), vTarget = new THREE.Vector3(), vDesired = new THREE.Vector3();
+const mLook = new THREE.Matrix4(), vTarget = new THREE.Vector3(), vDesired = new THREE.Vector3(), chaseOff = new THREE.Vector3();
+let xrHeadY = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   try {
@@ -1471,12 +1472,20 @@ function frame() {
       else rig.rotation.set(cam.pitch + look.pitch, cam.yaw + Math.PI + look.yaw, 0, 'YXZ');      // no roll
       camPos.copy(rig.position);
     } else if (view === 'chase') {
+      // The camera rides a boom fixed to the animal, behind and above it. Only the boom's angle is smoothed (it follows
+      // the comfort heading: low-passed, 30 deg/s cap, no roll), never its world position: a position lag left the
+      // camera v/4 behind (300+ m for the shark at x1000), lost in the 85 m underwater fog, so Chase showed nothing.
       const yc = cam.yaw + look.yaw, ch = model.chase;
-      vDesired.set(g.position.x - Math.sin(yc) * ch.back, g.position.y + ch.up - look.pitch * ch.back, g.position.z - Math.cos(yc) * ch.back);
-      if (snap) camPos.copy(vDesired); else camPos.lerp(vDesired, 1 - Math.exp(-dt * 4));
+      vDesired.set(-Math.sin(yc) * ch.back, ch.up - look.pitch * ch.back, -Math.cos(yc) * ch.back);
+      if (snap) chaseOff.copy(vDesired); else chaseOff.lerp(vDesired, 1 - Math.exp(-dt * 4));
+      camPos.copy(g.position).add(chaseOff);
       const gh = terrainHeight(world, camPos.x + ORIGIN.x, camPos.z + ORIGIN.z);
-      if (g.position.y < 0) camPos.y = clamp(camPos.y, gh + 1, -0.4); else camPos.y = Math.max(camPos.y, Math.max(gh, 0) + 1);
+      if (g.position.y < 0) camPos.y = Math.min(Math.max(camPos.y, gh + 1), -0.4);   // stay under the surface, off the seabed
+      else camPos.y = Math.max(camPos.y, Math.max(gh, 0) + 1);
       rig.position.copy(camPos);
+      // WebXR uses a local-floor space: the head sits ~1.6 m above the rig, which put the eye above the water while the
+      // shark swam below. Lower the rig by the (slowly smoothed) head height so the eye itself is at the chase point.
+      if (xr) { xrHeadY += (camera.position.y - xrHeadY) * (1 - Math.exp(-dt * 3)); rig.position.y -= xrHeadY; }
       vTarget.copy(g.position); vTarget.y += 0.3;
       // look along the comfort heading (never chase the animal round a tight circle); tilt only on screens
       const tilt = xr ? 0 : clamp(Math.atan2(vTarget.y - camPos.y, Math.hypot(vTarget.x - camPos.x, vTarget.z - camPos.z)), -0.6, 0.6);
@@ -1484,7 +1493,7 @@ function frame() {
     }
     snap = false;
 
-    const under = rig.position.y < 0;
+    const under = (view === 'chase' ? camPos.y : rig.position.y) < 0;   // in Chase camPos is the eye (also in WebXR)
     scene.fog = under ? fogUnder : fogAbove; scene.background = under ? PAL.under : fogAbove.color;
     sky.visible = !under; snow.visible = under; sky.position.copy(rig.position);
     hemi.intensity = under ? 0.8 : 1.15; sun.intensity = under ? 1.2 : 2.4;
