@@ -203,7 +203,7 @@ export function convertAirport(ap, runwayRows) {
 
   return {
     icao: (ap.ident || '').toUpperCase(), name: ap.name || ap.ident, iata: ap.iata_code || '',
-    municipality: ap.municipality || '', type: ap.type || '',
+    municipality: ap.municipality || '', region: ap.iso_region || '', type: ap.type || '',
     arp, elev_ft: elev, country, rules: isUS ? 'FAA' : 'ICAO',
     sources: 'OurAirports (ourairports.com, public domain): airport position, elevation, runway ends, widths, displaced thresholds, lighted/closed flags. ' +
              'Lighting systems are assumptions (see verify). Not for real-world navigation.',
@@ -280,6 +280,20 @@ let airportIndex = null;   // parsed airports.csv, kept for the session
  * loadOurAirport('KJFK', { base, fetchFn, onStatus }) -> Promise<airport data (KBNA.json format)>
  * base: folder holding airports.csv and runways.csv (default: OurAirports on GitHub Pages).
  */
+// Nearest large/medium airport to a position (used when a joined live flight lands). -> { ident, name, distNm }
+export async function nearestAirport(lat, lon, opts = {}) {
+  const base = opts.base || OA_BASE;
+  const o = { fetchFn: opts.fetchFn || ((u) => fetch(u)), onStatus: opts.onStatus, refresh: opts.refresh };
+  const aText = await getText(base + 'airports.csv', o);
+  if (!airportIndex || airportIndex.base !== base) airportIndex = { base, rows: parseCSV(aText).rows };
+  let best = null, bd = Infinity;
+  for (const r of airportIndex.rows) {
+    if (r.type !== 'large_airport' && r.type !== 'medium_airport') continue;
+    const la = +r.latitude_deg, lo = +r.longitude_deg; if (!Number.isFinite(la) || Math.abs(la - lat) > 1 || !Number.isFinite(lo)) continue;
+    const d = distanceFt(lat, lon, la, lo); if (d < bd) { bd = d; best = r; }
+  }
+  return best ? { ident: (best.ident || '').toUpperCase(), name: best.name, municipality: best.municipality || '', region: best.iso_region || '', distNm: bd * 0.3048 / 1852 } : null;
+}
 export async function loadOurAirport(query, opts = {}) {
   const base = opts.base || OA_BASE;
   const o = { fetchFn: opts.fetchFn || ((u) => fetch(u)), onStatus: opts.onStatus, refresh: opts.refresh };

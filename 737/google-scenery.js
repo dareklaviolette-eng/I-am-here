@@ -42,7 +42,10 @@ const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[s.lengt
 
 /**
  * createGoogleScenery({ THREE, GLTFLoader, DRACOLoader, renderer, camera, key, onStatus })
- * -> Promise<{ holder, setOrigin(lat, lon, elevFt), setProbes([[x,z],...]), update(dt), setTint(hex), credits(), dispose() }>
+ * -> Promise<{ holder, setOrigin(lat, lon, elevFt), setProbes([[x,z],...]), update(dt), setTint(hex), setOpacity(0..1), credits(), dispose() }>
+ * setOpacity blends the tiles over the page's own render ("Realism"): a depth-only pre-pass draws the tiles' depth first,
+ * then their colour with that opacity, so only the front surfaces show (no see-through interiors). Pixels the page marks
+ * in the stencil buffer (stencil = 1: runway paint, markings, lights) are never covered by tiles. Needs a renderer with stencil.
  * holder: add to the moving world group and position it exactly like the airport group.
  */
 export async function createGoogleScenery({ THREE, GLTFLoader, DRACOLoader, renderer, camera, key, onStatus = () => {} }) {
@@ -50,7 +53,11 @@ export async function createGoogleScenery({ THREE, GLTFLoader, DRACOLoader, rend
   // 1) Pre-flight: the key must be accepted for this web address (it is restricted to the GitHub Pages domain).
   onStatus('Checking Google 3D Tiles access…');
   const pre = await fetch(`${GOOGLE_ROOT}?key=${encodeURIComponent(key)}`);
-  if (!pre.ok) throw new Error(`Google 3D Tiles refused (HTTP ${pre.status})`);
+  if (!pre.ok) {   // say why, in plain words: HTTP status + Google's own error message (key, referrer, billing, API not enabled...)
+    let msg = '';
+    try { const t = await pre.text(); try { const j = JSON.parse(t); msg = (j.error && (j.error.message || j.error.status)) || ''; } catch (e) { msg = t.replace(/<(style|script)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160); } } catch (e) { /* no body */ }
+    throw new Error(`Google 3D Tiles refused: HTTP ${pre.status}${pre.statusText ? ' ' + pre.statusText : ''}${msg ? ' - ' + msg : ''}`);
+  }
   await pre.json();
 
   // 2) Library (same three.js instance via the page's import map)
@@ -82,21 +89,34 @@ export async function createGoogleScenery({ THREE, GLTFLoader, DRACOLoader, rend
   const holder = new THREE.Group(); holder.name = 'google-3d-tiles';
   const align = new THREE.Group(); holder.add(align); align.add(tiles.group);
   const M = new THREE.Matrix4();
-  let tint = new THREE.Color(0xffffff), loaded = 0, failed = 0;
+  let tint = new THREE.Color(0xffffff), loaded = 0, failed = 0, opacity = 1, lastError = '';
+  const plainError = (e) => { const er = e && (e.error || e), m = er && (er.message || String(er)) || 'unknown error', u = e && e.url ? String(e.url).replace(/[?&]key=[^&]+/, '') : '';
+    return 'tile failed to load: ' + m.slice(0, 160) + (u ? ' (' + u.slice(0, 80) + ')' : ''); };
+  const stencilSkip = (m) => { m.stencilWrite = true; m.stencilRef = 1; m.stencilFunc = THREE.NotEqualStencilFunc;
+    m.stencilFail = m.stencilZFail = m.stencilZPass = THREE.KeepStencilOp; };
+  const depthMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true }); stencilSkip(depthMat);
+  const colourMats = new Set();
+  function applyOpacity(m) {
+    m.transparent = opacity < 1; m.opacity = opacity; m.depthWrite = opacity >= 1; m.depthFunc = THREE.LessEqualDepth; m.needsUpdate = true;
+  }
 
   const seen = new WeakSet();
   const onModel = (scene) => {
     if (!scene || seen.has(scene)) return; seen.add(scene); loaded++;
-    scene.traverse((o) => {
-      if (!o.isMesh) return;
-      o.renderOrder = -10;                    // after the sky, before the airport lights and the cockpit
+    const meshes = []; scene.traverse((o) => { if (o.isMesh && o.name !== 'depth-prepass') meshes.push(o); });   // collect first: we add children below
+    meshes.forEach((o) => {
+      o.renderOrder = -10;                    // after the sky, ground and the page's stencil-marked overlay
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of mats) if (m && m.color) { m.userData.baseColor = m.color.clone(); m.color.copy(m.userData.baseColor).multiply(tint); }
+      for (const m of mats) if (m) { stencilSkip(m); applyOpacity(m); colourMats.add(m); m.addEventListener('dispose', () => colourMats.delete(m)); }
+      const d = new THREE.Mesh(o.geometry, depthMat); d.renderOrder = -12; d.frustumCulled = o.frustumCulled; d.name = 'depth-prepass';
+      d.raycast = () => {};                   // probes hit the real tile, not its depth twin
+      o.add(d);
     });
   };
   if (tiles.addEventListener) {
     tiles.addEventListener('load-model', (e) => onModel(e.scene));
-    tiles.addEventListener('load-error', () => { failed++; });
+    tiles.addEventListener('load-error', (e) => { failed++; lastError = plainError(e); });
   }
   tiles.onLoadModel = (scene) => onModel(scene);   // older 0.3 releases use a callback
 
@@ -144,7 +164,7 @@ export async function createGoogleScenery({ THREE, GLTFLoader, DRACOLoader, rend
       tiles.group.traverse((o) => { if (!o.isMesh) return; const mats = Array.isArray(o.material) ? o.material : [o.material];
         for (const m of mats) if (m && m.userData.baseColor) m.color.copy(m.userData.baseColor).multiply(tint); });
     },
-    stats: () => ({ loaded, failed, aligned, offset: align.position.y }),
+    stats: () => ({ loaded, failed, aligned, offset: align.position.y, lastError }),
     credits() {   // data attribution the tiles carry (required by Google)
       try {
         if (tiles.getAttributions) return tiles.getAttributions([]).filter((x) => x.type === 'string').map((x) => x.value).join('; ');
@@ -152,6 +172,10 @@ export async function createGoogleScenery({ THREE, GLTFLoader, DRACOLoader, rend
       } catch (e) { /* ignore */ }
       return '';
     },
-    dispose() { try { tiles.dispose(); } catch (e) { /* ignore */ } holder.removeFromParent(); },
+    setOpacity(a) {
+      a = Math.max(0, Math.min(1, a)); if (Math.abs(a - opacity) < 0.004) return; opacity = a;
+      for (const m of colourMats) applyOpacity(m);
+    },
+    dispose() { try { tiles.dispose(); } catch (e) { /* ignore */ } holder.removeFromParent(); depthMat.dispose(); },
   };
 }

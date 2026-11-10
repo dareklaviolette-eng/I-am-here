@@ -1,6 +1,8 @@
 {
   "icao": "KBNA",
   "name": "Nashville International",
+  "municipality": "Nashville",
+  "region": "US-TN",
   "arp": [36.124475, -86.678181],
   "elev_ft": 599,
   "magvar": -4.2,

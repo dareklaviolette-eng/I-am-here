@@ -63,43 +63,41 @@
 
 <!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
 <script id="imhere-mark">
-/* I'M HERE experience watermark (info card), v3. SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
+/* I'M HERE experience label, v4 (founder-approved final design). SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
    Pasted inline into every prototype page between the IMHERE-MARK markers by
    node /home/claude/shared/sync-mark.mjs <files...>  (artifact pages cannot share files).
    Edit here, then re-run the sync. Self-contained: no network, no dependencies.
 
-   Founder's layout (final): one small top-left label (translucent navy, soft blur, 1px border, 8px radius/padding):
-   white title and subject, grey row labels, brighter values; the brand appears only here, not in page top bars.
-       I'M HERE  (faint watermark)      (i)  ×
-       subject · ID
-       • Location – Nashville International (BNA)
-       • Updated – Live | 3 hrs ago | Demo | Fixed | None
-       • Scene – Real | AI render | 3D render | ...
-       • Video – Live | Nov 9, 2026 | None
-   All four rows always shown (value "None" when missing). Only the word "Live" is green.
-   "Live" (Updated/Video) comes only from setLive()/video.live, which pages drive from real data freshness;
-   demo/simulated data never sets it. After ~6 s the card collapses to a small "I'M HERE" corner mark;
-   tapping the mark re-expands it. (i) opens the detail: live stats + provenance (source, last update,
-   live vs recorded/simulated, rendered vs actual imagery). In VR, xrPanel(THREE) is a small HUD panel low
-   in the corner of view, drawn the same way.
+   Layout (top-left on screens; panel rgba(10,18,32,.55), 1px border white 18%, 8px radius):
+       I'M HERE                                   (i)  ×     <- watermark: 9-11px, .25em spacing, white 30%
+       SWA 444 · 737-800 · approach BNA                      <- context line: 11px, white 60%, no headline
+       LOC:      Nashville, TN                               <- labels: outlined caps (transparent fill, 0.5px stroke,
+       SIGNAL:   airplanes.live, live                           white 65%, 11px); values: solid white 13px, one column
+       VIEW:     Google 3D + render
+   Only the word "live" is coloured (green #5DCAA5), and only while setLive(true): pages drive it from real data freshness;
+   demo/simulated data never sets it. After ~6 s the label collapses to a small "I'M HERE" corner mark; tap to re-expand.
+   (i) opens the details: live stats + provenance (source, last update, live vs recorded/simulated, render vs real imagery).
+   In VR, xrPanel(THREE) draws the same label on a canvas (row labels use a 50% white fill there: hairline outlines
+   alias and shimmer at headset panel scale).
 
    API
-     ImHereMark.init({ subject, id, location, position, scene, video, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.init({ context, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
      ImHereMark.update({ ...same keys })
-        location  place name                                   e.g. 'Nashville International (BNA)'
-        position  value of the "Updated" row: 'Demo' | 'Fixed' | 'None' | { time: msEpoch } ("3 hrs ago"); "Live" while setLive(true)
-        scene     short value                                  e.g. 'Real', '3D render', 'AI render'
-        video     'None' | 'Live' (only for a truly live feed) | { date: msEpoch } (shown "Nov 9, 2026")
-        stats     [[label, value], ...]  shown in the (i) detail
-        tag       { text } status line for the detail ("Now: ...")
-        sceneNote plain sentence in the detail: AI-created/rendered vs actual imagery
+        context   e.g. 'SWA 444 · 737-800 · approach BNA', 'ISS · over Pacific Ocean', 'Heart · stop 1 of 10'
+        loc       place, e.g. 'Nashville, TN'
+        signal    { source, time }  -> "source, live" while setLive(true), else "source, 3 hrs ago"
+                  { source, date }  -> "GPS track, 3 May 2008"      { text } -> 'Demo data', 'Fixed camera', ...
+        view      what you are seeing: 'Google 3D + render', '3D render', 'Live video', 'Video, Nov 9'
+        stats     [[label, value], ...] shown in the (i) details
+        tag       { text } status line for the details ("Now: ...")
+        sceneNote sentence in the details: AI-created/rendered vs actual imagery
         items     provenance list: { kind, label, source, age, time, timeLabel, note, href, list: [{ text, time | age }] }
                   kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
-        below     CSS selector(s): the card sits just under the lowest visible one (e.g. the page header)
-     ImHereMark.setLive(true|false)   Updated shows "Live" (green). Only while the data is really fresh.
-     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh HUD panel, kept up to date
+        below     CSS selector(s): the label sits just under the lowest visible one (e.g. the page header)
+     ImHereMark.setLive(true|false)   "live" (green) in SIGNAL. Only while the data is really fresh.
+     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh panel, kept up to date
      ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
-   CSS variable --imh-h on <html>: height taken by the card (or the corner mark) + gap, so a page can push its
+   CSS variable --imh-h on <html>: height taken by the label (or the corner mark) + gap, so a page can push its
    own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
 */
 (function () {
@@ -110,20 +108,20 @@
     computed: ['CALCULATED', '#2b7f8c'], estimated: ['ESTIMATED', '#6f7f8f'], assumed: ['ASSUMED', '#6f7f8f'],
     simulated: ['SIMULATED', '#c47a12'], sample: ['SAMPLE', '#c47a12'], illustrative: ['ILLUSTRATIVE', '#7d5cc4'], ai: ['AI-GENERATED', '#b44a8a']
   };
-  var NAVY = 'rgba(20,30,50,0.6)', GREY = '#9fb0c0', VALUE = '#e8eef4', GREEN = '#3ddc84';
+  var NAVY = 'rgba(10,18,32,0.55)', GREY = '#9fb0c0', VALUE = '#ffffff', GREEN = '#5DCAA5';
   var FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
   var COLLAPSE_MS = 6000;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var CSS =
     '.imh-box,.imh-mini{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imh-z,1500);' +
-    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.14);' +
+    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.18);' +
     'box-shadow:0 2px 10px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);font:11px/1.25 ' + FONT + ';' +
     'letter-spacing:normal;text-align:left;text-shadow:none;pointer-events:auto;-webkit-tap-highlight-color:transparent}' +
     '.imh-box[hidden],.imh-mini[hidden],.imh-src[hidden],.imh-box [hidden]{display:none}' +
     '.imh-box{width:min(190px,45vw);padding:8px}' +
     '.imh-box.imh-wide{width:min(300px,calc(100vw - 20px))}' +
     '.imh-r1{display:flex;align-items:center;gap:5px;min-height:18px}' +
-    '.imh-brand{font-weight:300;font-size:11px;letter-spacing:.28em;flex:none;color:#fff;opacity:.3}' +   /* faint watermark, not a title */
+    '.imh-brand{font-weight:400;font-size:10px;letter-spacing:.25em;flex:none;color:rgba(255,255,255,.3)}' +   /* watermark */
     '.imh-i,.imh-x{flex:none;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;' +
     'color:#dfe7ee;user-select:none;-webkit-user-select:none;position:relative}' +
     '.imh-i::after,.imh-x::after{content:"";position:absolute;inset:-7px}' +   /* bigger touch target */
@@ -131,12 +129,12 @@
     '.imh-x{font-size:14px;line-height:1;background:rgba(255,255,255,.1)}' +
     '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
     '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
-    '.imh-r2{margin-top:2px;font-weight:600;font-size:11px;color:#fff;overflow-wrap:anywhere}' +
-    '.imh-rows{list-style:none;margin:3px 0 0;padding:0;color:' + GREY + ';font-size:11px;line-height:1.3}' +
-    '.imh-rows li{margin:0;padding:0 0 0 9px;position:relative;overflow-wrap:anywhere}' +
-    '.imh-rows li::before{content:"•";position:absolute;left:0;color:' + GREY + '}' +
-    '.imh-rows .imh-l{font-size:10px;color:' + GREY + '}' +
-    '.imh-rows .imh-v{color:' + VALUE + '}.imh-rows .imh-v.imh-g{color:' + GREEN + ';font-weight:700}' +
+    '.imh-r2{margin-top:1px;font-weight:400;font-size:11px;color:rgba(255,255,255,.6);overflow-wrap:anywhere}' +   /* context line */
+    '.imh-rows{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;margin:5px 0 0}' +
+    '.imh-l{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:transparent;' +
+    '-webkit-text-stroke:.5px rgba(255,255,255,.65);text-stroke:.5px rgba(255,255,255,.65);white-space:nowrap}' +
+    '@supports not ((-webkit-text-stroke:.5px #fff) or (text-stroke:.5px #fff)){.imh-l{color:rgba(255,255,255,.5)}}' +
+    '.imh-v{font-size:13px;line-height:1.3;color:' + VALUE + ';overflow-wrap:anywhere}.imh-v .imh-g{color:' + GREEN + ';font-weight:600}' +
     '.imh-src{margin-top:5px;max-height:min(46vh,360px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;' +
     'border-top:1px solid rgba(255,255,255,.14);font-size:11px;line-height:1.3}' +
     '.imh-ph{font-weight:700;font-size:11px;margin-top:5px;color:#fff}' +
@@ -155,7 +153,7 @@
     '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
     '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
 
-  var S = { subject: '', id: '', location: '', position: 'None', scene: '3D render', video: 'None', stats: [], tag: null,
+  var S = { context: '', loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
     sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
   var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
   var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
@@ -177,19 +175,18 @@
     if (!href) return document.createTextNode(text);
     var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
   }
-  function line2() { return [S.subject, S.id].filter(function (x) { return x; }).join(' · '); }
-  function posText() {
-    if (S.live) return 'Live';
-    var p = S.position;
-    if (p && typeof p === 'object') return p.time ? fmtAge(Date.now() - p.time) : (p.text || 'None');
-    return p ? (String(p) === 'Live' ? 'None' : String(p)) : 'None';   // a plain "Live" string is never trusted
+  function line2() { return S.context || ''; }
+  function fmtDay(ms) { var d = new Date(ms); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
+  // SIGNAL value as [text, liveWordShown]: "source, live" only while setLive(true)
+  function signalParts() {
+    var g = S.signal || {};
+    if (typeof g === 'string') return [g, false];
+    if (g.source && S.live) return [g.source + ', ', true];
+    if (g.source && g.time) return [g.source + ', ' + fmtAge(Date.now() - g.time), false];
+    if (g.source && g.date) return [g.source + ', ' + fmtDay(g.date), false];
+    return [g.text || g.source || 'None', false];
   }
-  function videoText() {
-    var v = S.video;
-    if (v && typeof v === 'object') return v.live ? 'Live' : v.date ? fmtDate(v.date) : (v.text || 'None');
-    return v ? (String(v) === 'Live' ? 'None' : String(v)) : 'None';
-  }
-  function rows() { return [['Location', S.location || 'None'], ['Updated', posText()], ['Scene', S.scene || 'None'], ['Video', videoText()]]; }
+  function rows() { var sp = signalParts(); return [['LOC', S.loc || 'None'], ['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]; }
   function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
   function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
 
@@ -204,8 +201,11 @@
       r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
       rowsEl.textContent = '';
       R.forEach(function (r) {
-        var li = el('li'); li.appendChild(el('span', 'imh-l', r[0])); li.appendChild(document.createTextNode(' – '));
-        li.appendChild(el('span', 'imh-v' + (r[1] === 'Live' ? ' imh-g' : ''), r[1])); li.title = r[0] + ' – ' + r[1]; rowsEl.appendChild(li);
+        rowsEl.appendChild(el('span', 'imh-l', r[0] + ':'));
+        var v = el('span', 'imh-v');
+        if (r[2]) { v.appendChild(document.createTextNode(r[2][0])); if (r[2][1]) v.appendChild(el('span', 'imh-g', 'live')); }
+        else v.textContent = r[1];
+        rowsEl.appendChild(v);
       });
       more.classList.toggle('imh-on', S.srcOpen);
       more.setAttribute('aria-expanded', String(S.srcOpen));
@@ -312,7 +312,7 @@
     button(x, function () { setDismissed(true, true); });
     r1.appendChild(x); box.appendChild(r1);
     r2 = el('div', 'imh-r2'); box.appendChild(r2);
-    rowsEl = el('ul', 'imh-rows'); box.appendChild(rowsEl);
+    rowsEl = el('div', 'imh-rows'); box.appendChild(rowsEl);
     var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
     more.addEventListener('mouseenter', function () {
       if (!S.srcOpen && window.matchMedia && matchMedia('(hover: hover)').matches) { hoverOpen = true; S.srcOpen = true; lastSrcSig = ''; render(); }
@@ -338,9 +338,8 @@
   }
   function apply(o) {
     if (!o) return;
-    ['subject', 'id', 'location', 'scene', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
-    if (o.position !== undefined) S.position = o.position;
-    if (o.video !== undefined) S.video = o.video;
+    ['context', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.signal !== undefined) S.signal = o.signal;
     if (o.stats) S.stats = [].concat(o.stats);
     if (o.tag !== undefined) S.tag = o.tag;
     if (o.items) S.items = [].concat(o.items);
@@ -356,29 +355,36 @@
     if (!xr) return;
     var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
     g.clearRect(0, 0, W, H);
-    g.fillStyle = 'rgba(20,30,50,0.78)'; rr(g, 3, 3, W - 6, H - 6, 22); g.fill();   // a bit denser in VR for legibility
+    g.fillStyle = 'rgba(10,18,32,0.72)'; rr(g, 3, 3, W - 6, H - 6, 18); g.fill();   // a little denser in VR for legibility
     g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
-    g.textBaseline = 'alphabetic'; g.fillStyle = '#fff';
-    g.save(); g.globalAlpha = 0.3; g.font = '300 32px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '9px'; g.fillText("I'M HERE", 28, 54); g.restore();   // faint watermark
-    g.font = '600 30px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 98);
-    var y = 140;
-    rows().forEach(function (r) {
-      g.fillStyle = GREY; g.font = '400 26px ' + FONT; var lt = '•  ' + r[0] + ' – ';
-      g.fillText(lt, 28, y); var lw = g.measureText(lt).width;
-      g.font = (r[1] === 'Live' ? '700 ' : '400 ') + '28px ' + FONT; g.fillStyle = r[1] === 'Live' ? GREEN : VALUE;
-      g.fillText(fit(g, r[1], W - 56 - lw), 28 + lw, y); y += 38;
+    g.textBaseline = 'alphabetic';
+    g.save(); g.fillStyle = 'rgba(255,255,255,0.3)'; g.font = '400 22px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '6px'; g.fillText("I'M HERE", 28, 46); g.restore();
+    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 88);
+    // labels: translucent fill in VR (a 0.5px outline aliases/shimmers at headset panel scale); values solid white
+    var R = rows(), lx = 28, vx = 0, y = 140;
+    g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px';
+    R.forEach(function (r) { vx = Math.max(vx, g.measureText(r[0] + ':').width); });
+    vx += lx + 22;
+    R.forEach(function (r) {
+      g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px'; g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillText(r[0] + ':', lx, y);
+      if ('letterSpacing' in g) g.letterSpacing = '0px';
+      g.font = '400 30px ' + FONT; g.fillStyle = VALUE;
+      if (r[2]) { var t = fit(g, r[2][0], W - 28 - vx - (r[2][1] ? 60 : 0)); g.fillText(t, vx, y);
+        if (r[2][1]) { var w = g.measureText(t).width; g.fillStyle = GREEN; g.font = '600 30px ' + FONT; g.fillText('live', vx + w, y); } }
+      else g.fillText(fit(g, r[1], W - 28 - vx), vx, y);
+      y += 46;
     });
     xr.tex.needsUpdate = true;
   }
   function xrPanel(THREE, o) {
     o = o || {};
     if (!xr) {
-      var c = document.createElement('canvas'); c.width = 512; c.height = 300;
+      var c = document.createElement('canvas'); c.width = 512; c.height = 262;
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
       xr = { canvas: c, tex: tex };
     }
     var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
-    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 300 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 262 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
     m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
     m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
@@ -984,7 +990,7 @@ function updateInfo(now, ss, sub) {
 
 // ---------------------------------------------------------------- I'M HERE watermark + source card (shared/imhere-mark.js, inlined above)
 const MARK = window.ImHereMark;
-if (MARK) MARK.init({ subject: 'International Space Station' });
+if (MARK) MARK.init({ context: 'ISS' });
 let markNext = 0;
 const markXR = MARK ? MARK.xrPanel(THREE) : null;   // same card: small HUD tag low in the corner of view in VR
 if (markXR) { markXR.visible = false; camera.add(markXR);
@@ -997,8 +1003,8 @@ function refreshMark(now) {
   const when = shifted ? { kind: 'simulated', label: 'Time shown: ' + fmt(now), source: 'Time slider / speed buttons: not the current time' } : null;
   if (view === 'planets') {
     const au = (n) => geocentric(n, now).dist.toFixed(2) + ' AU';
-    MARK.update({ subject: 'Planets', id: fmt(now).slice(0, 10), location: 'Solar system',
-      position: 'Calculated', scene: '3D render', video: 'None', tag: { text: 'Calculated', kind: 'computed' },
+    MARK.update({ context: 'Planets · ' + fmt(now).slice(0, 10), loc: 'Solar system',
+      signal: { text: 'Calculated (JPL elements)' }, view: '3D render', tag: { text: 'Calculated', kind: 'computed' },
       stats: [['Earth–Sun', subsolar(now).distAU.toFixed(3) + ' AU'], ['Mars', au('Mars')], ['Jupiter', au('Jupiter')]],
       items: [
         { kind: 'computed', label: 'Planet positions', source: 'JPL approximate Keplerian elements (valid 1800–2050), calculated for the time shown',
@@ -1016,8 +1022,8 @@ function refreshMark(now) {
           note: shifted ? 'Time is shifted away from now, so this is not the live position.' : 'Waiting for fresh live fixes.' }
       : { kind: 'simulated', label: 'ISS position', source: 'Simulated orbit, not the live position (no live data reached this page)',
           note: 'Realistic 51.6°, ~420 km, 92.7 min circular orbit; where the ISS is along it is made up.' };
-  MARK.update({ subject: 'ISS', id: '', location: 'Over ' + coarseRegion(sub.lat, sub.lon, isLand),
-    position: iss.kind === 'estimated' ? { time: issState.lastFix } : 'Demo', scene: '3D render', video: 'None',
+  MARK.update({ context: 'ISS · over ' + coarseRegion(sub.lat, sub.lon, isLand), loc: 'Low Earth orbit, ' + Math.round(orbit.altKm) + ' km',
+    signal: iss.kind === 'simulated' ? { text: 'Demo data' } : { source: 'wheretheiss.at', time: issState.lastFix }, view: '3D render',
     tag: liveNow ? { text: 'fix ' + ago(issState.lastFix) } : iss.kind === 'estimated' ? { text: 'Fix ' + ago(issState.lastFix) + ', estimated', kind: 'estimated' } : { text: 'Simulated orbit', kind: 'simulated' },
     stats: [['Alt', Math.round(orbit.altKm) + ' km'], ['Speed', (2 * Math.PI * orbit.a / (orbit.periodMin * 60)).toFixed(2) + ' km/s'], ['Orbit', orbit.periodMin.toFixed(1) + ' min'], ['Over', fmtLat(sub.lat) + ' ' + fmtLon(sub.lon)], ['NORAD', '25544']],
     items: [iss,

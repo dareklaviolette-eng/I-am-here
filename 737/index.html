@@ -41,6 +41,15 @@
   #apt { width: 120px; text-transform: uppercase; letter-spacing: .08em; }
   #rwy { width: 100%; }
   button:disabled { opacity: .5; cursor: wait; }
+  #liveList { max-height: 170px; overflow-y: auto; margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+  #liveList button { text-align: left; font-size: 11px; padding: 5px 7px; line-height: 1.3; }
+  #liveList button small { display: block; color: #9fb6c6; font-size: 10px; }
+  #liveList button.no737 { opacity: .55; cursor: not-allowed; }
+  #liveQ { flex: 1; min-width: 0; }
+  #realRow { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; color: #93a8b8; }
+  #realRow input[type=range] { flex: 1; min-width: 0; accent-color: #6cdbb4; }
+  #realRow.off { opacity: .45; }
+  #realVal { min-width: 30px; text-align: right; color: #cfe3ee; font-variant-numeric: tabular-nums; }
   #gcredit { position: absolute; right: 10px; bottom: 24px; display: flex; align-items: center; gap: 6px; max-width: 60vw;
     font-size: 10px; color: #dfe8ee; text-shadow: 0 0 3px #000; pointer-events: none; }
   #gcredit img { height: 14px; }
@@ -65,7 +74,7 @@
     <button data-seat="fo">First Officer</button>
     <button data-seat="jump">Jumpseat</button>
     <button data-seat="overhead">Overhead</button>
-    <button data-seat="outside">Outside</button>
+    <button data-seat="outside" title="Follow camera behind the aircraft; drag to orbit, it eases back">Chase</button>
   </div>
   <div class="lbl">Time of day</div>
   <div class="row" id="tod">
@@ -78,9 +87,22 @@
   <div class="lbl">Flight</div>
   <div class="row" id="modes"><button data-mode="approach" class="on" id="landBtn">Land BNA 2L</button><button data-mode="cruise">Cruise</button></div>
   <div class="row" style="margin-top:5px"><button id="play" class="on">Pause</button><button id="restart">Restart</button></div>
+  <div class="lbl">Weather</div>
+  <div class="row"><button data-wx="live" class="on">Live (METAR)</button><button data-wx="clear">Clear</button></div>
+  <div class="src" id="wxNote"></div>
+  <div class="lbl">Join a real flight</div>
+  <div class="row"><button id="liveFind">Live flights nearby</button><button id="liveLeave" hidden>Leave flight</button></div>
+  <div class="row" style="margin-top:5px"><input id="liveQ" placeholder="Flight or tail (SWA1234, N8501V)" spellcheck="false" autocomplete="off" aria-label="Search a live flight by flight number or tail"><button id="liveGo">Find</button></div>
+  <div id="liveList"></div>
+  <div class="src" id="liveStatus">Live ADS-B within 150 nm of the airport. 737s first.</div>
   <div class="lbl">Scenery</div>
   <div class="row"><button id="scenery">Real scenery (Google 3D)</button></div>
   <div class="src" id="sceneryNote"></div>
+  <div id="realRow" class="off" title="Blend of Google 3D tiles over our airport render (test control)">
+    <span>Realism (test)</span><input id="realism" type="range" min="0" max="100" step="5" value="70" aria-label="Realism: Google 3D tiles opacity" disabled>
+    <span id="realVal">70%</span><label><input id="realAuto" type="checkbox" checked> Auto</label>
+  </div>
+  <div class="src" id="realNote"></div>
   <div class="lbl">Now</div>
   <div id="readout">—</div>
 </aside>
@@ -92,43 +114,41 @@
 
 <!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
 <script id="imhere-mark">
-/* I'M HERE experience watermark (info card), v3. SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
+/* I'M HERE experience label, v4 (founder-approved final design). SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
    Pasted inline into every prototype page between the IMHERE-MARK markers by
    node /home/claude/shared/sync-mark.mjs <files...>  (artifact pages cannot share files).
    Edit here, then re-run the sync. Self-contained: no network, no dependencies.
 
-   Founder's layout (final): one small top-left label (translucent navy, soft blur, 1px border, 8px radius/padding):
-   white title and subject, grey row labels, brighter values; the brand appears only here, not in page top bars.
-       I'M HERE                         (i)  ×
-       subject · ID
-       • Location – Nashville International (BNA)
-       • Position – Live | 3 hrs ago | Demo | Fixed | None
-       • Scene – Real | AI render | 3D render | ...
-       • Video – Live | Nov 9, 2026 | None
-   All four rows always shown (value "None" when missing). Only the word "Live" is green.
-   "Live" (Position/Video) comes only from setLive()/video.live, which pages drive from real data freshness;
-   demo/simulated data never sets it. After ~6 s the card collapses to a small "I'M HERE" corner mark;
-   tapping the mark re-expands it. (i) opens the detail: live stats + provenance (source, last update,
-   live vs recorded/simulated, rendered vs actual imagery). In VR, xrPanel(THREE) is a small HUD panel low
-   in the corner of view, drawn the same way.
+   Layout (top-left on screens; panel rgba(10,18,32,.55), 1px border white 18%, 8px radius):
+       I'M HERE                                   (i)  ×     <- watermark: 9-11px, .25em spacing, white 30%
+       SWA 444 · 737-800 · approach BNA                      <- context line: 11px, white 60%, no headline
+       LOC:      Nashville, TN                               <- labels: outlined caps (transparent fill, 0.5px stroke,
+       SIGNAL:   airplanes.live, live                           white 65%, 11px); values: solid white 13px, one column
+       VIEW:     Google 3D + render
+   Only the word "live" is coloured (green #5DCAA5), and only while setLive(true): pages drive it from real data freshness;
+   demo/simulated data never sets it. After ~6 s the label collapses to a small "I'M HERE" corner mark; tap to re-expand.
+   (i) opens the details: live stats + provenance (source, last update, live vs recorded/simulated, render vs real imagery).
+   In VR, xrPanel(THREE) draws the same label on a canvas (row labels use a 50% white fill there: hairline outlines
+   alias and shimmer at headset panel scale).
 
    API
-     ImHereMark.init({ subject, id, location, position, scene, video, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.init({ context, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
      ImHereMark.update({ ...same keys })
-        location  place name                                   e.g. 'Nashville International (BNA)'
-        position  'Demo' | 'Fixed' | 'None' | { time: msEpoch } (shown as "3 hrs ago"); shows "Live" while setLive(true)
-        scene     short value                                  e.g. 'Real', '3D render', 'AI render'
-        video     'None' | 'Live' (only for a truly live feed) | { date: msEpoch } (shown "Nov 9, 2026")
-        stats     [[label, value], ...]  shown in the (i) detail
-        tag       { text } status line for the detail ("Now: ...")
-        sceneNote plain sentence in the detail: AI-created/rendered vs actual imagery
+        context   e.g. 'SWA 444 · 737-800 · approach BNA', 'ISS · over Pacific Ocean', 'Heart · stop 1 of 10'
+        loc       place, e.g. 'Nashville, TN'
+        signal    { source, time }  -> "source, live" while setLive(true), else "source, 3 hrs ago"
+                  { source, date }  -> "GPS track, 3 May 2008"      { text } -> 'Demo data', 'Fixed camera', ...
+        view      what you are seeing: 'Google 3D + render', '3D render', 'Live video', 'Video, Nov 9'
+        stats     [[label, value], ...] shown in the (i) details
+        tag       { text } status line for the details ("Now: ...")
+        sceneNote sentence in the details: AI-created/rendered vs actual imagery
         items     provenance list: { kind, label, source, age, time, timeLabel, note, href, list: [{ text, time | age }] }
                   kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
-        below     CSS selector(s): the card sits just under the lowest visible one (e.g. the page header)
-     ImHereMark.setLive(true|false)   Position shows "Live" (green). Only while the data is really fresh.
-     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh HUD panel, kept up to date
+        below     CSS selector(s): the label sits just under the lowest visible one (e.g. the page header)
+     ImHereMark.setLive(true|false)   "live" (green) in SIGNAL. Only while the data is really fresh.
+     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh panel, kept up to date
      ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
-   CSS variable --imh-h on <html>: height taken by the card (or the corner mark) + gap, so a page can push its
+   CSS variable --imh-h on <html>: height taken by the label (or the corner mark) + gap, so a page can push its
    own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
 */
 (function () {
@@ -139,20 +159,20 @@
     computed: ['CALCULATED', '#2b7f8c'], estimated: ['ESTIMATED', '#6f7f8f'], assumed: ['ASSUMED', '#6f7f8f'],
     simulated: ['SIMULATED', '#c47a12'], sample: ['SAMPLE', '#c47a12'], illustrative: ['ILLUSTRATIVE', '#7d5cc4'], ai: ['AI-GENERATED', '#b44a8a']
   };
-  var NAVY = 'rgba(20,30,50,0.6)', GREY = '#9fb0c0', VALUE = '#e8eef4', GREEN = '#3ddc84';
+  var NAVY = 'rgba(10,18,32,0.55)', GREY = '#9fb0c0', VALUE = '#ffffff', GREEN = '#5DCAA5';
   var FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
   var COLLAPSE_MS = 6000;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var CSS =
     '.imh-box,.imh-mini{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imh-z,1500);' +
-    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.14);' +
+    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.18);' +
     'box-shadow:0 2px 10px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);font:11px/1.25 ' + FONT + ';' +
     'letter-spacing:normal;text-align:left;text-shadow:none;pointer-events:auto;-webkit-tap-highlight-color:transparent}' +
     '.imh-box[hidden],.imh-mini[hidden],.imh-src[hidden],.imh-box [hidden]{display:none}' +
     '.imh-box{width:min(190px,45vw);padding:8px}' +
     '.imh-box.imh-wide{width:min(300px,calc(100vw - 20px))}' +
     '.imh-r1{display:flex;align-items:center;gap:5px;min-height:18px}' +
-    '.imh-brand{font-weight:800;font-size:12.5px;letter-spacing:.1em;flex:none;color:#fff}' +
+    '.imh-brand{font-weight:400;font-size:10px;letter-spacing:.25em;flex:none;color:rgba(255,255,255,.3)}' +   /* watermark */
     '.imh-i,.imh-x{flex:none;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;' +
     'color:#dfe7ee;user-select:none;-webkit-user-select:none;position:relative}' +
     '.imh-i::after,.imh-x::after{content:"";position:absolute;inset:-7px}' +   /* bigger touch target */
@@ -160,12 +180,12 @@
     '.imh-x{font-size:14px;line-height:1;background:rgba(255,255,255,.1)}' +
     '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
     '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
-    '.imh-r2{margin-top:2px;font-weight:600;font-size:11px;color:#fff;overflow-wrap:anywhere}' +
-    '.imh-rows{list-style:none;margin:3px 0 0;padding:0;color:' + GREY + ';font-size:11px;line-height:1.3}' +
-    '.imh-rows li{margin:0;padding:0 0 0 9px;position:relative;overflow-wrap:anywhere}' +
-    '.imh-rows li::before{content:"•";position:absolute;left:0;color:' + GREY + '}' +
-    '.imh-rows .imh-l{font-size:10px;color:' + GREY + '}' +
-    '.imh-rows .imh-v{color:' + VALUE + '}.imh-rows .imh-v.imh-g{color:' + GREEN + ';font-weight:700}' +
+    '.imh-r2{margin-top:1px;font-weight:400;font-size:11px;color:rgba(255,255,255,.6);overflow-wrap:anywhere}' +   /* context line */
+    '.imh-rows{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;margin:5px 0 0}' +
+    '.imh-l{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:transparent;' +
+    '-webkit-text-stroke:.5px rgba(255,255,255,.65);text-stroke:.5px rgba(255,255,255,.65);white-space:nowrap}' +
+    '@supports not ((-webkit-text-stroke:.5px #fff) or (text-stroke:.5px #fff)){.imh-l{color:rgba(255,255,255,.5)}}' +
+    '.imh-v{font-size:13px;line-height:1.3;color:' + VALUE + ';overflow-wrap:anywhere}.imh-v .imh-g{color:' + GREEN + ';font-weight:600}' +
     '.imh-src{margin-top:5px;max-height:min(46vh,360px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;' +
     'border-top:1px solid rgba(255,255,255,.14);font-size:11px;line-height:1.3}' +
     '.imh-ph{font-weight:700;font-size:11px;margin-top:5px;color:#fff}' +
@@ -184,7 +204,7 @@
     '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
     '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
 
-  var S = { subject: '', id: '', location: '', position: 'None', scene: '3D render', video: 'None', stats: [], tag: null,
+  var S = { context: '', loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
     sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
   var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
   var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
@@ -206,19 +226,18 @@
     if (!href) return document.createTextNode(text);
     var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
   }
-  function line2() { return [S.subject, S.id].filter(function (x) { return x; }).join(' · '); }
-  function posText() {
-    if (S.live) return 'Live';
-    var p = S.position;
-    if (p && typeof p === 'object') return p.time ? fmtAge(Date.now() - p.time) : (p.text || 'None');
-    return p ? (String(p) === 'Live' ? 'None' : String(p)) : 'None';   // a plain "Live" string is never trusted
+  function line2() { return S.context || ''; }
+  function fmtDay(ms) { var d = new Date(ms); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
+  // SIGNAL value as [text, liveWordShown]: "source, live" only while setLive(true)
+  function signalParts() {
+    var g = S.signal || {};
+    if (typeof g === 'string') return [g, false];
+    if (g.source && S.live) return [g.source + ', ', true];
+    if (g.source && g.time) return [g.source + ', ' + fmtAge(Date.now() - g.time), false];
+    if (g.source && g.date) return [g.source + ', ' + fmtDay(g.date), false];
+    return [g.text || g.source || 'None', false];
   }
-  function videoText() {
-    var v = S.video;
-    if (v && typeof v === 'object') return v.live ? 'Live' : v.date ? fmtDate(v.date) : (v.text || 'None');
-    return v ? (String(v) === 'Live' ? 'None' : String(v)) : 'None';
-  }
-  function rows() { return [['Location', S.location || 'None'], ['Position', posText()], ['Scene', S.scene || 'None'], ['Video', videoText()]]; }
+  function rows() { var sp = signalParts(); return [['LOC', S.loc || 'None'], ['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]; }
   function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
   function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
 
@@ -233,8 +252,11 @@
       r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
       rowsEl.textContent = '';
       R.forEach(function (r) {
-        var li = el('li'); li.appendChild(el('span', 'imh-l', r[0])); li.appendChild(document.createTextNode(' – '));
-        li.appendChild(el('span', 'imh-v' + (r[1] === 'Live' ? ' imh-g' : ''), r[1])); li.title = r[0] + ' – ' + r[1]; rowsEl.appendChild(li);
+        rowsEl.appendChild(el('span', 'imh-l', r[0] + ':'));
+        var v = el('span', 'imh-v');
+        if (r[2]) { v.appendChild(document.createTextNode(r[2][0])); if (r[2][1]) v.appendChild(el('span', 'imh-g', 'live')); }
+        else v.textContent = r[1];
+        rowsEl.appendChild(v);
       });
       more.classList.toggle('imh-on', S.srcOpen);
       more.setAttribute('aria-expanded', String(S.srcOpen));
@@ -341,7 +363,7 @@
     button(x, function () { setDismissed(true, true); });
     r1.appendChild(x); box.appendChild(r1);
     r2 = el('div', 'imh-r2'); box.appendChild(r2);
-    rowsEl = el('ul', 'imh-rows'); box.appendChild(rowsEl);
+    rowsEl = el('div', 'imh-rows'); box.appendChild(rowsEl);
     var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
     more.addEventListener('mouseenter', function () {
       if (!S.srcOpen && window.matchMedia && matchMedia('(hover: hover)').matches) { hoverOpen = true; S.srcOpen = true; lastSrcSig = ''; render(); }
@@ -367,9 +389,8 @@
   }
   function apply(o) {
     if (!o) return;
-    ['subject', 'id', 'location', 'scene', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
-    if (o.position !== undefined) S.position = o.position;
-    if (o.video !== undefined) S.video = o.video;
+    ['context', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.signal !== undefined) S.signal = o.signal;
     if (o.stats) S.stats = [].concat(o.stats);
     if (o.tag !== undefined) S.tag = o.tag;
     if (o.items) S.items = [].concat(o.items);
@@ -385,29 +406,36 @@
     if (!xr) return;
     var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
     g.clearRect(0, 0, W, H);
-    g.fillStyle = 'rgba(20,30,50,0.78)'; rr(g, 3, 3, W - 6, H - 6, 22); g.fill();   // a bit denser in VR for legibility
+    g.fillStyle = 'rgba(10,18,32,0.72)'; rr(g, 3, 3, W - 6, H - 6, 18); g.fill();   // a little denser in VR for legibility
     g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
-    g.textBaseline = 'alphabetic'; g.fillStyle = '#fff';
-    g.font = '800 40px ' + FONT; g.fillText("I'M HERE", 28, 54);
-    g.font = '600 30px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 98);
-    var y = 140;
-    rows().forEach(function (r) {
-      g.fillStyle = GREY; g.font = '400 26px ' + FONT; var lt = '•  ' + r[0] + ' – ';
-      g.fillText(lt, 28, y); var lw = g.measureText(lt).width;
-      g.font = (r[1] === 'Live' ? '700 ' : '400 ') + '28px ' + FONT; g.fillStyle = r[1] === 'Live' ? GREEN : VALUE;
-      g.fillText(fit(g, r[1], W - 56 - lw), 28 + lw, y); y += 38;
+    g.textBaseline = 'alphabetic';
+    g.save(); g.fillStyle = 'rgba(255,255,255,0.3)'; g.font = '400 22px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '6px'; g.fillText("I'M HERE", 28, 46); g.restore();
+    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 88);
+    // labels: translucent fill in VR (a 0.5px outline aliases/shimmers at headset panel scale); values solid white
+    var R = rows(), lx = 28, vx = 0, y = 140;
+    g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px';
+    R.forEach(function (r) { vx = Math.max(vx, g.measureText(r[0] + ':').width); });
+    vx += lx + 22;
+    R.forEach(function (r) {
+      g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px'; g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillText(r[0] + ':', lx, y);
+      if ('letterSpacing' in g) g.letterSpacing = '0px';
+      g.font = '400 30px ' + FONT; g.fillStyle = VALUE;
+      if (r[2]) { var t = fit(g, r[2][0], W - 28 - vx - (r[2][1] ? 60 : 0)); g.fillText(t, vx, y);
+        if (r[2][1]) { var w = g.measureText(t).width; g.fillStyle = GREEN; g.font = '600 30px ' + FONT; g.fillText('live', vx + w, y); } }
+      else g.fillText(fit(g, r[1], W - 28 - vx), vx, y);
+      y += 46;
     });
     xr.tex.needsUpdate = true;
   }
   function xrPanel(THREE, o) {
     o = o || {};
     if (!xr) {
-      var c = document.createElement('canvas'); c.width = 512; c.height = 300;
+      var c = document.createElement('canvas'); c.width = 512; c.height = 262;
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
       xr = { canvas: c, tex: tex };
     }
     var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
-    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 300 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 262 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
     m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
     m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
@@ -436,7 +464,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { buildAirport } from './airport-kit.js';
-import { loadOurAirport, defaultEnd } from './ourairports.js';
+import { loadOurAirport, defaultEnd, nearestAirport } from './ourairports.js';
+import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit } from './live-flights.js';
+import { toLocal } from './airport-kit.js';
+import { fetchMetar, isLive as wxIsLive, summary as wxSummary, windComponents } from './weather.js';
 import { createGoogleScenery } from './google-scenery.js';
 
 // Google Map Tiles API key. Safe to publish: Google only accepts it from https://dareklaviolette-eng.github.io/
@@ -454,7 +485,7 @@ const SEATS = {                       // eye point, look-at point (model units)
   fo:       { eye: [-0.40, 2.18, 1.08], at: [-0.40, 2.08, 2.30] },
   jump:     { eye: [ 0.05, 2.22, 0.50], at: [ 0.00, 1.85, 1.80] },
   overhead: { eye: [ 0.40, 2.12, 1.05], at: [ 0.10, 2.60, 1.60] },
-  outside:  { eye: [ 1.40, 2.40, 3.80], at: [ 0.00, 1.90, 1.40], orbit: true },
+  outside:  { eye: [ 0.00, 8.30, -36.0], at: [ 0.00, 2.10, -6.25], orbit: true },   // Chase: behind and above (model units)
 };
 // Display units: centre, size (model units), facing normal (toward the pilots)
 const UP = [0, 0, -1], LO = [0, 0.900, -0.435];
@@ -470,7 +501,7 @@ const SCREENS = [
 // ---------------------------------------------------------------------------
 // Renderer, scene, camera
 // ---------------------------------------------------------------------------
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', stencil: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -537,7 +568,32 @@ ground.renderOrder = -19; ground.frustumCulled = false; world.add(ground);
 // ---------------------------------------------------------------------------
 const aircraft = new THREE.Group(); aircraft.scale.setScalar(S); scene.add(aircraft);
 const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+const airframe = buildAirframe(); airframe.scale.setScalar(1 / S); airframe.visible = false; aircraft.add(airframe);
+let chaseIdle = 0, chaseDrag = false, chaseYaw = null;
 
+// Simplified 737-800 exterior (illustrative, metres; nose +z) for the Chase view. The cockpit model has no exterior.
+function buildAirframe() {
+  const g = new THREE.Group(), white = new THREE.MeshLambertMaterial({ color: 0xe9edf1 }), grey = new THREE.MeshLambertMaterial({ color: 0x8b949c }),
+    dark = new THREE.MeshLambertMaterial({ color: 0x2b3640 }), blue = new THREE.MeshLambertMaterial({ color: 0x24497a });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m; };
+  const R = 1.88, yc = 3.5;
+  add(new THREE.CylinderGeometry(R, R, 33, 28, 1, true).rotateX(Math.PI / 2), white, 0, yc, -14.5);          // fuselage
+  add(new THREE.SphereGeometry(R, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2).scale(1, 1, 1.45), white, 0, yc, 2.0);   // nose
+  add(new THREE.ConeGeometry(R, 7, 28, 1, true).rotateX(-Math.PI / 2), white, 0, yc + 0.4, -34.5);             // tail cone
+  add(new THREE.BoxGeometry(2 * R + 0.02, 0.5, 30), blue, 0, yc - 0.55, -14.5);                                 // cheatline
+  for (const sd of [1, -1]) {
+    const w = add(new THREE.BoxGeometry(16.5, 0.32, 4.2), white, sd * 9.4, yc - 1.4, -14.6, 0, sd * 0.42, sd * -0.1);   // swept, dihedral
+    add(new THREE.CylinderGeometry(0.95, 0.85, 4.4, 20).rotateX(Math.PI / 2), grey, sd * 5.0, yc - 2.3, -11.4);           // engine
+    add(new THREE.CircleGeometry(0.8, 20), dark, sd * 5.0, yc - 2.3, -9.18);                                               // intake
+    add(new THREE.BoxGeometry(6.6, 0.22, 2.4), white, sd * 3.9, yc + 0.6, -33.2, 0, sd * 0.5, 0);                         // stabiliser
+    add(new THREE.BoxGeometry(0.4, 0.8, 1.6), white, sd * 17.2, yc - 0.3, -18.6, 0, 0, 0);                                 // winglet
+    void w;
+  }
+  add(new THREE.BoxGeometry(0.3, 6.6, 4.2), white, 0, yc + 4.6, -32.6, -0.45, 0, 0);                                      // fin
+  add(new THREE.BoxGeometry(0.32, 3.2, 2.4), blue, 0, yc + 5.4, -33.6, -0.45, 0, 0);
+  g.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+  return g;
+}
 const displays = SCREENS.map((d) => {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
@@ -635,7 +691,7 @@ function endInfo(data, id) {
   for (const rw of data.runways) for (const e of rw.ends) if (e.id === id) return { rw, e };
   return null;
 }
-async function loadAirport(code, preferEnd) {
+async function loadAirport(code, preferEnd, opts = {}) {
   code = String(code || '').trim().toUpperCase(); if (!code) return;
   const req = ++aptReq; $('aptGo').disabled = true; setAptStatus(`Looking up ${code}…`);
   try {
@@ -645,8 +701,10 @@ async function loadAirport(code, preferEnd) {
     // draw order: lights before the cockpit (so the cockpit hides them), tyre marks hidden by the cockpit too
     surfaces = [];
     built.group.traverse((o) => {
-      if (o.isPoints) o.material.transparent = false;          // additive blending still applies
-      else if (o.isMesh) { if (o.material.transparent) o.material.depthTest = true; surfaces.push(o); }
+      if (o.isPoints) { o.material.transparent = false; o.renderOrder = -14; }   // additive blending still applies
+      else if (o.isMesh) { if (o.material.transparent) o.material.depthTest = true; o.renderOrder = -15; surfaces.push(o); }
+      for (const m of [].concat(o.material || [])) {   // Realism: stencil = 1 here -> Google tiles skip these pixels (crisp on top)
+        m.stencilWrite = true; m.stencilRef = 1; m.stencilFunc = THREE.AlwaysStencilFunc; m.stencilZPass = THREE.ReplaceStencilOp; }
     });
     if (airport) { world.remove(airport.group); disposeGroup(airport.group); }
     airport = built; world.add(airport.group);
@@ -665,7 +723,9 @@ async function loadAirport(code, preferEnd) {
     pos.x = pos.z = 0;
     if (scenery) placeScenery();
     try { const u = new URL(location.href); u.searchParams.set('apt', data.icao); u.searchParams.delete('rwy'); history.replaceState(null, '', u); } catch (e) { /* ignore */ }
-    setMode('approach');
+    ORG.lat = data.arp[0]; ORG.lon = data.arp[1]; orgOff = [0, 0];   // scene origin back at the airport
+    windsock = null; placeWindsock(); if (WX.icao !== data.icao) loadWeather(data.icao);
+    if (!opts.keepLive) setMode('approach'); else { startApproach(); refreshMark(); }
   } catch (e) {
     console.error('airport', e);
     if (req === aptReq) setAptStatus(`Could not load ${code}: ${e.message}${airport ? ` (still showing ${airport.data.icao})` : ''}`);
@@ -677,7 +737,7 @@ function startApproach() {
   if (!airport) return;
   if (!airport.ends[AP.rwy]) AP.rwy = defaultEnd(airport.data);
   const e = airport.ends[AP.rwy];
-  $('landBtn').textContent = `Land ${shortName(airport.data)} ${AP.rwy}`;
+  $('landBtn').textContent = `Land ${shortName(airport.data)} ${AP.rwy}`; placeWindsock();
   if (scenery) scenery.setProbes(probePoints());
   AP.s = (e.displaced_ft + 1000) * FT - 9260;   // 5 nm before the touchdown point
   Object.assign(AP, { v: 140 * 0.5144, t: 0, tdT: 0, hold: 0, lastH: null, stage: 'APPROACH' });
@@ -700,10 +760,19 @@ function approachStep(dt) {
     pitch = Math.max(0, 5.5 - since * 1.2); n1 = since > 1.5 && since < 14 ? 72 : 22;
     if (AP.hold > 8) { startApproach(); return; }
   }
-  const vs = AP.lastH === null ? -750 : (h - AP.lastH) / dt * 60; AP.lastH = h;
+  const vs = AP.lastH === null ? -750 : (h - AP.lastH) / Math.max(dt, 1e-3) * 60; AP.lastH = h;
   const air = h > 40 ? 1 : 0, lat = air * 4 * Math.sin(AP.t * 0.11);   // gentle drift off the centreline
   pos.x = e.O[0] + e.u[0] * AP.s + e.r[0] * lat; pos.z = e.O[1] + e.u[1] * AP.s + e.r[1] * lat;
-  const hdg = (Math.atan2(-e.u[0], e.u[1]) / D2R + 360 + air * 1.2 * Math.cos(AP.t * 0.11)) % 360;
+  // ILS needles for the PFD: localizer antenna ~300 m past the far end, glideslope 3 deg to the aiming point
+  if (AP.stage === 'APPROACH') {
+    const toLoc = e.L_ft * FT + 300 - AP.s, toGs = sTD - AP.s;
+    AP.loc = Math.max(-2.5, Math.min(2.5, Math.atan2(lat, toLoc) / D2R / 1.25));                     // dots (1 dot ~ 1.25 deg)
+    AP.gs = Math.max(-2.5, Math.min(2.5, (Math.atan2(h * FT, Math.max(toGs, 1)) / D2R - 3) / 0.35));  // dots (1 dot ~ 0.35 deg)
+  } else { AP.loc = AP.stage === 'FLARE' ? 0 : null; AP.gs = null; }
+  const rwyHdg = (Math.atan2(-e.u[0], e.u[1]) / D2R + 360) % 360, wxw = WX.mode === 'live' && WX.data ? WX.data : null;
+  const xw = windComponents(wxw, rwyHdg).cross, gust = wxw && wxw.gustKt ? (wxw.gustKt - wxw.windKt) * 0.5 * Math.sin(AP.t * 1.3) : 0;
+  const crab = air * Math.asin(Math.max(-0.4, Math.min(0.4, (xw + gust * Math.sign(xw || 1)) / Math.max(100, AP.v / 0.5144)))) / D2R;   // nose into the wind
+  const hdg = (rwyHdg + 360 + air * 1.2 * Math.cos(AP.t * 0.11) + crab) % 360;
   const kt = AP.v / 0.5144;
   updateFlightData({ altitude: airport.data.elev_ft + h, radioAlt: h, verticalSpeed: vs, airspeed: kt + 6, groundSpeed: kt, mach: (kt + 6) / 661,
     heading: hdg, track: hdg, pitch, bank: air * (1.3 * Math.sin(AP.t * 0.7) + 0.6 * Math.sin(AP.t * 1.9)),
@@ -730,9 +799,12 @@ function sceneryFail(why) {
   console.warn('Real scenery unavailable:', why);
   if (scenery) { scenery.dispose(); scenery = null; }
   sceneryOn = false; $('scenery').classList.remove('on'); $('gcredit').hidden = true;
-  $('sceneryNote').textContent = 'Real scenery not available here, flat ground shown.';
-  refreshMark();
+  const reason = String((why && why.message) || why || '').replace(/[?&]key=[^&\s]+/g, '');
+  sceneryFailReason = reason;
+  $('sceneryNote').textContent = 'Real scenery failed: ' + (reason || 'unknown error') + '. Flat ground shown.';   // plain words, on screen
+  refreshMark(); syncRealUI();
 }
+let sceneryFailReason = '';
 async function setScenery(on) {
   if (!on) { sceneryOn = false; if (scenery) { scenery.dispose(); scenery = null; }
     $('scenery').classList.remove('on'); $('gcredit').hidden = true; $('sceneryNote').textContent = ''; refreshMark(); return; }
@@ -751,16 +823,228 @@ function sceneryStep(dt, gy) {
   scenery.holder.position.set(-pos.x, gy, -pos.z);
   try { scenery.update(dt); } catch (e) { sceneryFail(e); return false; }
   const st = scenery.stats(); sceneryT += dt;
-  if (!st.loaded && sceneryT > 25) { sceneryFail('no tiles after 25 s'); return false; }
+  if (!st.loaded && (sceneryT > 25 || (st.failed >= 3 && sceneryT > 6))) { sceneryFail(st.lastError || 'no tiles arrived after 25 s'); return false; }
   if ((creditClock += dt) > 1) { creditClock = 0; $('gattr').textContent = scenery.credits();
     if (st.loaded) $('sceneryNote').textContent = st.aligned ? 'Google 3D tiles on (ground matched to runway)' : 'Google 3D tiles on'; }
   return st.loaded > 0;
 }
+// ---------------------------------------------------------------------------
+// Realism (test control): how strongly the Google tiles show over our own render. Auto by default from the time of day
+// (about 70% by day, easing to 25% at night so the airport lighting dominates). Moving the slider switches Auto off;
+// the last manual value per time of day is remembered on this device.
+// ---------------------------------------------------------------------------
+const REAL_AUTO = { day: 70, dusk: 45, night: 25 };
+const REAL = (() => { const d = { auto: true, manual: { ...REAL_AUTO } };
+  try { return Object.assign(d, JSON.parse(localStorage.getItem('imhere737.realism') || '{}')); } catch (e) { return d; } })();
+let realNow = 0;   // eased blend actually applied (0..1)
+const saveReal = () => { try { localStorage.setItem('imhere737.realism', JSON.stringify({ auto: REAL.auto, manual: REAL.manual })); } catch (e) { /* private mode */ } };
+const realTarget = () => (REAL.auto ? REAL_AUTO[todName] : REAL.manual[todName]) / 100;
+function syncRealUI() {
+  const v = Math.round(realTarget() * 100), ready = !!(scenery && scenery.stats().loaded);
+  $('realism').value = v; $('realVal').textContent = v + '%'; $('realAuto').checked = REAL.auto;
+  $('realism').disabled = !ready; $('realRow').classList.toggle('off', !ready);
+  $('realNote').textContent = ready ? (REAL.auto ? 'Auto: follows the time of day.' : 'Manual (remembered for ' + todName + ').')
+    : !/github\.io$/i.test(location.hostname) ? 'Real scenery loads on the GitHub site.' : sceneryOn ? 'Waiting for real scenery…'
+    : sceneryFailReason ? 'Real scenery failed (see above).' : 'Turn on Real scenery to use this.';
+  efbDirty = true;
+}
+function setRealManual(v) { REAL.auto = false; REAL.manual[todName] = Math.max(0, Math.min(100, Math.round(v))); saveReal(); syncRealUI(); }
+function setRealAuto(on) { REAL.auto = on; saveReal(); syncRealUI(); }
+function realismStep(dt) {
+  if (!scenery) { realNow = 0; return; }
+  realNow += (realTarget() - realNow) * (1 - Math.exp(-dt * 2));
+  scenery.setOpacity(realNow); scenery.holder.visible = realNow > 0.01;
+}
 let nearNow = 0.02;
 function setNear(n) { if (n !== nearNow) { nearNow = n; camera.near = n; camera.updateProjectionMatrix(); } }
 
+// ---------------------------------------------------------------------------
+// Weather: Live = the airport's current METAR (aviationweather.gov, relay fallback); Clear = no weather.
+// Cloud layers at their reported bases/coverage, visibility as fog, rain/snow particles, wind in the windsock and
+// as crab on the approach. Not called live if the METAR is more than 90 minutes old. Light enough for Quest.
+// ---------------------------------------------------------------------------
+const WX = { mode: (() => { try { return localStorage.getItem('imhere737.weather') || 'live'; } catch (e) { return 'live'; } })(), data: null, err: '', busy: false, at: 0, icao: '' };
+const wxGroup = new THREE.Group(); world.add(wxGroup);
+const cloudTex = {};
+function cloudTexture(amount) {
+  const k = Math.round(amount * 10); if (cloudTex[k]) return cloudTex[k];
+  const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d'), img = g.createImageData(N, N);
+  const h = (x, y) => { const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return v - Math.floor(v); };
+  const vn = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), m = (a, b) => ((a % 16) + 16) % 16;
+    const a = h(m(xi), m(yi)), b = h(m(xi + 1), m(yi)), cc = h(m(xi), m(yi + 1)), d = h(m(xi + 1), m(yi + 1)); return a + (b - a) * u + (cc - a) * v + (a - b - cc + d) * u * v; };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    let f = 0, amp = 0.5, fr = 16 / N;
+    for (let o = 0; o < 4; o++) { f += amp * vn(x * fr * (1 << o), y * fr * (1 << o)); amp *= 0.5; }
+    const a = Math.max(0, Math.min(1, (f - (1 - amount) * 0.95) * 3.2)), i = (y * N + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = a * 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(30, 30); t.colorSpace = THREE.SRGBColorSpace;
+  return (cloudTex[k] = t);
+}
+let wxLayers = [];
+const precip = (() => {
+  const N = 1400, geo = new THREE.BufferGeometry(), p = new Float32Array(N * 3);
+  geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xcfd8e3, size: 0.05, transparent: true, opacity: 0.55, depthWrite: false });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.visible = false; scene.add(pts);
+  const rnd = () => Math.random() * 2 - 1;
+  for (let i = 0; i < N; i++) { p[i * 3] = rnd() * 30; p[i * 3 + 1] = rnd() * 20; p[i * 3 + 2] = rnd() * 30; }
+  return { pts, p, N, kind: null, step(dt, eye) {
+    if (!pts.visible) return; const fall = this.kind === 'snow' ? 1.2 : 9, drift = this.kind === 'snow' ? 0.6 : 0;
+    for (let i = 0; i < N; i++) {
+      let y = p[i * 3 + 1] - fall * dt; if (y < -20) y += 40; p[i * 3 + 1] = y;
+      if (drift) p[i * 3] += Math.sin(y * 0.7 + i) * drift * dt;
+    }
+    pts.position.copy(eye); geo.attributes.position.needsUpdate = true;
+  } };
+})();
+// keep the flakes/drops out of the flight deck: nothing within 4 m of the eye
+for (let i = 0; i < precip.N; i++) { const x = precip.p[i * 3], z = precip.p[i * 3 + 2]; if (Math.hypot(x, z) < 4) precip.p[i * 3] = x < 0 ? x - 4 : x + 4; }
+let windsock = null;
+function buildWindsock() {
+  const g = new THREE.Group(), pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 6, 8), new THREE.MeshLambertMaterial({ color: 0xdddddd }));
+  pole.position.y = 3; g.add(pole);
+  const piv = new THREE.Group(); piv.position.y = 6; g.add(piv);
+  const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.18, 3.6, 12, 1, true).rotateX(Math.PI / 2).translate(0, 0, 1.8),
+    new THREE.MeshLambertMaterial({ color: 0xff6a1a, side: THREE.DoubleSide })); piv.add(sock); g.userData.piv = piv;
+  return g;
+}
+function placeWindsock() {
+  if (!airport) return;
+  if (!windsock) windsock = buildWindsock();
+  if (windsock.parent !== airport.group) airport.group.add(windsock);
+  const e = airport.ends[AP.rwy]; if (!e) return;
+  const s0 = Math.min(300, e.L_ft * FT * 0.1);
+  windsock.position.set(e.O[0] + e.u[0] * s0 - e.r[0] * 70, 0, e.O[1] + e.u[1] * s0 - e.r[1] * 70);
+  applyWindsock();
+}
+function applyWindsock() {
+  if (!windsock) return; const w = WX.mode === 'live' && WX.data ? WX.data : null, kt = w ? w.windKt : 0;
+  const to = ((w && w.windDir != null ? w.windDir : 0) + 180) * D2R;   // the sock points downwind
+  windsock.rotation.y = Math.atan2(-Math.sin(to), Math.cos(to));        // airport frame: x = west, z = north
+  windsock.userData.piv.rotation.x = Math.max(0, 1.25 - Math.min(15, kt) / 15 * 1.25);   // limp in calm air, straight out at 15 kt
+}
+function applyWeather() {
+  for (const m of wxLayers) { wxGroup.remove(m); m.geometry.dispose(); m.material.dispose(); } wxLayers = [];
+  const w = WX.mode === 'live' && WX.data ? WX.data : null;
+  scene.fog.density = w && w.visM ? Math.max(0.000022, 1.73 / Math.max(800, w.visM)) : 0.000022;
+  if (w) for (const c of w.clouds) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: cloudTexture(c.amount), transparent: true, opacity: 0.55 + 0.4 * c.amount, depthWrite: false, side: THREE.DoubleSide }));
+    m.renderOrder = 5; m.frustumCulled = false; m.userData.baseFt = c.baseFt; wxGroup.add(m); wxLayers.push(m);
+  }
+  tintClouds();
+  precip.kind = w && w.precip ? w.precip.kind : null; precip.pts.visible = !!precip.kind;
+  if (precip.kind) { precip.pts.material.size = precip.kind === 'snow' ? 0.09 : 0.04; precip.pts.material.opacity = 0.3 + 0.4 * w.precip.intensity;
+    precip.pts.material.color.set(precip.kind === 'snow' ? 0xffffff : 0xaebccc); }
+  F.windDirection = w && w.windDir != null ? w.windDir : 0; F.windSpeed = w ? w.windKt : 0;
+  applyWindsock();
+  $('wxNote').textContent = WX.mode === 'clear' ? 'Clear: no weather (perfect view).' : WX.data ? `${WX.data.icao}: ${wxSummary(WX.data)}` + (wxIsLive(WX.data) ? '' : ' - too old to call live')
+    : WX.err ? 'Live weather not reachable: ' + WX.err.slice(0, 120) : 'Loading the METAR…';
+  document.querySelectorAll('[data-wx]').forEach((b) => b.classList.toggle('on', b.dataset.wx === WX.mode));
+  refreshMark(); efbDirty = true;
+}
+function tintClouds() { const c = todName === 'night' ? 0x3a4250 : todName === 'dusk' ? 0xd8a888 : 0xffffff; for (const m of wxLayers) m.material.color.set(c); }
+async function loadWeather(icao) {
+  if (!icao || WX.busy) return; WX.busy = true; WX.icao = icao;
+  try { WX.data = await fetchMetar(icao); WX.err = ''; } catch (e) { WX.data = null; WX.err = e.message; }
+  finally { WX.busy = false; WX.at = Date.now(); applyWeather(); }
+}
+function setWeatherMode(m) { WX.mode = m; try { localStorage.setItem('imhere737.weather', m); } catch (e) { /* private mode */ } applyWeather(); }
+function weatherStep(dt, gy) {
+  for (const m of wxLayers) m.position.set(-(pos.x % 2000), gy + m.userData.baseFt * FT, -(pos.z % 2000));
+  if (precip.pts.visible) precip.step(dt, camera.getWorldPosition(_eye));
+  if (airport && WX.mode === 'live' && !WX.busy && Date.now() - WX.at > 15 * 60000) loadWeather(airport.data.icao);   // refresh every 15 min
+}
+const _eye = new THREE.Vector3();
+
+// ---------------------------------------------------------------------------
+// Join a real flight: live ADS-B (airplanes.live, adsb.lol, OpenSky fallback), smoothed by dead reckoning.
+// What ADS-B does not send (pitch, bank, N1/EGT, airspeed) is derived from the live track and says so in (i).
+// ---------------------------------------------------------------------------
+const ORG = { lat: 0, lon: 0 };   // scene origin (airport reference point, or a re-origin point en route)
+let orgOff = [0, 0];               // airport position in the scene-origin frame
+const JOIN = { hex: null, info: null, src: null, tracker: null, list: [], pollT: 0, busy: false, prevTrack: null, groundT: 0, landed: false, last: null };
+const liveStatus = (t) => { $('liveStatus').textContent = t; };
+function renderLiveList(list) {
+  const box = $('liveList'); box.textContent = '';
+  for (const f of list.slice(0, 40)) {
+    const b = document.createElement('button'); if (!f.is737) b.className = 'no737';
+    const head = `${f.flight || f.reg || f.hex.toUpperCase()} · ${f.type || 'type ?'}`;
+    const sub = `${f.onGround ? 'on the ground' : (f.altFt != null ? Math.round(f.altFt).toLocaleString('en-US') + ' ft' : 'alt ?')} · ${Math.round(f.distNm)} nm` + (f.is737 ? '' : ' · cockpit not available yet');
+    b.innerHTML = '<span></span><small></small>'; b.firstChild.textContent = head; b.lastChild.textContent = sub;
+    b.title = f.is737 ? 'Ride in this 737' : 'Only the 737 cockpit exists so far';
+    b.onclick = () => { if (f.is737) joinFlight(f); };
+    box.appendChild(b);
+  }
+}
+async function findLive(q) {
+  if (!airport) return;
+  const [la, lo] = airport.data.arp; liveStatus('Looking for live flights…'); $('liveFind').disabled = true;
+  try {
+    const r = await fetchNearby(la, lo, 150); JOIN.src = r.source;
+    JOIN.list = sortFlights(r.flights, la, lo);
+    const shown = searchFlights(JOIN.list, q);
+    renderLiveList(shown);
+    liveStatus(shown.length ? `${shown.length} flight${shown.length === 1 ? '' : 's'} from ${r.source} (live ADS-B). 737s first.`
+      : q ? `"${q}" is not within 150 nm of ${airport.data.icao} right now.` : 'No flights in range right now.');
+  } catch (e) { liveStatus('Live flights not reachable from here: ' + e.message.slice(0, 140)); }
+  finally { $('liveFind').disabled = false; }
+}
+function joinFlight(f) {
+  JOIN.hex = f.hex; JOIN.info = f; JOIN.tracker = new Tracker(); JOIN.tracker.onFix(f); JOIN.prevTrack = null; JOIN.landed = false; JOIN.groundT = 0;
+  live = true; demo = false; feedAt = f.fixAt; viewHdg = null;
+  F.flight = (f.flight || f.reg || f.hex).slice(0, 24);
+  $('liveLeave').hidden = false; $('liveList').textContent = '';
+  liveStatus(`Riding ${f.flight || f.reg} (${f.type}) · live ADS-B from ${JOIN.src}`);
+  refreshMark();
+}
+function leaveFlight() {
+  JOIN.hex = null; JOIN.tracker = null; $('liveLeave').hidden = true; liveStatus('Left the live flight. Back to the demo.');
+  ORG.lat = airport.data.arp[0]; ORG.lon = airport.data.arp[1]; orgOff = [0, 0]; if (scenery) placeScenery();
+  F.flight = 'DEMO'; setMode(mode);
+}
+async function pollLive() {
+  if (JOIN.busy || !JOIN.hex) return; JOIN.busy = true;
+  try { const r = await fetchHex(JOIN.hex, { prefer: JOIN.src }); if (JOIN.hex && JOIN.tracker.onFix(r.flight)) { feedAt = r.flight.fixAt; JOIN.info = { ...JOIN.info, ...r.flight }; JOIN.src = r.source; } }
+  catch (e) { /* keep the last state: the label shows how old it is; after 30 s the aircraft freezes */ }
+  finally { JOIN.busy = false; }
+}
+function joinPlace(st) {
+  if (JOIN.placeBusy || (JOIN.placeAt && Date.now() - JOIN.placeAt < 60000)) return;
+  JOIN.placeBusy = true; JOIN.placeAt = Date.now();
+  nearestAirport(st.lat, st.lon).then((a) => { if (a && a.distNm < 60) JOIN.place = a; }).catch(() => {}).finally(() => { JOIN.placeBusy = false; });
+}
+function joinStep(dt) {
+  if ((JOIN.pollT += dt) > 2) { JOIN.pollT = 0; pollLive(); }   // about every 2 s (feeds allow ~1 request/s)
+  const now = Date.now(), st = JOIN.tracker.state(now); if (!st) return;
+  // keep the scene origin near the aircraft (flat local frame); the airport stays where it really is
+  let p = toLocal([ORG.lat, ORG.lon], st.lat, st.lon);
+  if (Math.hypot(p[0], p[1]) > 30000) {
+    ORG.lat = st.lat; ORG.lon = st.lon; orgOff = toLocal([ORG.lat, ORG.lon], airport.data.arp[0], airport.data.arp[1]);
+    if (scenery) { scenery.setOrigin(ORG.lat, ORG.lon, airport.data.elev_ft); scenery.setProbes([]); }
+    p = [0, 0];
+  }
+  pos.x = p[0]; pos.z = p[1]; joinPlace(st);
+  const d = deriveCockpit(st, JOIN.prevTrack, st.frozen ? 0 : dt); JOIN.prevTrack = st.track;
+  const alt = st.altFt == null ? F.altitude : st.onGround ? airport.data.elev_ft : st.altFt, gs = st.gs ?? 0;
+  updateFlightData({ altitude: alt, groundSpeed: gs, airspeed: gs, mach: gs / 661, heading: st.track ?? F.heading, track: st.track ?? F.track,
+    verticalSpeed: st.frozen ? 0 : st.vr || 0, pitch: d.pitch, bank: st.frozen ? 0 : d.bank, radioAlt: Math.max(0, alt - airport.data.elev_ft),
+    n1L: d.n1, n1R: d.n1 - 0.3, n2L: d.n1 + 8, n2R: d.n1 + 8, egtL: 300 + d.n1 * 4.5, egtR: 298 + d.n1 * 4.5, ffL: 0.4 + d.n1 / 45, ffR: 0.4 + d.n1 / 45,
+    gear: alt - airport.data.elev_ft < 2500 || st.onGround ? 1 : 0, flaps: alt - airport.data.elev_ft < 3000 ? 15 : 0,
+    phase: st.onGround ? 'TAXI' : (st.vr || 0) < -300 ? 'DESCENT' : (st.vr || 0) > 300 ? 'CLIMB' : 'CRUISE' });
+  // landed: load the nearest airport (OurAirports + Google tiles + Auto realism) and keep riding
+  if (st.onGround && gs < 60) { if (!JOIN.groundT) JOIN.groundT = now; } else { JOIN.groundT = 0; if (!st.onGround) JOIN.landed = false; }
+  if (JOIN.groundT && now - JOIN.groundT > 8000 && !JOIN.landed) {   // 8 s (wall clock) slow on the ground
+    JOIN.landed = true;
+    nearestAirport(st.lat, st.lon).then((a) => { if (a && a.distNm < 8 && a.ident !== airport.data.icao) { liveStatus(`Landed: loading ${a.name} (${a.ident})`); loadAirport(a.ident, null, { keepLive: true }); } })
+      .catch(() => { /* airport list unavailable: stay with the current scene */ });
+  }
+}
+
 function setMode(m) {
-  mode = m; demo = true; live = false;
+  mode = m; demo = true; live = false; viewHdg = null;
   document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
   if (m === 'approach') startApproach(); else { t = 0; F.radioAlt = 9999; }
   refreshMark();
@@ -778,7 +1062,13 @@ function refreshMark() {
   const d = airport && airport.data;
   const fix = live ? (liveNow ? fmtSince(feedAt) : 'feed quiet ' + fmtSince(feedAt)) : '';
   const items = [];
-  if (live) items.push({ kind: liveNow ? 'live' : 'recorded', label: 'Aircraft position & flight data', source: 'External flight-data feed (ImHere737.updateFlightData)',
+  if (live && JOIN.hex) {
+    const st = JOIN.tracker && JOIN.tracker.state(Date.now()), i = JOIN.info || {};
+    items.push({ kind: liveNow ? 'live' : 'recorded', label: 'Position, altitude, ground speed, track, vertical rate',
+      source: `Live ADS-B via ${JOIN.src} (${[i.flight, i.reg, i.type].filter(Boolean).join(', ')})`, time: feedAt, timeLabel: 'Last report',
+      note: st && st.frozen ? 'Feed lost for over 30 s: the aircraft is holding its last state.' : st && st.extrapolating ? 'Feed quiet: extrapolating along the last track (max 30 s).' : 'Smoothed between reports (dead reckoning with easing).' });
+    items.push({ kind: 'estimated', label: 'Pitch, bank, airspeed, engine N1/EGT, flaps/gear', source: 'derived from live track (ADS-B does not broadcast these)' });
+  } else if (live) items.push({ kind: liveNow ? 'live' : 'recorded', label: 'Aircraft position & flight data', source: 'External flight-data feed (ImHere737.updateFlightData)',
     time: feedAt, note: liveNow ? '' : 'Feed has gone quiet: showing the last values received.' });
   else items.push({ kind: 'simulated', label: 'Aircraft position & flight data', source: 'Built-in demo flight. No live feed is connected.',
     note: mode === 'approach' ? `Scripted 3° approach to runway ${AP.rwy}, flare, touchdown and rollout; then it repeats.` : 'Scripted climb, cruise and descent; then it repeats.' });
@@ -796,12 +1086,28 @@ function refreshMark() {
     ? { kind: 'recorded', label: 'Ground scenery', source: 'Google Photorealistic 3D Tiles: aerial imagery captured on past dates, not live',
         note: 'Image credits are shown at the bottom right, as Google requires.' + (scenery.credits() ? ' Now: ' + scenery.credits() : '') }
     : { kind: 'illustrative', label: 'Ground, sky and weather', source: 'Generic ground and sky drawn by I\'M HERE; not the real view, weather or traffic' });
+  if (WX.mode === 'clear') items.push({ kind: 'illustrative', label: 'Weather: Clear', source: 'Weather switched off for a perfect view (not the real conditions)' });
+  else if (WX.data) items.push({ kind: wxIsLive(WX.data) ? 'live' : 'recorded', label: `Weather: METAR ${WX.data.icao}`, source: WX.data.via, time: WX.data.obsTime, timeLabel: 'Observed',
+    note: WX.data.raw + (wxIsLive(WX.data) ? '' : '\nOlder than 90 minutes: not live.') + '\nClouds, visibility, rain/snow and wind are drawn from this report.' });
+  else items.push({ kind: 'estimated', label: 'Weather', source: WX.err ? 'METAR not reachable: ' + WX.err : 'Loading the METAR…' });
   items.push({ kind: 'illustrative', label: `Time of day: ${todName}`, source: 'Chosen with the Day/Dusk/Night buttons, not the real time at the airport' });
   items.push({ kind: 'illustrative', label: '737-800 flight deck', source: '3D model "Boeing 737-800 Cockpit" by hakai315 (Sketchfab, CC BY 4.0), optimized', href: COCKPIT_URL,
     note: 'Cockpit displays are drawn from the flight data above (737NG-style, simplified).' });
-  MARK.update({ subject: 'Boeing 737-800', location: d ? `${placeName(d)} (${shortName(d)})` : 'None',
-    position: live ? { time: feedAt } : 'Demo', scene: tiles ? 'Real + 3D render' : '3D render', video: 'None',
-    id: live ? (F.flight && F.flight !== 'DEMO' ? F.flight : 'Live flight') : mode === 'cruise' ? 'Cruise' : d ? `${shortName(d)} ${AP.rwy}` : '',
+  const jst = JOIN.hex && JOIN.tracker ? JOIN.tracker.state(Date.now()) : null;
+  const awayNm = jst && d ? Math.hypot(...toLocal(d.arp, jst.lat, jst.lon)) / 1852 : 0;
+  const apt = d ? shortName(d) : '', near = awayNm < 30;
+  // context line: callsign · type · phase (climbing out of X / cruising over Y / approach Z / landed Z)
+  const typ = JOIN.hex && JOIN.info && JOIN.info.type ? ({ B738: '737-800', B737: '737-700', B739: '737-900', B38M: '737 MAX 8', B39M: '737 MAX 9', B736: '737-600' }[JOIN.info.type] || JOIN.info.type) : '737-800';
+  const phase = jst ? (jst.onGround ? (near ? 'landed ' + apt : 'on the ground')
+      : (jst.vr || 0) > 300 && near ? 'climbing out of ' + apt : (jst.vr || 0) < -300 && near ? 'approach ' + apt
+      : 'cruising over ' + (JOIN.place ? JOIN.place.municipality || JOIN.place.name : 'open country'))
+    : live ? 'live feed' : mode === 'cruise' ? 'cruising' : d ? 'approach ' + apt + ' ' + AP.rwy : 'parked';
+  const call = live ? (F.flight && F.flight !== 'DEMO' ? F.flight : 'Live flight') : 'Demo flight';
+  const town = (x) => x ? [x.municipality || placeName(x), (x.region || '').replace(/^[A-Z]{2}-/, '')].filter(Boolean).join(', ') : '';
+  MARK.update({ context: [call, typ, phase].join(' · '),
+    loc: jst && !near && JOIN.place ? 'near ' + town(JOIN.place) : d ? town(d) : 'None',
+    signal: JOIN.hex ? { source: JOIN.src || 'ADS-B', time: feedAt } : live ? { source: 'External feed', time: feedAt } : { text: 'Demo data' },
+    view: tiles && realNow > 0.01 ? 'Google 3D + render' : '3D render',
     stats: [['Alt', Math.round(F.altitude).toLocaleString('en-US') + ' ft'], ['GS', Math.round(F.groundSpeed) + ' kt'],
       ['HDG', String((Math.round(F.heading) % 360 + 360) % 360).padStart(3, '0') + '°']],
     tag: live ? { text: fix, kind: liveNow ? 'live' : 'recorded' } : { text: 'Simulated demo flight', kind: 'simulated' }, items,
@@ -839,6 +1145,14 @@ function drawPFD(x) {
   x.save(); x.translate(256, 231);
   for (const a of [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60]) { x.save(); x.rotate(a * D2R); L(x, 0, -132, 0, a % 30 === 0 ? -146 : -140, C.w, 2); x.restore(); }
   x.rotate(-F.bank * D2R); x.fillStyle = C.w; x.beginPath(); x.moveTo(0, -130); x.lineTo(-8, -116); x.lineTo(8, -116); x.fill(); x.restore();
+  // ILS deviation (approach only): glideslope scale right of the attitude, localizer scale below it
+  if (!live && mode === 'approach' && (AP.loc != null || AP.gs != null)) {
+    x.strokeStyle = C.w; x.lineWidth = 2;
+    for (const k of [-2, -1, 1, 2]) { x.beginPath(); x.arc(404, 231 + k * 38, 4, 0, 7); x.stroke(); x.beginPath(); x.arc(256 + k * 40, 362, 4, 0, 7); x.stroke(); }
+    const dia = (cx, cy) => { x.fillStyle = C.m; x.beginPath(); x.moveTo(cx, cy - 9); x.lineTo(cx + 7, cy); x.lineTo(cx, cy + 9); x.lineTo(cx - 7, cy); x.closePath(); x.fill(); };
+    if (AP.gs != null) dia(404, 231 + AP.gs * 38);
+    if (AP.loc != null) dia(256 + AP.loc * 40, 362);
+  }
   // aircraft symbol
   x.fillStyle = '#000'; x.strokeStyle = C.w; x.lineWidth = 2;
   for (const s of [-1, 1]) { x.fillRect(256 + s * 72 - (s < 0 ? 0 : 50), 227, 50, 8); x.strokeRect(256 + s * 72 - (s < 0 ? 0 : 50), 227, 50, 8); }
@@ -954,7 +1268,7 @@ function setTOD(k) {
   todTint = p.gnd; if (scenery) scenery.setTint(p.gnd);
   for (const d of displays) d.mesh.material.color.setScalar(p.disp);
   document.querySelectorAll('[data-tod]').forEach((b) => b.classList.toggle('on', b.dataset.tod === k));
-  todName = k; refreshMark();
+  todName = k; refreshMark(); syncRealUI(); tintClouds(); efbDirty = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -968,8 +1282,9 @@ function setSeat(k) {
   dome.position.copy(toWorld([0, 2.6, 0.9]));
   if (renderer.xr.isPresenting) { placeRig(); return; }
   camera.position.copy(eye);
-  if (s.orbit) {   // orbit around the nose
-    controls.target.copy(at); controls.minDistance = 2; controls.maxDistance = 25; controls.rotateSpeed = 0.6; camera.fov = 50;
+  airframe.visible = !!s.orbit; chaseIdle = 0;
+  if (s.orbit) {   // Chase: follow camera behind and above; drag to orbit, it eases back after a few idle seconds
+    controls.target.copy(at); controls.minDistance = 12; controls.maxDistance = 160; controls.rotateSpeed = 0.6; camera.fov = 55;
   } else {         // look around from a fixed head position
     const dir = at.clone().sub(eye).normalize();
     controls.target.copy(eye).addScaledVector(dir, 0.05); controls.minDistance = controls.maxDistance = 0.05; controls.rotateSpeed = -0.35; camera.fov = 72;
@@ -990,10 +1305,132 @@ renderer.xr.addEventListener('sessionend', () => { if (markXR) markXR.visible = 
 renderer.xr.addEventListener('sessionstart', () => { placeRig(); rig.add(camera); camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0); controls.enabled = false; });
 renderer.xr.addEventListener('sessionend', () => { scene.add(camera); controls.enabled = true; setSeat(seat); });
 const seatCycle = ['captain', 'fo', 'jump'];
-for (let i = 0; i < 2; i++) {
-  const ctrl = renderer.xr.getController(i); rig.add(ctrl);
-  ctrl.addEventListener('selectstart', () => setSeat(seatCycle[(seatCycle.indexOf(seat) + 1) % seatCycle.length]));
+// ---------------------------------------------------------------------------
+// EFB: an iPad-style Electronic Flight Bag on a side-window mount next to each pilot seat (world-fixed in the cockpit).
+// VR: point the controller ray and click. Desktop/phone: click it to zoom in, click its buttons, click outside (or Esc) to
+// zoom back out. It replaces the floating VR settings panel. Tabs: Seat, Time, Weather, Realism, Airport, Flight, Charts.
+// ---------------------------------------------------------------------------
+let efbDirty = true;
+const efb = (() => {
+  const W = 800, H = 600, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
+  const bezel = new THREE.MeshLambertMaterial({ color: 0x1b1d20 });
+  const TABS = ['Seat', 'Time', 'Weather', 'Realism', 'Airport', 'Flight', 'Charts'];
+  let tab = 'Seat', hover = null, btns = [];
+  const mounts = [];
+  for (const sd of [1, -1]) {   // captain (+x, left of the captain) and first officer (-x, right of the FO)
+    const grp = new THREE.Group(), w = 0.165, h = 0.124;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w + 0.012, h + 0.012, 0.006), bezel); body.position.z = -0.0035; grp.add(body);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); grp.add(screen);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.06, 8).rotateZ(Math.PI / 2), bezel); arm.position.set(sd * 0.05, -0.04, -0.02); grp.add(arm);
+    grp.position.set(sd * 0.77, 2.02, 1.16); aircraft.add(grp);
+    aircraft.updateMatrixWorld(true); grp.lookAt(toWorld(SEATS[sd > 0 ? 'captain' : 'fo'].eye));   // face the pilot
+    mounts.push({ grp, screen, side: sd > 0 ? 'captain' : 'fo' });
+  }
+  const B = (x, y, w, h, label, fn, on = false, dis = false) => { btns.push({ x, y, w, h, label, fn, on, dis }); };
+  function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function wrapText(t, x, y, maxW, lh, maxLines = 6) {
+    const words = String(t).split(/\s+/); let line = '', n = 0;
+    for (const wd of words) { if (g.measureText(line + wd).width > maxW && line) { g.fillText(line, x, y); y += lh; line = ''; if (++n >= maxLines) return y; } line += wd + ' '; }
+    if (line) { g.fillText(line, x, y); y += lh; } return y;
+  }
+  function layout() {
+    btns = [];
+    TABS.forEach((t, i) => B(0, 64 + i * 76, 190, 72, t, () => { tab = t; }, tab === t));
+    const X = 214, Y = 84, cw = 270, chh = 78;
+    if (tab === 'Seat') [['captain', 'Captain'], ['fo', 'First Officer'], ['jump', 'Jumpseat'], ['overhead', 'Overhead'], ['outside', 'Chase']]
+      .forEach(([k, l], i) => B(X + (i % 2) * (cw + 14), Y + Math.floor(i / 2) * (chh + 14), cw, chh, l, () => { efbZoom(false); setSeat(k); }, seat === k));
+    if (tab === 'Time') ['day', 'dusk', 'night'].forEach((k, i) => B(X, Y + i * (chh + 14), cw, chh, k[0].toUpperCase() + k.slice(1), () => setTOD(k), todName === k));
+    if (tab === 'Weather') { B(X, Y, cw, chh, 'Live (METAR)', () => setWeatherMode('live'), WX.mode === 'live'); B(X + cw + 14, Y, cw, chh, 'Clear', () => setWeatherMode('clear'), WX.mode === 'clear'); }
+    if (tab === 'Realism') {
+      const ready = !!(scenery && scenery.stats().loaded);
+      B(X, Y, cw, chh, 'Auto: ' + (REAL.auto ? 'on' : 'off'), () => setRealAuto(!REAL.auto), REAL.auto, !ready);
+      B(X, Y + chh + 14, 120, chh, '−', () => setRealManual(realTarget() * 100 - 10), false, !ready);
+      B(X + 290, Y + chh + 14, 120, chh, '+', () => setRealManual(realTarget() * 100 + 10), false, !ready);
+    }
+    if (tab === 'Airport' && airport) {
+      const ids = Object.keys(airport.ends).sort((a, b) => rwyKey(a) - rwyKey(b)).slice(0, 8);
+      ids.forEach((id, i) => B(X + (i % 4) * 140, Y + 40 + Math.floor(i / 4) * 80, 128, 68, id, () => { AP.rwy = id; $('rwy').value = id; setMode('approach'); }, AP.rwy === id && mode === 'approach'));
+      ['KBNA', 'KJFK', 'KLAX', 'KATL', 'KSEA', 'KDEN', 'EGLL', 'EHAM'].forEach((k, i) => B(X + (i % 4) * 140, Y + 250 + Math.floor(i / 4) * 80, 128, 68, k, () => loadAirport(k), airport.data.icao === k));
+    }
+    if (tab === 'Flight') {
+      B(X, Y, 180, chh, 'Approach', () => setMode('approach'), !JOIN.hex && mode === 'approach'); B(X + 194, Y, 180, chh, 'Cruise', () => setMode('cruise'), !JOIN.hex && mode === 'cruise');
+      B(X + 388, Y, 180, chh, paused ? 'Play' : 'Pause', () => $('play').click());
+      if (JOIN.hex) B(X, Y + 100, 374, chh, 'Leave live flight', leaveFlight);
+      else B(X, Y + 100, 374, chh, 'Find live flights', () => findLive(''));
+      (JOIN.hex ? [] : JOIN.list.filter((f) => f.is737).slice(0, 3)).forEach((f, i) =>
+        B(X, Y + 196 + i * 84, 568, 72, `${f.flight || f.reg} · ${f.type} · ${f.onGround ? 'ground' : Math.round(f.altFt || 0).toLocaleString('en-US') + ' ft'} · ${Math.round(f.distNm)} nm`, () => joinFlight(f)));
+    }
+  }
+  function draw() {
+    layout(); efbDirty = false;
+    g.fillStyle = '#0d1116'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#161c24'; g.fillRect(0, 0, W, 56); g.fillRect(0, 56, 196, H - 56);
+    g.fillStyle = '#e8eef4'; g.font = '600 26px system-ui, sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText('EFB', 18, 28);
+    g.fillStyle = '#7f8c99'; g.font = '400 20px system-ui, sans-serif';
+    const d = new Date(); g.fillText(`${airport ? airport.data.icao : ''}  ·  ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}Z`, 80, 28);
+    g.textAlign = 'right'; g.fillText(JOIN.hex ? 'LIVE FLIGHT ' + (F.flight || '') : 'DEMO FLIGHT', W - 18, 28); g.textAlign = 'left';
+    for (const b of btns) {
+      const isTab = b.x === 0, hv = hover === b;
+      g.globalAlpha = b.dis ? 0.4 : 1;
+      if (isTab) { g.fillStyle = b.on ? '#0a84ff' : hv ? '#232c38' : '#161c24'; g.fillRect(b.x, b.y, b.w, b.h); if (b.on) { g.fillStyle = '#ffffff'; } }
+      else { g.fillStyle = b.on ? '#0a84ff' : hv ? '#2c3a4a' : '#1f2833'; rr(b.x, b.y, b.w, b.h, 14); g.fill(); }
+      g.fillStyle = '#ffffff'; g.font = (isTab ? '600 26px ' : '600 28px ') + 'system-ui, sans-serif'; g.textAlign = isTab ? 'left' : 'center';
+      g.fillText(b.label, isTab ? 22 : b.x + b.w / 2, b.y + b.h / 2, b.w - 20); g.textAlign = 'left'; g.globalAlpha = 1;
+    }
+    const X = 214; g.fillStyle = '#aab6c2'; g.font = '400 22px system-ui, sans-serif';
+    if (tab === 'Weather') {
+      let y = 200; g.fillStyle = '#e8eef4'; g.font = '600 24px system-ui, sans-serif';
+      y = wrapText(WX.mode === 'clear' ? 'Clear: weather off for a perfect view.' : WX.data ? `${WX.data.icao}: ${wxSummary(WX.data)}` : WX.err ? 'METAR not reachable: ' + WX.err : 'Loading METAR…', X, y, 560, 32, 3);
+      if (WX.data) { g.fillStyle = '#7f8c99'; g.font = '400 20px ui-monospace, monospace'; wrapText(WX.data.raw, X, y + 12, 560, 28, 5); }
+    }
+    if (tab === 'Realism') { g.fillStyle = '#e8eef4'; g.font = '700 44px system-ui, sans-serif'; g.textAlign = 'center';
+      g.fillText(scenery && scenery.stats().loaded ? Math.round(realTarget() * 100) + '%' : '—', X + 205, 84 + 78 + 14 + 39); g.textAlign = 'left';
+      g.fillStyle = '#aab6c2'; g.font = '400 22px system-ui, sans-serif'; wrapText('Realism (test): how strongly Google 3D tiles show over our render. ' + $('realNote').textContent, X, 380, 560, 30, 5); }
+    if (tab === 'Airport' && airport) { g.fillStyle = '#e8eef4'; g.font = '600 24px system-ui, sans-serif'; g.fillText(`${airport.data.icao} · runways`, X, 104); g.fillText('Go to airport', X, 314); }
+    if (tab === 'Flight') { g.fillStyle = '#aab6c2'; g.font = '400 20px system-ui, sans-serif'; if (!JOIN.hex) g.fillText(JOIN.list.length ? '737s within 150 nm (tap to ride):' : 'Live ADS-B: 737s first.', X, 278); }
+    if (tab === 'Charts') { g.fillStyle = '#e8eef4'; g.font = '600 34px system-ui, sans-serif'; g.fillText('Charts', X, 120); g.fillStyle = '#7f8c99'; g.font = '400 26px system-ui, sans-serif'; g.fillText('Coming soon', X, 170); }
+    tex.needsUpdate = true;
+  }
+  const ray = new THREE.Raycaster();
+  function hitUV(origin, dir) { ray.ray.origin.copy(origin); ray.ray.direction.copy(dir);
+    for (const m of mounts) { if (!m.grp.visible) continue; const h = ray.intersectObject(m.screen)[0]; if (h && h.uv) return { m, x: h.uv.x * W, y: (1 - h.uv.y) * H }; } return null; }
+  function btnAt(p) { return p ? btns.find((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) || null : null; }
+  function click(p) { const b = btnAt(p); if (b && !b.dis) { b.fn(); efbDirty = true; draw(); return true; } return !!p; }
+  return { draw, hitUV, btnAt, click, mounts, set hover(b) { if (b !== hover) { hover = b; draw(); } }, get hover() { return hover; } };
+})();
+// desktop / phone: click the tablet to zoom in; click its buttons; click elsewhere or Esc to zoom out
+let efbZoomed = null;
+function efbZoom(m) {
+  if (!m) { if (efbZoomed) { efbZoomed = null; setSeat(seat); } return; }
+  efbZoomed = m; const p = m.screen.getWorldPosition(new THREE.Vector3()), n = new THREE.Vector3(0, 0, 1).applyQuaternion(m.screen.getWorldQuaternion(new THREE.Quaternion()));
+  camera.position.copy(p).addScaledVector(n, 0.34); controls.target.copy(p); controls.minDistance = controls.maxDistance = 0.34; camera.fov = 45; camera.updateProjectionMatrix(); controls.update();
 }
+{ let down = null; const el = renderer.domElement, ndc = new THREE.Vector2(), rc = new THREE.Raycaster();
+  el.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
+  el.addEventListener('pointerup', (e) => {
+    if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6 || renderer.xr.isPresenting) { down = null; return; } down = null;
+    ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); rc.setFromCamera(ndc, camera);
+    const p = efb.hitUV(rc.ray.origin, rc.ray.direction);
+    if (p && !efbZoomed) efbZoom(p.m); else if (p) efb.click(p); else if (efbZoomed) efbZoom(false);
+  });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') efbZoom(false); });
+  controls.addEventListener('start', () => { chaseDrag = true; chaseIdle = 0; });
+  controls.addEventListener('end', () => { chaseDrag = false; chaseIdle = 0; });
+}
+const vrCtrls = [];
+const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _m4 = new THREE.Matrix4();
+const ctrlRay = (ct) => { _m4.identity().extractRotation(ct.matrixWorld); _o.setFromMatrixPosition(ct.matrixWorld); _d.set(0, 0, -1).applyMatrix4(_m4); return efb.hitUV(_o, _d); };
+for (let i = 0; i < 2; i++) {
+  const ctrl = renderer.xr.getController(i); rig.add(ctrl); vrCtrls.push(ctrl);
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -0.8)]),
+    new THREE.LineBasicMaterial({ color: 0x0a84ff, transparent: true, opacity: 0.6 })); ctrl.add(line);
+  ctrl.addEventListener('selectstart', () => {   // pointing at an EFB: use it; anywhere else: next seat
+    const p = ctrlRay(ctrl); if (p) efb.click(p); else setSeat(seatCycle[(seatCycle.indexOf(seat) + 1) % seatCycle.length]);
+  });
+}
+setInterval(() => { if (!renderer.xr.isPresenting) return; let b = null; for (const ct of vrCtrls) { const p = ctrlRay(ct); if (p) b = efb.btnAt(p) || b; } efb.hover = b; }, 100);
 
 // ---------------------------------------------------------------------------
 // UI
@@ -1009,6 +1446,15 @@ $('aptGo').onclick = () => loadAirport($('apt').value);
 $('apt').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); loadAirport($('apt').value); } });
 $('rwy').onchange = () => { AP.rwy = $('rwy').value; setMode('approach'); };
 $('scenery').onclick = () => setScenery(!sceneryOn);
+document.querySelectorAll('[data-wx]').forEach((b) => (b.onclick = () => setWeatherMode(b.dataset.wx)));
+$('liveFind').onclick = () => findLive('');
+$('liveGo').onclick = () => findLive($('liveQ').value);
+$('liveQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); findLive($('liveQ').value); } });
+$('liveLeave').onclick = leaveFlight;
+$('realism').addEventListener('input', () => setRealManual(+$('realism').value));
+$('realAuto').addEventListener('change', () => setRealAuto($('realAuto').checked));
+setInterval(syncRealUI, 1000);   // enables the control once tiles have actually streamed in
+if (/github\.io$/i.test(location.hostname)) setScenery(true);   // Auto realism needs the tiles: load them where the key works
 $('glogo').onerror = () => { const s = document.createElement('b'); s.textContent = 'Google'; $('glogo').replaceWith(s); };
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
@@ -1017,27 +1463,47 @@ addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; cam
 // ---------------------------------------------------------------------------
 const pos = { x: 0, z: 0 };   // aircraft position over the ground (m), for ground motion
 const att = new THREE.Euler(0, 0, 0, 'YXZ');
-let last = performance.now(), dispClock = 1, uiClock = 1;
+let viewHdg = null;   // comfort-smoothed heading used for the view (see the loop)
+let last = performance.now(), dispClock = 1, uiClock = 1, efbClock = 1;
 setTOD('day'); setSeat('captain');
 loadAirport(params.get('apt') || 'KBNA', params.get('rwy'));
 renderer.setAnimationLoop((now) => {
-  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  // XR frames use the headset's clock: never let dt go negative or huge (that froze the flight and displays in VR)
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.1)); last = now;
   const flying = demo && mode === 'approach' && airport;
   if (demo && !paused) { if (flying) approachStep(dt); else if (mode === 'cruise') demoStep(dt); }
-  if (!paused && !flying) {   // move over the ground along the heading
+  if (JOIN.hex) joinStep(dt);   // a real flight drives position and flight data
+  else if (!paused && !flying) {   // move over the ground along the heading
     const gs = F.groundSpeed * 0.5144, h = F.heading * D2R;
     pos.x += -Math.sin(h) * gs * dt; pos.z += Math.cos(h) * gs * dt;
   }
   // world moves around the aircraft: inverse of aircraft attitude
-  att.set(-F.pitch * D2R, -F.heading * D2R, F.bank * D2R); world.quaternion.setFromEuler(att).invert();
+  // VR comfort: the view's heading follows the flight data at no more than 30 deg/s (a live feed can jump), and in a
+  // headset the horizon stays level (no roll). Snaps instead of spinning after a restart or a new airport.
+  if (viewHdg === null) viewHdg = F.heading;
+  else { const d = ((F.heading - viewHdg + 540) % 360) - 180; viewHdg = (viewHdg + Math.max(-30 * dt, Math.min(30 * dt, d)) + 360) % 360; }
+  if (seat === 'outside' && !renderer.xr.isPresenting) {
+    // Chase: the camera's frame follows the heading with a lag (no roll: horizon level); the aircraft itself pitches,
+    // banks and turns ahead of the camera, so you see it manoeuvre against the scenery.
+    chaseYaw = chaseYaw === null ? viewHdg : (chaseYaw + (((viewHdg - chaseYaw + 540) % 360) - 180) * (1 - Math.exp(-dt / 1.8)) + 360) % 360;
+    att.set(0, -chaseYaw * D2R, 0); world.quaternion.setFromEuler(att).invert();
+    aircraft.rotation.set(-F.pitch * D2R, -((((viewHdg - chaseYaw + 540) % 360) - 180) * D2R), F.bank * D2R, 'YXZ');
+    if (!chaseDrag && (chaseIdle += dt) > 4) {   // ease back behind the aircraft after a few idle seconds
+      const k = 1 - Math.exp(-dt * 0.8); camera.position.lerp(toWorld(SEATS.outside.eye), k); controls.target.lerp(toWorld(SEATS.outside.at), k);
+    }
+  } else {
+    chaseYaw = null; aircraft.rotation.set(0, 0, 0);
+    att.set(-F.pitch * D2R, -viewHdg * D2R, renderer.xr.isPresenting ? 0 : F.bank * D2R); world.quaternion.setFromEuler(att).invert();
+  }
   const fieldFt = airport ? airport.data.elev_ft : 599;
   const gy = EYE_Y - EYE_AGL_GROUND - (F.altitude - fieldFt) * FT;   // ground height in the world frame
   ground.position.set(-(pos.x % TILE), gy - 0.05, -(pos.z % TILE));
-  const real = sceneryStep(dt, gy);   // true once Google tiles are showing: hide the flat ground and runway paint
-  ground.visible = !real; for (const m of surfaces) m.visible = !real; setNear(real ? 0.1 : 0.02);
-  if (airport) { airport.group.position.set(-pos.x, gy, -pos.z); airport.update(now / 1000, camera, renderer, todLights); }
+  const real = sceneryStep(dt, gy);   // true once Google tiles are showing; they blend over our render (Realism)
+  realismStep(dt); setNear(real ? 0.1 : 0.02); weatherStep(dt, gy);
+  if ((efbClock += dt) > 0.5 && efbDirty !== null) { efbClock = 0; efb.draw(); }
+  if (airport) { airport.group.position.set(orgOff[0] - pos.x, gy, orgOff[1] - pos.z); airport.group.visible = Math.hypot(orgOff[0] - pos.x, orgOff[1] - pos.z) < 60000; airport.update(now / 1000, camera, renderer, todLights); }
   landing.intensity = mode === 'approach' ? 900 : 0;
-  if ((dispClock += dt) > 1 / 15) { dispClock = 0; redrawDisplays(); }
+  if ((dispClock += dt) > 1 / 24) { dispClock = 0; redrawDisplays(); }   // ~24 Hz live displays
   if ((uiClock += dt) > 0.25) { uiClock = 0;
     $('readout').innerHTML = `<b>${r0(F.altitude).toLocaleString()}</b> ft · <b>${r0(F.airspeed)}</b> kt<br>HDG ${pad3(F.heading)}° · ${F.verticalSpeed >= 0 ? '+' : ''}${r0(F.verticalSpeed)} fpm<br>${F.phase}`; }
   if (!renderer.xr.isPresenting) controls.update();
