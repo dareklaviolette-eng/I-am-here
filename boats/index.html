@@ -3,45 +3,66 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>I'M HERE - Boats (live AIS prototype)</title>
+<title>I'M HERE - Boats (ride a real ship)</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 <style>
-  :root { --bg:#0e1a24; --panel:#152635; --line:#284256; --text:#e8f1f7; --muted:#9db3c4; --accent:#ffb300; --live:#2ecc71; --sim:#ffb300; --err:#e74c3c; }
+  :root { --bg:#0e1a24; --panel:rgba(12,22,34,.86); --line:rgba(255,255,255,.16); --text:#e8f1f7; --muted:#9db3c4; --live:#5DCAA5; --err:#ff9d92; }
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  body { display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
+  body { height:100dvh; overflow:hidden; }
   [hidden] { display:none !important; }
-  header { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 10px; padding-top:max(8px, env(safe-area-inset-top)); background:var(--panel); border-bottom:1px solid var(--line); }
-  .brand { font-weight:800; letter-spacing:.04em; white-space:nowrap; }
-  .brand small { font-weight:500; color:var(--muted); letter-spacing:0; }
-  select, button { font:inherit; color:var(--text); background:#1d3346; border:1px solid var(--line); border-radius:8px; padding:7px 10px; min-height:38px; }
+  select, button { font:inherit; color:var(--text); background:#1d3346; border:1px solid var(--line); border-radius:10px; padding:8px 12px; min-height:44px; }
   button { cursor:pointer; }
-  button:hover { border-color:#3d6683; }
+  button:hover { border-color:#5d8db0; }
   button[aria-pressed="true"] { background:#2b5170; border-color:#5d8db0; }
-  #areaSel { flex:1 1 220px; min-width:0; max-width:420px; }
-  .tabs { display:flex; gap:4px; }
-  .pill { flex:0 1 auto; min-width:0; font-size:13px; padding:4px 10px; border-radius:999px; background:#22394c; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
-  .pill.live { background:rgba(46,204,113,.16); color:#7ff0ad; }
-  .pill.demo { background:rgba(255,179,0,.18); color:#ffd36a; font-weight:600; }
-  .pill.error { background:rgba(231,76,60,.2); color:#ff9d92; }
-  .pill.connecting { color:#cfe3f2; }
-  .statusrow { display:flex; align-items:center; gap:8px; padding:4px 10px; background:#112130; border-bottom:1px solid var(--line); font-size:13px; color:var(--muted); min-height:30px; }
-  #areaNote { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  main { position:relative; flex:1; min-height:0; }
+  main { position:fixed; inset:0; }
   #mapWrap, #wrap3d { position:absolute; inset:0; }
   #map { position:absolute; inset:0; background:#aad3df; }
-  .fallback, #loading3d { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; color:var(--text); background:var(--bg); }
   #view3d { position:absolute; inset:0; background:#a9cbe6; touch-action:none; }
   #view3d canvas.gl { display:block; width:100%; height:100%; }
-  .hud { position:absolute; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:6px; pointer-events:none; }
-  .hud > * { pointer-events:auto; }
-  .hudrow { display:flex; flex-wrap:wrap; gap:6px; }
-  .hud select { flex:1 1 200px; min-width:0; background:rgba(15,30,42,.88); }
-  .hud button { background:rgba(15,30,42,.88); }
-  #rideInfo { background:rgba(15,30,42,.82); border-radius:8px; padding:6px 10px; font-size:13px; }
-  .osmnote { position:absolute; right:6px; top:6px; font-size:11px; background:rgba(255,255,255,.75); color:#222; padding:1px 6px; border-radius:4px; }
-  .osmnote a { color:#0a5a9c; }
+  .fallback, #loading3d { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; color:var(--text); background:var(--bg); }
+  .credit { position:fixed; right:6px; bottom:calc(4px + env(safe-area-inset-bottom)); font-size:10.5px; background:rgba(255,255,255,.72); color:#222; padding:1px 6px; border-radius:4px; z-index:1200; }
+  .credit a { color:#0a5a9c; }
+  /* one menu button, top right */
+  #menuBtn { position:fixed; top:calc(10px + env(safe-area-inset-top)); right:calc(10px + env(safe-area-inset-right)); z-index:1600; background:var(--panel); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); font-weight:600; }
+  /* plain-words feed message (errors are never silent) */
+  #feedMsg { position:fixed; left:50%; transform:translateX(-50%); top:calc(62px + env(safe-area-inset-top)); z-index:1550; max-width:min(94vw,560px); padding:9px 14px; border-radius:10px; font-size:14px;
+             background:rgba(12,22,34,.92); border:1px solid var(--line); box-shadow:0 4px 18px rgba(0,0,0,.35); }
+  #feedMsg.error { border-color:rgba(231,76,60,.7); color:#ffd0ca; }
+  #feedMsg.hint { color:#dfe9f1; }
+  /* "Ride a ship" list */
+  #ships { position:fixed; z-index:1400; right:calc(10px + env(safe-area-inset-right)); top:calc(64px + env(safe-area-inset-top)); bottom:calc(26px + env(safe-area-inset-bottom)); width:min(360px, 46vw);
+           display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line); border-radius:12px; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); overflow:hidden; }
+  #ships h2 { margin:0; padding:12px 14px 2px; font-size:18px; }
+  #shipsSub { padding:0 14px 8px; font-size:12.5px; color:var(--muted); border-bottom:1px solid var(--line); }
+  #shipList { list-style:none; margin:0; padding:4px 0; overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; flex:1; }
+  #shipList li { margin:0; }
+  #shipList button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0; border-bottom:1px solid rgba(255,255,255,.07); padding:10px 14px; min-height:56px; }
+  #shipList button:hover, #shipList button:focus-visible { background:rgba(255,255,255,.08); }
+  .sname { display:block; font-weight:600; font-size:15.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .smeta { display:block; font-size:13px; color:var(--muted); }
+  .smeta .go { float:right; color:#a9d3ff; font-weight:600; }
+  #shipEmpty { padding:14px; color:var(--muted); font-size:14px; }
+  /* aboard bar */
+  #aboard { position:fixed; left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right)); bottom:calc(26px + env(safe-area-inset-bottom)); z-index:1400;
+            display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px; background:var(--panel); border:1px solid var(--line); border-radius:12px; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
+  #aboardInfo { flex:1 1 220px; min-width:0; font-size:14px; }
+  #aboardInfo b { display:block; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* menu + about */
+  .overlay { position:fixed; inset:0; background:rgba(4,10,16,.7); display:flex; align-items:center; justify-content:center; padding:14px; z-index:2000; }
+  .card { background:#152635; border:1px solid var(--line); border-radius:12px; max-width:520px; width:100%; max-height:90dvh; overflow:auto; padding:16px 18px 14px; }
+  .card h2 { margin:0 0 8px; font-size:19px; }
+  .card h3 { margin:14px 0 4px; font-size:14px; color:#ffcf66; text-transform:uppercase; letter-spacing:.06em; }
+  .card p, .card li { color:#d3e1eb; }
+  .card a { color:#7cc4ff; }
+  .card select { width:100%; }
+  .btnrow { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .btnrow.end { justify-content:flex-end; }
+  .primary { background:#2a7bd0; border-color:#2a7bd0; font-weight:600; }
+  .small { font-size:12.5px; color:var(--muted); }
+  #feedState { font-size:14px; }
+  #feedState.error { color:var(--err); }
+  .legend span { display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:middle; }
   /* map markers */
   .vicon { background:none; border:none; }
   .vmark svg { display:block; transform-origin:50% 50%; filter:drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
@@ -51,29 +72,55 @@
   .vpop { font-size:13px; line-height:1.45; }
   .vpop .mmsi { color:#667; font-size:11px; }
   .vpop .ridebtn { margin-top:6px; background:#1d3346; color:#fff; border-radius:6px; padding:6px 10px; min-height:34px; }
-  /* overlays */
-  .overlay { position:fixed; inset:0; background:rgba(4,10,16,.7); display:flex; align-items:center; justify-content:center; padding:14px; z-index:2000; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; max-width:560px; width:100%; max-height:90dvh; overflow:auto; padding:18px 18px 14px; }
-  .card h2 { margin:0 0 8px; font-size:19px; }
-  .card h3 { margin:14px 0 4px; font-size:15px; color:var(--accent); }
-  .card p, .card li { color:#d3e1eb; }
-  .card a { color:#7cc4ff; }
-  .card input { width:100%; font:inherit; padding:10px; border-radius:8px; border:1px solid var(--line); background:#0f1d29; color:var(--text); margin:6px 0 10px; }
-  .btnrow { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; margin-top:8px; }
-  .primary { background:#2a7bd0; border-color:#2a7bd0; font-weight:600; }
-  .small { font-size:12.5px; color:var(--muted); }
-  .legend span { display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:middle; }
-  #toast { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(70px + env(safe-area-inset-bottom)); background:#21384b; border:1px solid #3d6683; padding:9px 14px; border-radius:10px; max-width:min(92vw,520px); z-index:2500; font-size:14px; box-shadow:0 4px 20px rgba(0,0,0,.4); }
-  @media (max-width:600px) {
-    .brand small { display:none; }
-    header { gap:6px; }
-    #areaSel { order:5; flex-basis:100%; max-width:none; }
-    .statusrow { flex-wrap:wrap; }
-    #areaNote { flex-basis:100%; white-space:normal; }
-    .hud button { padding:6px 8px; }
+  @media (max-width:640px) {
+    #ships { left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right)); width:auto; top:auto; height:46dvh; }
+    #feedMsg { top:auto; bottom:calc(46dvh + 36px + env(safe-area-inset-bottom)); }
   }
+  /* Leaflet 1.9.4 essential layout rules, inlined (the external leaflet.css is not needed; without these rules tiles
+     fall into a jumble of squares). Subset of leaflet.css (BSD-2-Clause, (c) Vladimir Agafonkin, CloudMade). */
+  .leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0}
+  .leaflet-container{overflow:hidden;-webkit-tap-highlight-color:transparent;font-size:12px;line-height:1.5;outline-offset:1px}
+  .leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow{-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
+  .leaflet-tile::selection{background:transparent}
+  .leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-image-layer,.leaflet-pane>svg path,.leaflet-tile-container{pointer-events:none}
+  .leaflet-marker-icon.leaflet-interactive,.leaflet-image-layer.leaflet-interactive,.leaflet-pane>svg path.leaflet-interactive{pointer-events:auto}
+  .leaflet-container .leaflet-overlay-pane svg{max-width:none!important;max-height:none!important}
+  .leaflet-container .leaflet-marker-pane img,.leaflet-container .leaflet-shadow-pane img,.leaflet-container .leaflet-tile-pane img,.leaflet-container img.leaflet-image-layer,.leaflet-container .leaflet-tile{max-width:none!important;max-height:none!important;width:auto;padding:0}
+  .leaflet-container.leaflet-touch-zoom{touch-action:pan-x pan-y}
+  .leaflet-container.leaflet-touch-drag{touch-action:none}
+  .leaflet-container.leaflet-touch-drag.leaflet-touch-zoom{touch-action:none}
+  .leaflet-tile{filter:inherit;visibility:hidden}
+  .leaflet-tile-loaded{visibility:inherit}
+  .leaflet-zoom-box{width:0;height:0;box-sizing:border-box;z-index:800}
+  .leaflet-pane{z-index:400}.leaflet-tile-pane{z-index:200}.leaflet-overlay-pane{z-index:400}.leaflet-shadow-pane{z-index:500}
+  .leaflet-marker-pane{z-index:600}.leaflet-tooltip-pane{z-index:650}.leaflet-popup-pane{z-index:700}.leaflet-map-pane canvas{z-index:100}.leaflet-map-pane svg{z-index:200}
+  .leaflet-control{position:relative;z-index:800;pointer-events:visiblePainted;pointer-events:auto;float:left;clear:both}
+  .leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none}
+  .leaflet-top{top:0}.leaflet-right{right:0}.leaflet-bottom{bottom:0}.leaflet-left{left:0}
+  .leaflet-right .leaflet-control{float:right;margin-right:10px}.leaflet-top .leaflet-control{margin-top:10px}.leaflet-bottom .leaflet-control{margin-bottom:10px}.leaflet-left .leaflet-control{margin-left:10px}
+  .leaflet-fade-anim .leaflet-popup{opacity:0;transition:opacity .2s linear}.leaflet-fade-anim .leaflet-map-pane .leaflet-popup{opacity:1}
+  .leaflet-zoom-animated{transform-origin:0 0}
+  .leaflet-zoom-anim .leaflet-zoom-animated{transition:transform .25s cubic-bezier(0,0,.25,1)}
+  .leaflet-zoom-anim .leaflet-tile,.leaflet-pan-anim .leaflet-tile{transition:none}
+  .leaflet-zoom-anim .leaflet-zoom-hide{visibility:hidden}
+  .leaflet-interactive{cursor:pointer}.leaflet-grab{cursor:grab}.leaflet-dragging .leaflet-grab,.leaflet-dragging .leaflet-marker-draggable{cursor:move;cursor:grabbing}
+  .leaflet-popup-pane,.leaflet-control{cursor:auto}
+  .leaflet-container a{color:#0078a8}
+  .leaflet-bar{box-shadow:0 1px 5px rgba(0,0,0,.65);border-radius:4px}
+  .leaflet-bar a{background:#fff;border-bottom:1px solid #ccc;width:30px;height:30px;line-height:30px;display:block;text-align:center;text-decoration:none;color:#000;font:bold 18px 'Lucida Console',Monaco,monospace}
+  .leaflet-bar a:first-child{border-top-left-radius:4px;border-top-right-radius:4px}.leaflet-bar a:last-child{border-bottom-left-radius:4px;border-bottom-right-radius:4px;border-bottom:none}
+  .leaflet-bar a.leaflet-disabled{cursor:default;background:#f4f4f4;color:#bbb}
+  .leaflet-control-attribution{background:rgba(255,255,255,.8);margin:0;padding:0 5px;color:#333;line-height:1.4;font-size:11px}
+  .leaflet-control-attribution a{text-decoration:none}
+  .leaflet-attribution-flag{display:none!important}
+  .leaflet-popup{position:absolute;text-align:center;margin-bottom:20px}
+  .leaflet-popup-content-wrapper{padding:1px;text-align:left;border-radius:12px;background:#fff;color:#333;box-shadow:0 3px 14px rgba(0,0,0,.4)}
+  .leaflet-popup-content{margin:13px 24px 13px 20px;line-height:1.3;min-height:1px}
+  .leaflet-popup-tip-container{width:40px;height:20px;position:absolute;left:50%;margin-top:-1px;margin-left:-20px;overflow:hidden;pointer-events:none}
+  .leaflet-popup-tip{width:17px;height:17px;padding:1px;margin:-10px auto 0;pointer-events:auto;transform:rotate(45deg);background:#fff;box-shadow:0 3px 14px rgba(0,0,0,.4)}
+  .leaflet-container a.leaflet-popup-close-button{position:absolute;top:0;right:0;border:none;text-align:center;width:24px;height:24px;font:16px/24px Tahoma,Verdana,sans-serif;color:#757575;text-decoration:none;background:transparent}
+  .leaflet-container a.leaflet-popup-close-button:hover{color:#585858}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script type="importmap">
 { "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
@@ -82,109 +129,108 @@
 </script>
 </head>
 <body>
-<header>
-  <div class="brand">Boats <small>&middot; live ship tracking</small></div>
-  <select id="areaSel" aria-label="Choose an area"></select>
-  <div class="tabs" role="group" aria-label="View">
-    <button id="tabMap" type="button" aria-pressed="true">Map</button>
-    <button id="tab3d" type="button" aria-pressed="false">3D</button>
-  </div>
-  <button id="keyBtn" type="button" title="aisstream.io key">Key</button>
-  <button id="infoBtn" type="button" aria-label="About this page">&#9432; Info</button>
-</header>
-<div class="statusrow"><span id="status" class="pill">Starting&hellip;</span><span id="areaNote"></span></div>
 <main>
-  <div id="mapWrap"><div id="map"></div></div>
-  <div id="wrap3d" hidden>
-    <div id="view3d"></div>
-    <div class="osmnote">Map &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
-    <div id="loading3d" hidden>Loading the 3D view&hellip;</div>
-    <div class="hud">
-      <div id="rideInfo">Drag to orbit, pinch or scroll to zoom.</div>
-      <div class="hudrow">
-        <select id="rideSel" aria-label="Ride along with a vessel"></select>
-        <button id="camChase" type="button">Chase cam</button>
-        <button id="camBridge" type="button">On deck</button>
-        <button id="camOverview" type="button">Overview</button>
-      </div>
-    </div>
-  </div>
+  <div id="wrap3d"><div id="view3d"></div><div id="loading3d" hidden>Loading the 3D view&hellip;</div></div>
+  <div id="mapWrap" hidden><div id="map"></div></div>
 </main>
+<div class="credit" id="credit3d">Map &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a> &middot; AIS: <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a></div>
 
-<div id="keyDlg" class="overlay" hidden>
-  <form id="keyForm" class="card" autocomplete="off">
-    <h2>Connect to live ship data</h2>
-    <p>Paste your free <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a> API key to see real vessels. It is asked for once and remembered in this browser only.</p>
-    <input id="keyInput" type="password" placeholder="aisstream.io API key" aria-label="aisstream.io API key" spellcheck="false" autocapitalize="off">
-    <p class="small">Prototype note: the key stays in this browser and is sent only to aisstream.io. A production app will relay the data through an I'M HERE server so no key is ever in the web page.</p>
+<button id="menuBtn" type="button" aria-haspopup="dialog" aria-controls="menu">&#9776; Menu</button>
+<div id="feedMsg" role="status" aria-live="polite" hidden></div>
+
+<section id="ships" aria-labelledby="shipsTitle">
+  <h2 id="shipsTitle">Ride a ship</h2>
+  <div id="shipsSub">Connecting&hellip;</div>
+  <ul id="shipList"></ul>
+  <div id="shipEmpty">Looking for ships&hellip;</div>
+</section>
+
+<div id="aboard" hidden>
+  <button id="backBtn" type="button">&larr; Ships</button>
+  <div id="aboardInfo"></div>
+  <button id="camBridge" type="button" aria-pressed="true">On deck</button>
+  <button id="camChase" type="button" aria-pressed="false">Chase cam</button>
+</div>
+
+<div id="menu" class="overlay" hidden>
+  <div class="card" role="dialog" aria-labelledby="menuTitle">
+    <h2 id="menuTitle">Menu</h2>
+    <h3>Port</h3>
+    <select id="areaSel" aria-label="Choose a port or waterway"></select>
+    <p id="areaNote" class="small"></p>
+    <h3>View</h3>
     <div class="btnrow">
-      <button id="keyForget" type="button" hidden>Forget key</button>
-      <button id="keyDemo" type="button">Try simulated sample</button>
-      <button id="keyCancel" type="button">Close</button>
-      <button class="primary" type="submit">Start live</button>
+      <button id="tab3d" type="button" aria-pressed="true">Ships (3D)</button>
+      <button id="tabMap" type="button" aria-pressed="false">Map</button>
     </div>
-  </form>
+    <h3>Ship feed</h3>
+    <p id="feedState">Starting&hellip;</p>
+    <p class="small">Live ships come from <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a> through the I'M HERE relay, which holds the key. Nothing to paste here.</p>
+    <div class="btnrow">
+      <button id="retryBtn" type="button">Reconnect</button>
+      <button id="demoBtn" type="button">Simulated sample (Old Hickory)</button>
+      <button id="keyForget" type="button" hidden>Forget old key saved in this browser</button>
+    </div>
+    <h3>About</h3>
+    <div class="btnrow"><button id="infoBtn" type="button">What is real here?</button></div>
+    <div class="btnrow end"><button id="menuClose" type="button" class="primary">Close</button></div>
+  </div>
 </div>
 
 <div id="info" class="overlay" hidden>
   <div class="card" role="dialog" aria-labelledby="infoTitle">
     <h2 id="infoTitle">About this prototype</h2>
-    <p>Real ships report their position by radio (AIS). This page shows those reports live from <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>, on a map or in a 3D "be there" view where you can ride along on any vessel.</p>
+    <p>Real ships report their position by radio (AIS). This page shows those reports live from <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>, relayed by the I'M HERE server. Pick a ship from the list to go aboard: stand on its deck, or follow it with the chase cam.</p>
     <h3>Old Hickory Lake &amp; small boats</h3>
-    <p>Most small pleasure boats &ndash; bass boats, pontoons, jet skis &ndash; do <b>not</b> carry AIS, so they never show up. On the Cumberland River / Old Hickory you will mostly see commercial barge tows and workboats, and sometimes nothing for a while. Busy ports (New York, Houston, Gibraltar) show far more traffic.</p>
+    <p>Most small pleasure boats &ndash; bass boats, pontoons, jet skis &ndash; do <b>not</b> carry AIS, so they never show up. On the Cumberland River / Old Hickory you will mostly see commercial barge tows and workboats, and sometimes nothing for a while. Busy ports (Los Angeles, New York, Houston, Gibraltar) show far more traffic.</p>
     <h3>Simulated sample</h3>
-    <p>Without a key, the page plays a short <b>simulated sample</b>: three made-up tows/tugs moving along an approximate Cumberland River path near Old Hickory Dam. They are not real vessels or real positions: they never show LIVE, and the I'M HERE card's <b>(i)</b> panel says SIMULATED SAMPLE.</p>
+    <p>Menu &rarr; <b>Simulated sample</b> plays three made-up tows/tugs moving along an approximate Cumberland River path near Old Hickory Dam. They are not real vessels or real positions: they never show "live", and the I'M HERE label's <b>(i)</b> details say SIMULATED SAMPLE.</p>
     <h3>What is real and what is estimated</h3>
-    <p>Tap <b>Sources</b> on the I'M HERE card (top left) for what is live, estimated or simulated right now, where it comes from and how old each vessel's last report is.</p>
-    <h3>Colours</h3>
+    <p>Tap <b>(i)</b> on the I'M HERE label (top left) for what is live, estimated or simulated right now, where it comes from and how old each vessel's last report is. Ships are simple 3D shapes sized from what each ship reports; movement between reports is estimated.</p>
+    <h3>Colours (map)</h3>
     <p class="legend small"><span style="background:#3d7fd9"></span>Cargo<span style="background:#c0392b"></span>Tanker<span style="background:#f0a020"></span>Tug / tow<span style="background:#8e44ad"></span>Passenger<span style="background:#e84393"></span>Pleasure<span style="background:#16a085"></span>Fishing<span style="background:#d35400"></span>Special<span style="background:#95a5a6"></span>Unknown</p>
-    <h3>Your key</h3>
-    <p class="small">The aisstream.io key is kept only in this browser (use Key &rarr; Forget key to remove it). aisstream.io recommends keeping keys on a server; the production version of I'M HERE will relay the feed through its own server.</p>
-    <p class="small">Map data &copy; OpenStreetMap contributors. AIS data: aisstream.io.</p>
-    <div class="btnrow"><button id="infoClose" type="button" class="primary">Close</button></div>
+    <p class="small">Map data &copy; OpenStreetMap contributors, tiles &copy; CARTO. AIS data: aisstream.io.</p>
+    <div class="btnrow end"><button id="infoClose" type="button" class="primary">Close</button></div>
   </div>
 </div>
-<div id="toast" hidden></div>
 
 <!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
 <script id="imhere-mark">
-/* I'M HERE experience watermark (info card), v3. SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
+/* I'M HERE experience label, v4 (founder-approved final design). SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
    Pasted inline into every prototype page between the IMHERE-MARK markers by
    node /home/claude/shared/sync-mark.mjs <files...>  (artifact pages cannot share files).
    Edit here, then re-run the sync. Self-contained: no network, no dependencies.
 
-   Founder's layout (final): one small top-left label (translucent navy, soft blur, 1px border, 8px radius/padding):
-   white title and subject, grey row labels, brighter values; the brand appears only here, not in page top bars.
-       I'M HERE  (faint watermark)      (i)  ×
-       subject · ID
-       • Location – Nashville International (BNA)
-       • Updated – Live | 3 hrs ago | Demo | Fixed | None
-       • Scene – Real | AI render | 3D render | ...
-       • Video – Live | Nov 9, 2026 | None
-   All four rows always shown (value "None" when missing). Only the word "Live" is green.
-   "Live" (Updated/Video) comes only from setLive()/video.live, which pages drive from real data freshness;
-   demo/simulated data never sets it. After ~6 s the card collapses to a small "I'M HERE" corner mark;
-   tapping the mark re-expands it. (i) opens the detail: live stats + provenance (source, last update,
-   live vs recorded/simulated, rendered vs actual imagery). In VR, xrPanel(THREE) is a small HUD panel low
-   in the corner of view, drawn the same way.
+   Layout (top-left on screens; panel rgba(10,18,32,.55), 1px border white 18%, 8px radius):
+       I'M HERE                                   (i)  ×     <- watermark: 9-11px, .25em spacing, white 30%
+       SWA 444 · 737-800 · approach BNA                      <- context line: 11px, white 60%, no headline
+       LOC:      Nashville, TN                               <- labels: outlined caps (transparent fill, 0.5px stroke,
+       SIGNAL:   airplanes.live, live                           white 65%, 11px); values: solid white 13px, one column
+       VIEW:     Google 3D + render
+   Only the word "live" is coloured (green #5DCAA5), and only while setLive(true): pages drive it from real data freshness;
+   demo/simulated data never sets it. After ~6 s the label collapses to a small "I'M HERE" corner mark; tap to re-expand.
+   (i) opens the details: live stats + provenance (source, last update, live vs recorded/simulated, render vs real imagery).
+   In VR, xrPanel(THREE) draws the same label on a canvas (row labels use a 50% white fill there: hairline outlines
+   alias and shimmer at headset panel scale).
 
    API
-     ImHereMark.init({ subject, id, location, position, scene, video, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.init({ context, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
      ImHereMark.update({ ...same keys })
-        location  place name                                   e.g. 'Nashville International (BNA)'
-        position  value of the "Updated" row: 'Demo' | 'Fixed' | 'None' | { time: msEpoch } ("3 hrs ago"); "Live" while setLive(true)
-        scene     short value                                  e.g. 'Real', '3D render', 'AI render'
-        video     'None' | 'Live' (only for a truly live feed) | { date: msEpoch } (shown "Nov 9, 2026")
-        stats     [[label, value], ...]  shown in the (i) detail
-        tag       { text } status line for the detail ("Now: ...")
-        sceneNote plain sentence in the detail: AI-created/rendered vs actual imagery
+        context   e.g. 'SWA 444 · 737-800 · approach BNA', 'ISS · over Pacific Ocean', 'Heart · stop 1 of 10'
+        loc       place, e.g. 'Nashville, TN'
+        signal    { source, time }  -> "source, live" while setLive(true), else "source, 3 hrs ago"
+                  { source, date }  -> "GPS track, 3 May 2008"      { text } -> 'Demo data', 'Fixed camera', ...
+        view      what you are seeing: 'Google 3D + render', '3D render', 'Live video', 'Video, Nov 9'
+        stats     [[label, value], ...] shown in the (i) details
+        tag       { text } status line for the details ("Now: ...")
+        sceneNote sentence in the details: AI-created/rendered vs actual imagery
         items     provenance list: { kind, label, source, age, time, timeLabel, note, href, list: [{ text, time | age }] }
                   kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
-        below     CSS selector(s): the card sits just under the lowest visible one (e.g. the page header)
-     ImHereMark.setLive(true|false)   Updated shows "Live" (green). Only while the data is really fresh.
-     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh HUD panel, kept up to date
+        below     CSS selector(s): the label sits just under the lowest visible one (e.g. the page header)
+     ImHereMark.setLive(true|false)   "live" (green) in SIGNAL. Only while the data is really fresh.
+     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh panel, kept up to date
      ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
-   CSS variable --imh-h on <html>: height taken by the card (or the corner mark) + gap, so a page can push its
+   CSS variable --imh-h on <html>: height taken by the label (or the corner mark) + gap, so a page can push its
    own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
 */
 (function () {
@@ -195,20 +241,20 @@
     computed: ['CALCULATED', '#2b7f8c'], estimated: ['ESTIMATED', '#6f7f8f'], assumed: ['ASSUMED', '#6f7f8f'],
     simulated: ['SIMULATED', '#c47a12'], sample: ['SAMPLE', '#c47a12'], illustrative: ['ILLUSTRATIVE', '#7d5cc4'], ai: ['AI-GENERATED', '#b44a8a']
   };
-  var NAVY = 'rgba(20,30,50,0.6)', GREY = '#9fb0c0', VALUE = '#e8eef4', GREEN = '#3ddc84';
+  var NAVY = 'rgba(10,18,32,0.55)', GREY = '#9fb0c0', VALUE = '#ffffff', GREEN = '#5DCAA5';
   var FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
   var COLLAPSE_MS = 6000;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   var CSS =
     '.imh-box,.imh-mini{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imh-z,1500);' +
-    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.14);' +
+    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.18);' +
     'box-shadow:0 2px 10px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);font:11px/1.25 ' + FONT + ';' +
     'letter-spacing:normal;text-align:left;text-shadow:none;pointer-events:auto;-webkit-tap-highlight-color:transparent}' +
     '.imh-box[hidden],.imh-mini[hidden],.imh-src[hidden],.imh-box [hidden]{display:none}' +
     '.imh-box{width:min(190px,45vw);padding:8px}' +
     '.imh-box.imh-wide{width:min(300px,calc(100vw - 20px))}' +
     '.imh-r1{display:flex;align-items:center;gap:5px;min-height:18px}' +
-    '.imh-brand{font-weight:300;font-size:11px;letter-spacing:.28em;flex:none;color:#fff;opacity:.3}' +   /* faint watermark, not a title */
+    '.imh-brand{font-weight:400;font-size:10px;letter-spacing:.25em;flex:none;color:rgba(255,255,255,.3)}' +   /* watermark */
     '.imh-i,.imh-x{flex:none;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;' +
     'color:#dfe7ee;user-select:none;-webkit-user-select:none;position:relative}' +
     '.imh-i::after,.imh-x::after{content:"";position:absolute;inset:-7px}' +   /* bigger touch target */
@@ -216,12 +262,12 @@
     '.imh-x{font-size:14px;line-height:1;background:rgba(255,255,255,.1)}' +
     '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
     '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
-    '.imh-r2{margin-top:2px;font-weight:600;font-size:11px;color:#fff;overflow-wrap:anywhere}' +
-    '.imh-rows{list-style:none;margin:3px 0 0;padding:0;color:' + GREY + ';font-size:11px;line-height:1.3}' +
-    '.imh-rows li{margin:0;padding:0 0 0 9px;position:relative;overflow-wrap:anywhere}' +
-    '.imh-rows li::before{content:"•";position:absolute;left:0;color:' + GREY + '}' +
-    '.imh-rows .imh-l{font-size:10px;color:' + GREY + '}' +
-    '.imh-rows .imh-v{color:' + VALUE + '}.imh-rows .imh-v.imh-g{color:' + GREEN + ';font-weight:700}' +
+    '.imh-r2{margin-top:1px;font-weight:400;font-size:11px;color:rgba(255,255,255,.6);overflow-wrap:anywhere}' +   /* context line */
+    '.imh-rows{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;margin:5px 0 0}' +
+    '.imh-l{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:transparent;' +
+    '-webkit-text-stroke:.5px rgba(255,255,255,.65);text-stroke:.5px rgba(255,255,255,.65);white-space:nowrap}' +
+    '@supports not ((-webkit-text-stroke:.5px #fff) or (text-stroke:.5px #fff)){.imh-l{color:rgba(255,255,255,.5)}}' +
+    '.imh-v{font-size:13px;line-height:1.3;color:' + VALUE + ';overflow-wrap:anywhere}.imh-v .imh-g{color:' + GREEN + ';font-weight:600}' +
     '.imh-src{margin-top:5px;max-height:min(46vh,360px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;' +
     'border-top:1px solid rgba(255,255,255,.14);font-size:11px;line-height:1.3}' +
     '.imh-ph{font-weight:700;font-size:11px;margin-top:5px;color:#fff}' +
@@ -240,7 +286,7 @@
     '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
     '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
 
-  var S = { subject: '', id: '', location: '', position: 'None', scene: '3D render', video: 'None', stats: [], tag: null,
+  var S = { context: '', loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
     sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
   var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
   var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
@@ -262,19 +308,18 @@
     if (!href) return document.createTextNode(text);
     var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
   }
-  function line2() { return [S.subject, S.id].filter(function (x) { return x; }).join(' · '); }
-  function posText() {
-    if (S.live) return 'Live';
-    var p = S.position;
-    if (p && typeof p === 'object') return p.time ? fmtAge(Date.now() - p.time) : (p.text || 'None');
-    return p ? (String(p) === 'Live' ? 'None' : String(p)) : 'None';   // a plain "Live" string is never trusted
+  function line2() { return S.context || ''; }
+  function fmtDay(ms) { var d = new Date(ms); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
+  // SIGNAL value as [text, liveWordShown]: "source, live" only while setLive(true)
+  function signalParts() {
+    var g = S.signal || {};
+    if (typeof g === 'string') return [g, false];
+    if (g.source && S.live) return [g.source + ', ', true];
+    if (g.source && g.time) return [g.source + ', ' + fmtAge(Date.now() - g.time), false];
+    if (g.source && g.date) return [g.source + ', ' + fmtDay(g.date), false];
+    return [g.text || g.source || 'None', false];
   }
-  function videoText() {
-    var v = S.video;
-    if (v && typeof v === 'object') return v.live ? 'Live' : v.date ? fmtDate(v.date) : (v.text || 'None');
-    return v ? (String(v) === 'Live' ? 'None' : String(v)) : 'None';
-  }
-  function rows() { return [['Location', S.location || 'None'], ['Updated', posText()], ['Scene', S.scene || 'None'], ['Video', videoText()]]; }
+  function rows() { var sp = signalParts(); return [['LOC', S.loc || 'None'], ['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]; }
   function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
   function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
 
@@ -289,8 +334,11 @@
       r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
       rowsEl.textContent = '';
       R.forEach(function (r) {
-        var li = el('li'); li.appendChild(el('span', 'imh-l', r[0])); li.appendChild(document.createTextNode(' – '));
-        li.appendChild(el('span', 'imh-v' + (r[1] === 'Live' ? ' imh-g' : ''), r[1])); li.title = r[0] + ' – ' + r[1]; rowsEl.appendChild(li);
+        rowsEl.appendChild(el('span', 'imh-l', r[0] + ':'));
+        var v = el('span', 'imh-v');
+        if (r[2]) { v.appendChild(document.createTextNode(r[2][0])); if (r[2][1]) v.appendChild(el('span', 'imh-g', 'live')); }
+        else v.textContent = r[1];
+        rowsEl.appendChild(v);
       });
       more.classList.toggle('imh-on', S.srcOpen);
       more.setAttribute('aria-expanded', String(S.srcOpen));
@@ -397,7 +445,7 @@
     button(x, function () { setDismissed(true, true); });
     r1.appendChild(x); box.appendChild(r1);
     r2 = el('div', 'imh-r2'); box.appendChild(r2);
-    rowsEl = el('ul', 'imh-rows'); box.appendChild(rowsEl);
+    rowsEl = el('div', 'imh-rows'); box.appendChild(rowsEl);
     var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
     more.addEventListener('mouseenter', function () {
       if (!S.srcOpen && window.matchMedia && matchMedia('(hover: hover)').matches) { hoverOpen = true; S.srcOpen = true; lastSrcSig = ''; render(); }
@@ -423,9 +471,8 @@
   }
   function apply(o) {
     if (!o) return;
-    ['subject', 'id', 'location', 'scene', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
-    if (o.position !== undefined) S.position = o.position;
-    if (o.video !== undefined) S.video = o.video;
+    ['context', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.signal !== undefined) S.signal = o.signal;
     if (o.stats) S.stats = [].concat(o.stats);
     if (o.tag !== undefined) S.tag = o.tag;
     if (o.items) S.items = [].concat(o.items);
@@ -441,29 +488,36 @@
     if (!xr) return;
     var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
     g.clearRect(0, 0, W, H);
-    g.fillStyle = 'rgba(20,30,50,0.78)'; rr(g, 3, 3, W - 6, H - 6, 22); g.fill();   // a bit denser in VR for legibility
+    g.fillStyle = 'rgba(10,18,32,0.72)'; rr(g, 3, 3, W - 6, H - 6, 18); g.fill();   // a little denser in VR for legibility
     g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
-    g.textBaseline = 'alphabetic'; g.fillStyle = '#fff';
-    g.save(); g.globalAlpha = 0.3; g.font = '300 32px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '9px'; g.fillText("I'M HERE", 28, 54); g.restore();   // faint watermark
-    g.font = '600 30px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 98);
-    var y = 140;
-    rows().forEach(function (r) {
-      g.fillStyle = GREY; g.font = '400 26px ' + FONT; var lt = '•  ' + r[0] + ' – ';
-      g.fillText(lt, 28, y); var lw = g.measureText(lt).width;
-      g.font = (r[1] === 'Live' ? '700 ' : '400 ') + '28px ' + FONT; g.fillStyle = r[1] === 'Live' ? GREEN : VALUE;
-      g.fillText(fit(g, r[1], W - 56 - lw), 28 + lw, y); y += 38;
+    g.textBaseline = 'alphabetic';
+    g.save(); g.fillStyle = 'rgba(255,255,255,0.3)'; g.font = '400 22px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '6px'; g.fillText("I'M HERE", 28, 46); g.restore();
+    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 88);
+    // labels: translucent fill in VR (a 0.5px outline aliases/shimmers at headset panel scale); values solid white
+    var R = rows(), lx = 28, vx = 0, y = 140;
+    g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px';
+    R.forEach(function (r) { vx = Math.max(vx, g.measureText(r[0] + ':').width); });
+    vx += lx + 22;
+    R.forEach(function (r) {
+      g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px'; g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillText(r[0] + ':', lx, y);
+      if ('letterSpacing' in g) g.letterSpacing = '0px';
+      g.font = '400 30px ' + FONT; g.fillStyle = VALUE;
+      if (r[2]) { var t = fit(g, r[2][0], W - 28 - vx - (r[2][1] ? 60 : 0)); g.fillText(t, vx, y);
+        if (r[2][1]) { var w = g.measureText(t).width; g.fillStyle = GREEN; g.font = '600 30px ' + FONT; g.fillText('live', vx + w, y); } }
+      else g.fillText(fit(g, r[1], W - 28 - vx), vx, y);
+      y += 46;
     });
     xr.tex.needsUpdate = true;
   }
   function xrPanel(THREE, o) {
     o = o || {};
     if (!xr) {
-      var c = document.createElement('canvas'); c.width = 512; c.height = 300;
+      var c = document.createElement('canvas'); c.width = 512; c.height = 262;
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
       xr = { canvas: c, tex: tex };
     }
     var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
-    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 300 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 262 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
     m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
     m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
@@ -557,7 +611,9 @@
     var msg = raw;
     if (typeof raw === 'string') { try { msg = JSON.parse(raw); } catch (e) { return null; } }
     if (!msg || typeof msg !== 'object') return null;
-    if (msg.error) return { kind: 'error', error: String(msg.error) };
+    if (msg.relayError) return { kind: 'relayError', error: String(msg.relayError) };   // from the I'M HERE relay itself
+    if (msg.relay) return { kind: 'relay', info: String(msg.relay) };                     // relay hello ("connected to aisstream.io")
+    if (msg.error) return { kind: 'error', error: String(msg.error) };                    // from aisstream.io (e.g. bad key)
     var meta = msg.MetaData || msg.Metadata || {};
     var body = msg.Message || {};
     var type = msg.MessageType;
@@ -605,7 +661,7 @@
     var t = u.time != null ? u.time : receivedAt;
     if (u.kind === 'position') {
       if (v.fix && t < v.fix.time) return v;   // ignore out-of-order reports
-      v.fix = { lat: u.lat, lon: u.lon, sog: u.sog, cog: u.cog, heading: u.heading, time: t };
+      v.fix = { lat: u.lat, lon: u.lon, sog: u.sog, cog: u.cog, heading: u.heading, navStatus: u.navStatus == null ? null : u.navStatus, time: t };
     } else if (u.kind === 'static') {
       if (u.shipType != null) v.shipType = u.shipType;
       if (u.dims && u.dims.length > 0) v.dims = u.dims;
@@ -749,15 +805,23 @@
 
 
   /* ---------- areas (bounding boxes are [[lat1,lon1],[lat2,lon2]], aisstream order) ---------- */
-  var AREAS = {
+  var AREAS = {   // busy ports first (lots of ships); Old Hickory kept for home
+    losangeles: { name: 'Los Angeles / Long Beach (busiest US port)', box: [[33.55, -118.45], [33.80, -118.05]], center: [33.70, -118.22], zoom: 11,
+                  note: 'Container ships at anchor and berth, tankers, tugs, pilot boats and ferries. Usually dozens of ships.' },
+    newyork:    { name: 'New York Harbor', box: [[40.45, -74.30], [40.88, -73.85]], center: [40.66, -74.05], zoom: 11,
+                  note: 'Container ships, ferries, tugs and tour boats. Very busy.' },
+    rotterdam:  { name: 'Rotterdam (Europe\'s largest port)', box: [[51.85, 3.90], [52.05, 4.50]], center: [51.95, 4.15], zoom: 11,
+                  note: 'Container giants, tankers and inland barges around the Maasvlakte and the Nieuwe Waterweg.' },
+    singapore:  { name: 'Singapore Strait', box: [[1.10, 103.60], [1.35, 104.10]], center: [1.22, 103.85], zoom: 11,
+                  note: 'One of the busiest waterways on Earth: hundreds of ships in the anchorages and lanes.' },
+    channel:    { name: 'English Channel (Dover Strait)', box: [[50.85, 1.10], [51.20, 1.75]], center: [51.02, 1.42], zoom: 10,
+                  note: 'The world\'s busiest shipping lane, with ferries crossing between Dover and Calais.' },
     cumberland: { name: 'Cumberland River / Old Hickory Lake (Nashville)', box: [[36.08, -86.95], [36.42, -86.38]], center: [36.27, -86.65], zoom: 11, demo: true,
                   note: 'Commercial barge tows and a few workboats. Most bass boats and pleasure boats do not carry AIS, so they will not appear.' },
     neworleans: { name: 'Lower Mississippi at New Orleans', box: [[29.85, -90.25], [30.05, -89.85]], center: [29.94, -90.05], zoom: 12,
                   note: 'Ocean ships, tankers, tows and ferries on the river bends around the city.' },
     houston:    { name: 'Port of Houston / Houston Ship Channel', box: [[29.30, -95.30], [29.80, -94.70]], center: [29.62, -95.02], zoom: 10,
                   note: 'Tankers, chemical carriers and tugs along the ship channel to Galveston Bay.' },
-    newyork:    { name: 'New York Harbor', box: [[40.45, -74.30], [40.88, -73.85]], center: [40.66, -74.05], zoom: 11,
-                  note: 'Container ships, ferries, tugs and tour boats. Very busy.' },
     gibraltar:  { name: 'Strait of Gibraltar', box: [[35.75, -6.10], [36.25, -5.10]], center: [35.98, -5.55], zoom: 10,
                   note: 'One of the busiest shipping lanes in the world, between Spain and Morocco.' }
   };
@@ -811,6 +875,45 @@
     return [];
   }
 
+  /* ---------- "Ride a ship" list: name · type · status ---------- */
+  var SHORT_CAT = { cargo: 'Cargo ship', tanker: 'Tanker', tug: 'Tug / tow', passenger: 'Passenger ship', pleasure: 'Pleasure craft', fishing: 'Fishing boat', other: 'Vessel' };
+  var SHORT_SPECIAL = { 33: 'Dredger', 34: 'Dive vessel', 35: 'Military ship', 50: 'Pilot boat', 51: 'Rescue boat', 53: 'Port tender', 55: 'Law enforcement', 58: 'Medical transport', 36: 'Sailboat', 37: 'Pleasure craft', 30: 'Fishing boat', 31: 'Tug / tow', 32: 'Tug / tow', 52: 'Tug' };
+  function shortType(code) {
+    if (code == null) return 'Type not sent yet';
+    var t = decodeShipType(code), n = Number(code);
+    if (SHORT_SPECIAL[n]) return SHORT_SPECIAL[n];
+    if (n >= 40 && n < 50) return 'High-speed craft';
+    if (n >= 20 && n < 30) return 'Wing-in-ground craft';
+    return SHORT_CAT[t.category] || 'Vessel';
+  }
+  // Plain-words status from the last report (AIS navigational status + speed)
+  function shipStatus(v) {
+    var f = v && v.fix;
+    if (!f) return 'No position yet';
+    var sog = f.sog, ns = f.navStatus;
+    if (ns === 6) return 'Aground';
+    if ((ns === 1 || ns === 5) && (sog == null || sog < 1.5)) return ns === 1 ? 'At anchor' : 'Moored';
+    if (sog == null) return 'Speed not sent';
+    if (sog >= 0.5) return 'Underway, ' + (sog >= 10 ? Math.round(sog) : sog.toFixed(1)) + ' kn';
+    return 'Stopped';
+  }
+  // Vessels with a position, named ones first, then nearest to the area centre
+  function rideList(store, center, limit) {
+    var rows = [];
+    store.vessels.forEach(function (v) {
+      if (!v.fix) return;
+      rows.push({ mmsi: v.mmsi, title: vesselTitle(v), type: shortType(v.shipType), status: shipStatus(v), named: !!v.name,
+        moving: !!(v.fix.sog != null && v.fix.sog >= 0.5), dist: center ? distance(center[0], center[1], v.fix.lat, v.fix.lon) : 0, simulated: !!v.simulated });
+    });
+    rows.sort(function (a, b) { return (b.named - a.named) || (a.dist - b.dist) || (a.mmsi - b.mmsi); });
+    return limit ? rows.slice(0, limit) : rows;
+  }
+  // WebSocket URL of the I'M HERE ship relay for a bounding box ([[lat,lon],[lat,lon]])
+  function relayUrl(base, box) {
+    var r = function (x) { return String(Math.round(x * 10000) / 10000); };
+    return base.replace(/^http/, 'ws').replace(/\/$/, '') + '/ais?box=' + [box[0][0], box[0][1], box[1][0], box[1][1]].map(r).join(',');
+  }
+
   root.AISCore = {
     KNOT_MS: KNOT_MS, MAX_DR_SECONDS: MAX_DR_SECONDS,
     decodeShipType: decodeShipType, parseMessage: parseMessage, parseTimeUtc: parseTimeUtc, cleanText: cleanText,
@@ -818,6 +921,7 @@
     deadReckon: deadReckon, displayHeading: displayHeading, toLocal: toLocal, hullFromDims: hullFromDims,
     shortestAngle: shortestAngle, formatAge: formatAge,
     AREAS: AREAS, lon2tile: lon2tile, lat2tile: lat2tile, tile2lon: tile2lon, tile2lat: tile2lat, tilesForBox: tilesForBox, escapeHtml: escapeHtml, vesselTitle: vesselTitle, popupHtml: popupHtml, decayFactor: decayFactor,
+    shortType: shortType, shipStatus: shipStatus, rideList: rideList, relayUrl: relayUrl,
     DemoFeed: DemoFeed, DEMO_FLEET: DEMO_FLEET, DEMO_TRACK: DEMO_TRACK, fmtTimeUtc: fmtTimeUtc
   };
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -825,84 +929,111 @@
 </script>
 <script type="module">
 /* I'M HERE - Boats channel prototype. Browser module script.
-   Depends on window.AISCore (inline classic script) and window.L (Leaflet, cdnjs).
-   three.js is loaded lazily the first time the 3D view is opened. */
+   Depends on window.AISCore (inline classic script). Leaflet is loaded only when the map is opened (Menu -> Map);
+   three.js loads at start for the 3D "ride a ship" view.
+   Live ships: aisstream.io refuses direct browser connections, so the page connects to the I'M HERE relay
+   (Cloudflare Worker "imhere-flights", relay/worker.js), which holds the aisstream key as a secret. */
 const C = window.AISCore;
 const $ = (id) => document.getElementById(id);
 
-const AIS_URL = 'wss://stream.aisstream.io/v0/stream';
-const KEY_STORE = 'imhere.aisstream.key';
-const AREA_STORE = 'imhere.boats.area';
+const RELAY = 'https://imhere-flights.bt4w8jn5ty.workers.dev';
+const OLD_KEY_STORE = 'imhere.aisstream.key';   // older versions kept a pasted key here; no longer used
 const LIVE_MAX_AGE_MS = 20 * 60 * 1000;   // drop vessels silent for 20 min
-const LIVE_FRESH_MS = 60000;              // "LIVE" only while connected and reports keep arriving
+const LIVE_FRESH_MS = 30000;              // "live" only while connected and reports arrived in the last 30 s
+const EMPTY_HINT_MS = 20000;
+const LIST_MAX = 50;
 const CAT_COLORS = {
   cargo: '#3d7fd9', tanker: '#c0392b', tug: '#f0a020', passenger: '#8e44ad', pleasure: '#e84393',
   fishing: '#16a085', special: '#d35400', other: '#7f8c8d', unknown: '#95a5a6'
 };
+// Map tiles: CARTO Voyager (free, CORS-enabled, OpenStreetMap data); OpenStreetMap's own tiles as the fallback.
+const TILE_SOURCES = [
+  { name: 'CARTO', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', subdomains: 'abcd',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' },
+  { name: 'OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', subdomains: '',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors' }
+];
+const AIS_CREDIT = ' &middot; AIS: <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>';
+const tileStats = { ok: 0, failed: 0 };
+function tileUrl(src, z, x, y) {
+  const s = src.subdomains ? src.subdomains[(x + y) % src.subdomains.length] : '';
+  return src.url.replace('{s}', s).replace('{z}', z).replace('{x}', x).replace('{y}', y);
+}
+const LEAFLET_URLS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
+  'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+];
 
 /* ---------------- state ---------------- */
 const state = {
-  mode: 'none',            // 'live' | 'demo' | 'none'
-  areaId: 'cumberland',
-  key: '',
+  mode: 'live',            // 'live' | 'demo'
+  areaId: 'losangeles',
   store: new C.VesselStore(),
   feed: null,
   msgCount: 0,
   lastMsgAt: 0,
-  status: { kind: 'idle', text: '' },
-  view: 'map',
+  connectedAt: 0,
+  feedState: { kind: 'idle', text: '' },   // idle | connecting | open | error | demo
+  view: '3d',
   rideMmsi: null
 };
 
 /* ---------------- storage (never throws) ---------------- */
 function storeGet(k) { try { return window.localStorage.getItem(k) || ''; } catch (e) { return ''; } }
-function storeSet(k, v) { try { window.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
 function storeDel(k) { try { window.localStorage.removeItem(k); } catch (e) { /* ignore */ } }
 
-/* ---------------- status pill ---------------- */
-function setStatus(kind, text) { state.status = { kind, text }; renderStatus(); }
-function renderStatus() {
-  const pill = $('status');
-  const n = state.store.vessels.size;
-  // Founder's rule: on screen only "LIVE" (when reports really are arriving) or just the vessel count.
-  // Report ages, "simulated sample" and connection details live in the I'M HERE card's (i) panel.
-  const count = n + ' vessel' + (n === 1 ? '' : 's');
-  const liveNow = state.status.kind === 'live' && state.lastMsgAt > 0 && Date.now() - state.lastMsgAt < LIVE_FRESH_MS;
-  let text = '', kind = 'count';
-  if (state.status.kind === 'error') { text = state.status.text; kind = 'error'; }   // a broken key still needs saying
-  else if (liveNow) { text = 'LIVE · ' + count; kind = 'live'; }
-  else if (n > 0) text = count;
-  pill.textContent = text;
-  pill.hidden = !text;
-  pill.className = 'pill ' + kind;
+/* ---------------- feed status in plain words (never silent) ---------------- */
+function setFeed(kind, text) { state.feedState = { kind, text }; renderFeedMsg(); }
+function liveNow(now) {
+  return state.mode === 'live' && state.feedState.kind === 'open' && state.lastMsgAt > 0 && (now || Date.now()) - state.lastMsgAt < LIVE_FRESH_MS;
+}
+function renderFeedMsg() {
+  const now = Date.now(), f = state.feedState, el = $('feedMsg');
+  let text = '', cls = 'hint';
+  if (f.kind === 'error') { text = "Can't reach ship feed: " + f.text; cls = 'error'; }
+  else if (f.kind === 'connecting' && f.text) text = f.text;
+  else if (f.kind === 'open' && state.store.vessels.size === 0 && state.connectedAt && now - state.connectedAt > EMPTY_HINT_MS)
+    text = 'Connected, but no ships have reported here yet. Busy ports work best: Menu → Port.';
+  else if (f.kind === 'idle' && f.text) text = f.text;
+  if (!text && feedNote) text = feedNote;
+  el.textContent = text; el.className = cls; el.hidden = !text;
+  const fs = $('feedState');
+  fs.textContent = f.kind === 'error' ? "Can't reach ship feed: " + f.text
+    : f.kind === 'demo' ? 'Playing the simulated sample (made-up boats).'
+    : liveNow(now) ? 'Live: ' + state.store.vessels.size + ' ships reporting.'
+    : f.kind === 'open' ? 'Connected, waiting for ship reports…'
+    : f.text || 'Not connected.';
+  fs.className = f.kind === 'error' ? 'error' : '';
 }
 
-/* ---------------- toast ---------------- */
-let toastTimer = 0;
-function toast(msg, ms) {
-  const t = $('toast');
-  t.textContent = msg; t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, ms || 6000);
+/* ---------------- live feed through the I'M HERE relay ---------------- */
+async function explainFailure(code) {
+  // A browser cannot see why a WebSocket failed, so ask the relay's status endpoint.
+  try {
+    const r = await fetch(RELAY + '/ais/status', { cache: 'no-store' });
+    if (r.status === 404) return 'the I\'M HERE relay has not been updated with the ship route yet';
+    if (!r.ok) return 'the I\'M HERE relay answered with an error (HTTP ' + r.status + ')';
+    const j = await r.json();
+    if (j && j.key === false) return 'the relay has no aisstream.io key yet (Worker secret AISSTREAM_KEY is not set)';
+    return 'the relay refused the connection' + (code ? ' (code ' + code + ')' : '');
+  } catch (e) {
+    return 'the I\'M HERE relay is not reachable (offline, or blocked on this network)';
+  }
 }
-
-/* ---------------- live feed (aisstream.io) ---------------- */
 class LiveFeed {
-  constructor(key, box) { this.key = key; this.box = box; this.stopped = true; this.attempt = 0; this.ws = null; this.timer = 0; this.fatal = false; this.everGotData = false; }
+  constructor(box) { this.box = box; this.stopped = true; this.attempt = 0; this.ws = null; this.timer = 0; }
   start() { this.stopped = false; this.connect(); }
   connect() {
     if (this.stopped) return;
-    setStatus('connecting', 'Connecting to aisstream.io…');
+    if (state.feedState.kind !== 'error') setFeed('connecting', '');
     let ws;
-    try { ws = new WebSocket(AIS_URL); } catch (e) { setStatus('error', 'Could not open live connection: ' + e.message); return; }
+    try { ws = new WebSocket(C.relayUrl(RELAY, this.box)); }
+    catch (e) { this.failed('could not open a connection (' + (e && e.message || 'unknown error') + ')'); return; }
     ws.binaryType = 'arraybuffer';
-    this.ws = ws;
+    this.ws = ws; this.opened = false; this.reason = ''; const gen = this.gen = (this.gen || 0) + 1;
     const decoder = new TextDecoder();
-    ws.onopen = () => {
-      // aisstream closes the socket unless the subscription arrives within 3 seconds.
-      ws.send(JSON.stringify({ APIKey: this.key, BoundingBoxes: [this.box], FilterMessageTypes: ['PositionReport', 'ShipStaticData'] }));
-      setStatus('live', '');
-    };
+    ws.onopen = () => { if (ws !== this.ws) return; this.opened = true; };
     ws.onmessage = (ev) => {
       if (ws !== this.ws) return;
       const d = ev.data;
@@ -911,33 +1042,37 @@ class LiveFeed {
       else if (d && typeof d.text === 'function') d.text().then((t) => { if (ws === this.ws) this.handle(t); }, () => {});
     };
     ws.onerror = () => { /* a close event always follows; handled there */ };
-    ws.onclose = () => {
+    ws.onclose = async (ev) => {
       if (ws !== this.ws || this.stopped) return;
       this.ws = null;
-      if (this.fatal) return;
-      this.attempt++;
-      const wait = Math.min(30, Math.pow(2, Math.min(this.attempt, 5)));
-      const hint = this.everGotData ? '' : ' (if this keeps happening, check the key)';
-      setStatus('connecting', 'Connection closed - retrying in ' + wait + ' s' + hint);
-      this.timer = setTimeout(() => this.connect(), wait * 1000);
+      let reason = this.reason;
+      if (!reason) reason = this.opened && this.gotData ? 'the feed connection dropped' + (ev.code ? ' (code ' + ev.code + ')' : '') : await explainFailure(ev.code);
+      if (this.stopped || gen !== this.gen) return;   // a newer connection has started meanwhile
+      this.failed(reason);
     };
+  }
+  failed(reason) {
+    this.attempt++;
+    const wait = Math.min(60, Math.pow(2, Math.min(this.attempt, 6)));
+    setFeed('error', reason + '. Trying again in ' + wait + ' s.');
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.connect(), wait * 1000);
   }
   handle(text) {
     const u = C.parseMessage(text);
     if (!u) return;
-    if (u.kind === 'error') {
-      this.fatal = true;
-      setStatus('error', 'aisstream.io says: ' + u.error);
-      toast('aisstream.io refused the request: ' + u.error + '. Tap "Key" to check your key.', 10000);
-      return;
-    }
+    if (u.kind === 'relay') { state.connectedAt = Date.now(); setFeed('open', ''); return; }
+    if (u.kind === 'relayError') { if (!this.reason) this.reason = u.error; return; }   // the close that follows shows it
+    if (u.kind === 'error') { if (!this.reason) this.reason = 'aisstream.io says "' + u.error + '"'; return; }
     const now = Date.now();
     // Use our own clock if the report time looks skewed (device clock wrong) - keeps estimates sane.
     if (u.time == null || Math.abs(now - u.time) > 120000) u.time = now;
-    this.everGotData = true; this.attempt = 0;
+    if (state.feedState.kind !== 'open') { if (!state.connectedAt) state.connectedAt = now; setFeed('open', ''); }
+    this.gotData = true; this.attempt = 0;
     state.msgCount++; state.lastMsgAt = now;
     state.store.apply(u, now);
   }
+  retryNow() { if (this.stopped) return; clearTimeout(this.timer); const ws = this.ws; this.ws = null; if (ws) { ws.onclose = null; try { ws.close(); } catch (e) { /* ignore */ } } this.attempt = 0; setFeed('connecting', ''); this.connect(); }
   stop() {
     this.stopped = true; clearTimeout(this.timer);
     const ws = this.ws; this.ws = null;
@@ -956,7 +1091,7 @@ class DemoRunner {
       this.emit(this.feed.positionMessage(v, now), now);
       this.next.set(v.mmsi, { pos: now + 4000 + i * 2500, stat: now + 60000 + i * 5000 });
     });
-    setStatus('demo', '');
+    setFeed('demo', '');
     this.timer = setInterval(() => this.tick(), 1000);
   }
   emit(msg, now) {
@@ -978,7 +1113,7 @@ class DemoRunner {
 /* ---------------- feed control ---------------- */
 function clearVessels() {
   state.store = new C.VesselStore();
-  state.msgCount = 0; state.lastMsgAt = 0;
+  state.msgCount = 0; state.lastMsgAt = 0; state.connectedAt = 0;
   mapView.clear();
   if (scene3d) scene3d.clear();
   setRide(null);
@@ -986,45 +1121,72 @@ function clearVessels() {
 function stopFeed() { if (state.feed) state.feed.stop(); state.feed = null; }
 function startFeed() {
   stopFeed(); clearVessels();
-  $('toast').hidden = true;
   const area = C.AREAS[state.areaId];
-  if (state.mode === 'live' && state.key) {
-    state.feed = new LiveFeed(state.key, area.box);
-    state.feed.start();
-  } else if (state.mode === 'demo') {
-    if (area.demo) { state.feed = new DemoRunner(); state.feed.start(); }
-    else {
-      setStatus('idle', 'No live key - the simulated sample only covers Old Hickory');
-      toast('The simulated sample only covers Old Hickory Lake. Add an aisstream.io key (Key button) to see real ships here.', 9000);
-    }
+  if (state.mode === 'demo') {
+    state.feed = new DemoRunner(); state.feed.start();
   } else {
-    setStatus('idle', 'Not connected');
+    state.feed = new LiveFeed(area.box);
+    state.feed.start();
   }
-  updateModeLabels();
-}
-function updateModeLabels() {
-  $('keyBtn').textContent = state.mode === 'live' ? 'Key ✓' : 'Key';
+  renderList(true);
 }
 
-/* ---------------- 2D map (Leaflet) ---------------- */
+/* ---------------- 2D map (Leaflet, loaded on first use) ---------------- */
+let leafletLoading = null;
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (leafletLoading) return leafletLoading;
+  leafletLoading = new Promise((resolve, reject) => {
+    let i = 0;
+    const next = () => {
+      if (i >= LEAFLET_URLS.length) { leafletLoading = null; reject(new Error('the map library could not be downloaded')); return; }
+      const s = document.createElement('script');
+      s.src = LEAFLET_URLS[i++]; s.crossOrigin = 'anonymous';
+      s.onload = () => (window.L ? resolve(window.L) : next());
+      s.onerror = () => { s.remove(); next(); };
+      document.head.appendChild(s);
+    };
+    next();
+  });
+  return leafletLoading;
+}
 const mapView = {
-  map: null, markers: new Map(), boxLayer: null,
+  map: null, markers: new Map(), boxLayer: null, layer: null, srcIndex: 0, tileErrors: 0, tileLoads: 0,
+  ensure() {
+    if (this.map) return Promise.resolve(true);
+    return loadLeaflet().then(() => { this.init(); return true; }, (e) => {
+      $('map').innerHTML = '';
+      const d = document.createElement('div'); d.className = 'fallback';
+      d.textContent = "Can't show the map: " + e.message + ' (no internet, or the map servers are blocked on this network). The 3D view may still work.';
+      $('map').appendChild(d);
+      return false;
+    });
+  },
+  setSource(i) {
+    if (this.layer) this.layer.remove();
+    this.srcIndex = i; this.tileErrors = 0; this.tileLoads = 0;
+    const src = TILE_SOURCES[i];
+    this.layer = L.tileLayer(src.url, { maxZoom: 19, subdomains: src.subdomains || 'abc', attribution: src.attribution + AIS_CREDIT });
+    this.layer.on('tileload', () => { this.tileLoads++; });
+    this.layer.on('tileerror', () => {
+      this.tileErrors++;
+      if (this.tileLoads === 0 && this.tileErrors >= 4) {
+        if (this.srcIndex + 1 < TILE_SOURCES.length) this.setSource(this.srcIndex + 1);
+        else if (!this.warned) { this.warned = true; setFeedNote("Can't load map tiles from CARTO or OpenStreetMap (blocked or offline). Ships still show on the plain map."); }
+      }
+    });
+    this.layer.addTo(this.map);
+  },
   init() {
-    if (!window.L) {
-      $('map').innerHTML = '<div class="fallback">The map library could not load (no internet, or the CDN is blocked). The 3D view may still work.</div>';
-      return;
-    }
     const map = L.map('map', { zoomControl: true, worldCopyJump: true, preferCanvas: false });
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors · AIS: <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>'
-    }).addTo(map);
     this.map = map;
-    if (map.zoomControl && map.zoomControl.setPosition) map.zoomControl.setPosition('topright');   // top-left is the I'M HERE card
+    this.setSource(0);
+    if (map.zoomControl && map.zoomControl.setPosition) map.zoomControl.setPosition('bottomleft');   // top-left is the I'M HERE label, top-right the menu
     map.getContainer().addEventListener('click', (e) => {   // capture phase: popups may stop bubbling
       const b = e.target.closest && e.target.closest('[data-ride]');
-      if (b) { e.preventDefault(); setRide(Number(b.getAttribute('data-ride'))); showView('3d'); }
+      if (b) { e.preventDefault(); goAboard(Number(b.getAttribute('data-ride'))); }
     }, true);
+    this.showArea(C.AREAS[state.areaId]);
   },
   showArea(area) {
     if (!this.map) return;
@@ -1046,7 +1208,7 @@ const mapView = {
   },
   popupFor(v, now) {
     return '<div class="vpop">' + C.popupHtml(v, now, !!v.simulated) +
-      '<br><button type="button" class="ridebtn" data-ride="' + v.mmsi + '">Ride along in 3D</button></div>';
+      '<br><button type="button" class="ridebtn" data-ride="' + v.mmsi + '">Go aboard</button></div>';
   },
   tick(now) {
     if (!this.map) return;
@@ -1078,6 +1240,8 @@ const mapView = {
   },
   remove(mmsi) { const m = this.markers.get(mmsi); if (m) { m.remove(); this.markers.delete(mmsi); } }
 };
+let feedNote = '';
+function setFeedNote(t) { feedNote = t; renderFeedMsg(); }
 
 /* ---------------- 3D view (three.js, lazy) ---------------- */
 let scene3d = null;
@@ -1096,7 +1260,7 @@ function load3D() {
     .catch((e) => {
       scene3dLoading = null;
       $('loading3d').hidden = false;
-      $('loading3d').textContent = 'The 3D engine could not load (' + (e && e.message ? e.message : 'network') + '). Check the internet connection and try again.';
+      $('loading3d').textContent = 'The 3D engine could not load (' + (e && e.message ? e.message : 'network') + '). Check the internet connection and try again. Menu \u2192 Map may still work.';
       return null;
     });
   return scene3dLoading;
@@ -1136,7 +1300,7 @@ function createScene(THREE, OrbitControls) {
   const vessels = new Map();   // mmsi -> view state
   const world = { lat0: 0, lon0: 0 };
   let bridgeYaw = 0, bridgePitch = -0.04;
-  let camMode = 'chase';
+  let camMode = 'bridge';   // tap a ship -> stand on its deck
   let lastFrame = performance.now();
   let lastLabelSort = 0;
 
@@ -1161,10 +1325,11 @@ function createScene(THREE, OrbitControls) {
       mesh.position.set(nw.x + w / 2, -0.3, nw.z + h / 2);
       tileGroup.add(mesh);
 
-      loader.load('https://tile.openstreetmap.org/' + t.z + '/' + t.x + '/' + t.y + '.png', (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = maxAniso;
-        mat.map = tex; mat.opacity = 0.92; mat.needsUpdate = true;
-      }, undefined, () => { /* tile unavailable: plain water shows instead */ });
+      const done = (tex) => { tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = maxAniso; mat.map = tex; mat.opacity = 0.92; mat.needsUpdate = true; tileStats.ok++; };
+      // CARTO first, OpenStreetMap if a CARTO tile fails; if both fail, plain water shows and the page says so
+      loader.load(tileUrl(TILE_SOURCES[0], t.z, t.x, t.y), done, undefined, () => {
+        loader.load(tileUrl(TILE_SOURCES[1], t.z, t.x, t.y), done, undefined, () => { tileStats.failed++; });
+      });
     });
     camera.position.set(0, 9000, 14000);
     controls.target.set(0, 0, 0);
@@ -1403,7 +1568,8 @@ function createScene(THREE, OrbitControls) {
   };
 }
 
-/* ---------------- ride-along controls / HUD ---------------- */
+
+/* ---------------- "Ride a ship" list and going aboard ---------------- */
 function setRide(mmsi) {
   state.rideMmsi = mmsi;
   if (scene3d) {
@@ -1413,42 +1579,70 @@ function setRide(mmsi) {
       requestAnimationFrame(() => requestAnimationFrame(() => { if (state.rideMmsi === mmsi && scene3d) scene3d.startRide(mmsi); }));
     }
   }
-  renderHud(); refreshMark();
+  $('ships').hidden = mmsi != null;
+  $('aboard').hidden = mmsi == null;
+  renderAboard(); refreshMark();
 }
-function renderHud() {
-  const sel = $('rideSel');
-  const list = [];
-  state.store.vessels.forEach((v) => { if (v.fix) list.push(v); });
-  list.sort((a, b) => C.vesselTitle(a).localeCompare(C.vesselTitle(b)));
-  const want = ['', ...list.map((v) => String(v.mmsi))].join(',');
-  if (sel._sig !== want) {
-    sel._sig = want;
-    sel.textContent = '';
-    const o0 = document.createElement('option'); o0.value = ''; o0.textContent = list.length ? 'Ride along: pick a vessel' : 'No vessels yet'; sel.appendChild(o0);
-    list.forEach((v) => {
-      const o = document.createElement('option'); o.value = String(v.mmsi);
-      o.textContent = C.vesselTitle(v);
-      sel.appendChild(o);
-    });
+function goAboard(mmsi) {
+  if (scene3d) scene3d.setCamMode('bridge');
+  if (state.view !== '3d') showView('3d');
+  setRide(mmsi);
+}
+let listSig = '';
+function renderList(force) {
+  const area = C.AREAS[state.areaId];
+  const rows = C.rideList(state.store, area.center, LIST_MAX);
+  const total = [...state.store.vessels.values()].filter((v) => v.fix).length;
+  const now = Date.now(), f = state.feedState;
+  $('shipsSub').textContent = (SHORT_AREA[state.areaId] || area.name) + ' · ' +
+    (total ? total + (total === 1 ? ' ship' : ' ships') + (state.mode === 'demo' ? ' (sample)' : ' reporting') + (total > rows.length ? ', nearest ' + rows.length + ' shown' : '')
+      : f.kind === 'error' ? 'no connection' : 'looking for ships');
+  let empty = '';
+  if (!rows.length) {
+    if (f.kind === 'error') empty = "No ships yet: can't reach the ship feed (see the message at the top).";
+    else if (f.kind === 'open' && state.connectedAt && now - state.connectedAt > EMPTY_HINT_MS) empty = 'No ships have reported here yet. Try a busy port: Menu → Port.';
+    else if (f.kind === 'open') empty = 'Connected. Waiting for ship reports…';
+    else empty = 'Connecting to the ship feed…';
   }
-  sel.value = state.rideMmsi == null ? '' : String(state.rideMmsi);
-  const info = $('rideInfo');
+  $('shipEmpty').textContent = empty; $('shipEmpty').hidden = !empty;
+  const sig = rows.map((r) => r.mmsi + '|' + r.title + '|' + r.type + '|' + r.status).join(';');
+  if (!force && sig === listSig) return;
+  listSig = sig;
+  const ul = $('shipList'), focusedMmsi = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mmsi : null;
+  ul.textContent = '';
+  rows.forEach((r) => {
+    const li = document.createElement('li'), b = document.createElement('button');
+    b.type = 'button'; b.dataset.mmsi = String(r.mmsi);
+    const n = document.createElement('span'); n.className = 'sname'; n.textContent = r.title;
+    const m = document.createElement('span'); m.className = 'smeta'; m.textContent = r.type + ' · ' + r.status;
+    const go = document.createElement('span'); go.className = 'go'; go.textContent = 'Go aboard'; m.appendChild(go);
+    b.append(n, m);
+    b.setAttribute('aria-label', 'Go aboard ' + r.title + ', ' + r.type + ', ' + r.status);
+    li.appendChild(b); ul.appendChild(li);
+    if (focusedMmsi === String(r.mmsi)) b.focus({ preventScroll: true });
+  });
+}
+function renderAboard() {
+  const info = $('aboardInfo');
   const v = state.rideMmsi != null ? state.store.vessels.get(state.rideMmsi) : null;
-  if (!v) { info.textContent = state.rideMmsi != null ? 'Vessel no longer reporting.' : 'Drag to orbit, pinch or scroll to zoom.'; return; }
-  const f = v.fix || {};
-  const hd = C.displayHeading(f);
-  info.textContent = C.decodeShipType(v.shipType).label + ' · ' +
-    (f.sog == null ? 'speed n/a' : f.sog.toFixed(1) + ' kn') + ' · ' + (hd == null ? 'heading n/a' : Math.round(hd) + '°') +
-    (scene3d && scene3d.camMode === 'bridge' ? ' · drag to look around' : '');
+  const mode = scene3d ? scene3d.camMode : 'bridge';
+  $('camBridge').setAttribute('aria-pressed', String(mode === 'bridge'));
+  $('camChase').setAttribute('aria-pressed', String(mode === 'chase'));
+  info.textContent = '';
+  if (!v) { if (state.rideMmsi != null) info.textContent = 'This ship stopped reporting.'; return; }
+  const b = document.createElement('b'); b.textContent = C.vesselTitle(v);
+  const f = v.fix || {}, hd = C.displayHeading(f);
+  info.append(b, document.createTextNode(C.shortType(v.shipType) + ' · ' + C.shipStatus(v) + (hd == null ? '' : ' · heading ' + Math.round(hd) + '°') +
+    (mode === 'bridge' ? ' · drag to look around' : '')));
 }
 
-/* ---------------- I'M HERE watermark card (shared/imhere-mark.js, inlined in the page) ---------------- */
+/* ---------------- I'M HERE label (shared/imhere-mark.js, inlined in the page) ---------------- */
 const MARK = window.ImHereMark;
-const SHORT_AREA = { cumberland: 'Old Hickory', neworleans: 'New Orleans', houston: 'Houston', newyork: 'New York Harbor', gibraltar: 'Gibraltar' };
+const SHORT_AREA = { losangeles: 'Los Angeles / Long Beach, CA', rotterdam: 'Rotterdam, NL', singapore: 'Singapore Strait', channel: 'Dover Strait, English Channel', cumberland: 'Old Hickory Lake, TN', neworleans: 'New Orleans, LA', houston: 'Houston Ship Channel, TX', newyork: 'New York Harbor', gibraltar: 'Strait of Gibraltar' };
 function refreshMark() {
   if (!MARK) return;
-  const now = Date.now(), area = C.AREAS[state.areaId];
-  const liveNow = state.mode === 'live' && state.status.kind === 'live' && state.lastMsgAt > 0 && now - state.lastMsgAt < LIVE_FRESH_MS;
+  const now = Date.now(), area = C.AREAS[state.areaId], f = state.feedState;
+  const live = liveNow(now);
   const demo = state.mode === 'demo' && !!state.feed;
   const v = state.rideMmsi != null ? state.store.vessels.get(state.rideMmsi) : null;
   const list = [];
@@ -1456,38 +1650,37 @@ function refreshMark() {
   list.sort((p, q) => (q.updatedAt || 0) - (p.updatedAt || 0));
   const age = (ms) => C.formatAge(ms).replace(/ \d+ s ago$/, ' ago');
   let tag;
-  if (liveNow) tag = { text: v ? 'report ' + age(now - v.updatedAt) : 'last report ' + age(now - state.lastMsgAt) };
+  if (live) tag = { text: v ? 'report ' + age(now - v.updatedAt) : 'last report ' + age(now - state.lastMsgAt) };
   else if (demo) tag = { text: 'SIMULATED SAMPLE: made-up vessels, not real ships or positions', kind: 'simulated' };
-  else if (state.mode === 'live' && state.status.kind === 'live') tag = { text: 'Connected, waiting for reports', kind: 'estimated' };
-  else if (state.status.kind === 'connecting') tag = { text: 'Connecting…', kind: 'estimated' };
-  else tag = { text: state.status.kind === 'error' ? 'Live feed error' : 'Not connected', kind: 'estimated' };
+  else if (f.kind === 'error') tag = { text: "Can't reach ship feed: " + f.text, kind: 'estimated' };
+  else if (f.kind === 'open') tag = { text: 'Connected, waiting for reports', kind: 'estimated' };
+  else tag = { text: 'Connecting…', kind: 'estimated' };
   let stats;
   if (v) {
-    const f = v.fix || {}, hd = C.displayHeading(f);
-    stats = [['Speed', f.sog == null ? 'n/a' : f.sog.toFixed(1) + ' kn'], ['Heading', hd == null ? 'n/a' : Math.round(hd) + '°'], ['Type', C.decodeShipType(v.shipType).label]];
+    const fx = v.fix || {}, hd = C.displayHeading(fx);
+    stats = [['Speed', fx.sog == null ? 'n/a' : fx.sog.toFixed(1) + ' kn'], ['Heading', hd == null ? 'n/a' : Math.round(hd) + '°'], ['Type', C.decodeShipType(v.shipType).label]];
   } else {
-    // no data-age on the card itself (founder's rule): ages live in the (i) panel
     stats = [['Vessels', String(list.length)], ['Moving', String(list.filter((x) => x.fix && x.fix.sog != null && x.fix.sog >= 0.5).length)]];
   }
-  const vesselsItem = liveNow || state.mode === 'live'
-    ? { kind: liveNow ? 'live' : 'recorded', label: 'Vessel positions, speed, course, type, size', source: 'AIS radio reports via aisstream.io' + (liveNow ? ', arriving live' : ' (not arriving right now: last known values)'),
+  const vesselsItem = state.mode === 'live'
+    ? { kind: live ? 'live' : 'recorded', label: 'Vessel positions, speed, course, type, size', source: 'AIS radio reports via aisstream.io, relayed by the I\'M HERE server' + (live ? ', arriving live' : ' (not arriving right now: last known values)'),
         time: state.lastMsgAt || null, timeLabel: 'Last report', note: 'Age of each vessel\'s last report:', list: list.map((x) => ({ text: C.vesselTitle(x), time: x.updatedAt })) }
-    : demo
-      ? { kind: 'simulated', label: 'Vessels', source: 'Simulated sample: three made-up tows/tugs on an approximate Cumberland River path near Old Hickory Dam. Not real vessels or positions.',
-          list: list.map((x) => ({ text: C.vesselTitle(x), time: x.updatedAt })) }
-      : { kind: 'estimated', label: 'Vessels', source: 'No data: add an aisstream.io key (Key button) for live ships, or try the simulated sample' };
+    : { kind: 'simulated', label: 'Vessels', source: 'Simulated sample: three made-up tows/tugs on an approximate Cumberland River path near Old Hickory Dam. Not real vessels or positions.',
+        list: list.map((x) => ({ text: C.vesselTitle(x), time: x.updatedAt })) };
+  const cam = scene3d ? scene3d.camMode : 'bridge';
   MARK.update({
-    subject: v ? C.vesselTitle(v) : 'Boats', location: SHORT_AREA[state.areaId] || area.name,
-    position: demo ? 'Demo' : state.mode === 'live' && (v ? v.updatedAt : state.lastMsgAt) ? { time: v ? v.updatedAt : state.lastMsgAt } : 'None',
-    scene: state.view === '3d' ? '3D render' : 'Map (drawn)', video: 'None',
-    id: v ? 'MMSI ' + v.mmsi : list.length + ' vessel' + (list.length === 1 ? '' : 's'), tag, stats,
-    sceneNote: 'Computer-drawn: the map is drawn from OpenStreetMap data and the 3D view is rendered from AIS reports. No AI-generated scenes and no photos or video.',
+    context: v ? [C.vesselTitle(v), C.shortType(v.shipType), C.shipStatus(v)].join(' · ') : 'Boats · ' + list.length + (list.length === 1 ? ' ship' : ' ships') + ' nearby',
+    loc: SHORT_AREA[state.areaId] || area.name,
+    signal: demo ? { text: 'Demo data' } : state.mode === 'live' && (v ? v.updatedAt : state.lastMsgAt) ? { source: 'AIS', time: v ? v.updatedAt : state.lastMsgAt }
+      : { text: f.kind === 'error' ? 'No signal' : 'Connecting…' },
+    view: state.view === 'map' ? 'Map' : v ? (cam === 'bridge' ? 'On deck, 3D render' : 'Chase cam, 3D render') : '3D render', tag, stats,
+    sceneNote: 'Computer-drawn: the map is drawn from OpenStreetMap data (CARTO tiles) and the 3D view is rendered from AIS reports. No AI-generated scenes and no photos or video.',
     items: [vesselsItem,
       { kind: 'estimated', label: 'Movement between reports', source: 'Estimated from the last speed and course (at most 10 minutes), then glides to each new report' },
       { kind: 'illustrative', label: '3D boats and land', source: 'Generic shapes scaled to the reported length and width (typical size for the type if not yet sent); land is a flat map, no buildings, bridges or terrain' },
-      { kind: 'data', label: 'Map', source: 'OpenStreetMap contributors (map tiles)' },
+      { kind: 'data', label: 'Map', source: 'OpenStreetMap contributors, tiles by CARTO (OpenStreetMap tiles as fallback)' },
       { kind: 'assumed', label: 'Coverage', source: 'Depends on volunteer AIS receivers near the area; most small pleasure boats carry no AIS and never appear' }] });
-  MARK.setLive(liveNow);
+  MARK.setLive(live);
 }
 
 /* ---------------- views ---------------- */
@@ -1495,12 +1688,16 @@ function showView(name) {
   state.view = name;
   $('mapWrap').hidden = name !== 'map';
   $('wrap3d').hidden = name !== '3d';
+  $('credit3d').hidden = name !== '3d';
   $('tabMap').setAttribute('aria-pressed', String(name === 'map'));
   $('tab3d').setAttribute('aria-pressed', String(name === '3d'));
   if (name === 'map') {
     if (scene3d) scene3d.run(false);
-    if (mapView.map) setTimeout(() => mapView.map.invalidateSize(), 0);
+    if (state.rideMmsi != null) setRide(null);
+    $('ships').hidden = true;
+    mapView.ensure().then(() => { if (mapView.map) setTimeout(() => mapView.map.invalidateSize(), 0); });
   } else {
+    $('ships').hidden = state.rideMmsi != null;
     load3D().then((s) => {
       if (!s) return;
       if (!s._areaSet) { s.setArea(C.AREAS[state.areaId]); s._areaSet = true; }
@@ -1508,13 +1705,13 @@ function showView(name) {
       if (state.rideMmsi != null) setRide(state.rideMmsi);
     });
   }
+  refreshMark();
 }
 
 /* ---------------- area ---------------- */
 function setArea(id, restart) {
-  if (!C.AREAS[id]) id = 'cumberland';
+  if (!C.AREAS[id]) id = 'losangeles';
   state.areaId = id;
-  storeSet(AREA_STORE, id);
   $('areaSel').value = id;
   const area = C.AREAS[id];
   $('areaNote').textContent = area.note;
@@ -1524,14 +1721,9 @@ function setArea(id, restart) {
   if (restart) startFeed();
 }
 
-/* ---------------- key dialog ---------------- */
-function openKeyDialog() {
-  $('keyInput').value = state.key || '';
-  $('keyForget').hidden = !state.key;
-  $('keyDlg').hidden = false;
-  setTimeout(() => $('keyInput').focus(), 50);
-}
-function closeKeyDialog() { $('keyDlg').hidden = true; }
+/* ---------------- menu ---------------- */
+function openMenu() { $('keyForget').hidden = !storeGet(OLD_KEY_STORE); renderFeedMsg(); $('menu').hidden = false; setTimeout(() => $('areaSel').focus(), 50); }
+function closeMenu() { $('menu').hidden = true; }
 
 /* ---------------- wire up ---------------- */
 function init() {
@@ -1539,59 +1731,48 @@ function init() {
   Object.keys(C.AREAS).forEach((id) => {
     const o = document.createElement('option'); o.value = id; o.textContent = C.AREAS[id].name; sel.appendChild(o);
   });
-  sel.addEventListener('change', () => setArea(sel.value, true));
-
-  $('tabMap').addEventListener('click', () => showView('map'));
-  $('tab3d').addEventListener('click', () => showView('3d'));
-  $('infoBtn').addEventListener('click', () => { $('info').hidden = false; });
+  sel.addEventListener('change', () => { if (state.mode === 'demo' && !C.AREAS[sel.value].demo) state.mode = 'live'; setArea(sel.value, true); closeMenu(); });
+  $('menuBtn').addEventListener('click', openMenu);
+  $('menuClose').addEventListener('click', closeMenu);
+  $('menu').addEventListener('click', (e) => { if (e.target === $('menu')) closeMenu(); });
+  $('tabMap').addEventListener('click', () => { showView('map'); closeMenu(); });
+  $('tab3d').addEventListener('click', () => { showView('3d'); closeMenu(); });
+  $('infoBtn').addEventListener('click', () => { closeMenu(); $('info').hidden = false; });
   $('infoClose').addEventListener('click', () => { $('info').hidden = true; });
-  $('keyBtn').addEventListener('click', openKeyDialog);
-  $('keyCancel').addEventListener('click', () => { closeKeyDialog(); if (state.mode === 'none') { state.mode = 'demo'; startFeed(); } });
-  $('keyDemo').addEventListener('click', () => { closeKeyDialog(); state.mode = 'demo'; if (!C.AREAS[state.areaId].demo) setArea('cumberland', false); startFeed(); });
-  $('keyForget').addEventListener('click', () => { storeDel(KEY_STORE); state.key = ''; closeKeyDialog(); state.mode = 'demo'; startFeed(); toast('Key removed from this browser.'); });
-  $('keyForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const k = $('keyInput').value.trim();
-    if (!k) { $('keyInput').focus(); return; }
-    state.key = k;
-    if (!storeSet(KEY_STORE, k)) toast('This browser would not save the key, so it will be asked again next time.');
-    closeKeyDialog();
-    state.mode = 'live';
-    startFeed();
+  $('retryBtn').addEventListener('click', () => { closeMenu(); if (state.mode !== 'live') { state.mode = 'live'; startFeed(); } else if (state.feed && state.feed.retryNow) state.feed.retryNow(); else startFeed(); });
+  $('demoBtn').addEventListener('click', () => { closeMenu(); state.mode = 'demo'; setArea('cumberland', false); startFeed(); });
+  $('keyForget').addEventListener('click', () => { storeDel(OLD_KEY_STORE); $('keyForget').hidden = true; });
+  $('shipList').addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('button[data-mmsi]');
+    if (b) goAboard(Number(b.dataset.mmsi));
   });
-  $('rideSel').addEventListener('change', (e) => {
-    const val = e.target.value;
-    setRide(val ? Number(val) : null);
-    if (val && state.view !== '3d') showView('3d');
-  });
-  $('camChase').addEventListener('click', () => { if (scene3d) scene3d.setCamMode('chase'); renderHud(); });
-  $('camBridge').addEventListener('click', () => { if (scene3d) scene3d.setCamMode('bridge'); renderHud(); });
-  $('camOverview').addEventListener('click', () => setRide(null));
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('info').hidden = true; if (!$('keyDlg').hidden) closeKeyDialog(); } });
+  $('backBtn').addEventListener('click', () => setRide(null));
+  $('camChase').addEventListener('click', () => { if (scene3d) scene3d.setCamMode('chase'); renderAboard(); refreshMark(); });
+  $('camBridge').addEventListener('click', () => { if (scene3d) scene3d.setCamMode('bridge'); renderAboard(); refreshMark(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('info').hidden = true; closeMenu(); } });
 
-  if (MARK) MARK.init({ subject: 'Boats', below: ['header', '.statusrow', '.osmnote'],   // in 3D the label sits under the map credit, never touching it zIndex: 1900,
-    credits: [{ text: 'Map © OpenStreetMap contributors', href: 'https://www.openstreetmap.org/copyright' }, { text: 'AIS: aisstream.io', href: 'https://aisstream.io' }] });
-  mapView.init();
+  if (MARK) MARK.init({ context: 'Boats', loc: 'Los Angeles / Long Beach, CA', signal: { text: 'Connecting…' }, view: '3D render', zIndex: 1500,
+    credits: [{ text: 'Map © OpenStreetMap contributors, © CARTO', href: 'https://www.openstreetmap.org/copyright' }, { text: 'AIS: aisstream.io', href: 'https://aisstream.io' }] });
+  // Open straight into a busy port (Los Angeles / Long Beach) unless the link names an area (#area=newyork).
   const fromHash = /area=([a-z]+)/.exec(location.hash || '');
-  const initialArea = (fromHash && C.AREAS[fromHash[1]]) ? fromHash[1] : (storeGet(AREA_STORE) || 'cumberland');
-  state.key = storeGet(KEY_STORE);
+  const initialArea = (fromHash && C.AREAS[fromHash[1]]) ? fromHash[1] : 'losangeles';
   setArea(initialArea, false);
-  if (state.key) { state.mode = 'live'; startFeed(); }
-  else { state.mode = 'none'; setStatus('idle', 'Not connected'); openKeyDialog(); }
-  updateModeLabels();
+  state.mode = 'live';
+  startFeed();
+  showView('3d');
 
-  // 1 Hz housekeeping: map markers, pruning, HUD, status
+  // 1 Hz housekeeping: list, map markers, pruning, label, plain-words status
   setInterval(() => {
     const now = Date.now();
     if (state.mode === 'live') {
       state.store.prune(now, LIVE_MAX_AGE_MS).forEach((mmsi) => { mapView.remove(mmsi); if (scene3d) scene3d.removeVessel(mmsi); });
     }
     if (state.view === 'map') mapView.tick(now);
-    renderHud();
-    renderStatus();
-    refreshMark();
+    if (state.view === '3d' && !feedNote && tileStats.failed >= 4 && tileStats.ok === 0)
+      setFeedNote("Can't load map tiles from CARTO or OpenStreetMap (blocked or offline), so the water has no coastline.");
+    renderList(false); renderAboard(); renderFeedMsg(); refreshMark();
   }, 1000);
-  refreshMark();
+  renderFeedMsg(); refreshMark();
 }
 
 init();
