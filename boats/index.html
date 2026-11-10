@@ -31,18 +31,18 @@
   #feedMsg.error { border-color:rgba(231,76,60,.7); color:#ffd0ca; }
   #feedMsg.hint { color:#dfe9f1; }
   /* "Ride a ship" list */
-  #ships { position:fixed; z-index:1400; right:calc(10px + env(safe-area-inset-right)); top:calc(64px + env(safe-area-inset-top)); bottom:calc(26px + env(safe-area-inset-bottom)); width:min(360px, 46vw);
+  #ships { position:fixed; z-index:1400; left:calc(10px + env(safe-area-inset-left)); top:calc(150px + env(safe-area-inset-top)); max-height:calc(100dvh - 240px); width:min(230px, 34vw);
            display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line); border-radius:12px; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); overflow:hidden; }
-  #ships h2 { margin:0; padding:12px 14px 2px; font-size:18px; }
-  #shipsSub { padding:0 14px 8px; font-size:12.5px; color:var(--muted); border-bottom:1px solid var(--line); }
+  #ships h2 { margin:0; padding:8px 10px 0; font-size:13px; letter-spacing:.02em; }
+  #shipsSub { padding:0 10px 6px; font-size:11px; color:var(--muted); border-bottom:1px solid var(--line); }
   #shipList { list-style:none; margin:0; padding:4px 0; overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; flex:1; }
   #shipList li { margin:0; }
-  #shipList button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0; border-bottom:1px solid rgba(255,255,255,.07); padding:10px 14px; min-height:56px; }
+  #shipList button { display:block; width:100%; text-align:left; background:none; border:0; border-radius:0; border-bottom:1px solid rgba(255,255,255,.07); padding:6px 10px; min-height:38px; }
   #shipList button:hover, #shipList button:focus-visible { background:rgba(255,255,255,.08); }
-  .sname { display:block; font-weight:600; font-size:15.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .smeta { display:block; font-size:13px; color:var(--muted); }
+  .sname { display:block; font-weight:600; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .smeta { display:block; font-size:11px; color:var(--muted); }
   .smeta .go { float:right; color:#a9d3ff; font-weight:600; }
-  #shipEmpty { padding:14px; color:var(--muted); font-size:14px; }
+  #shipEmpty { padding:10px; color:var(--muted); font-size:12px; }
   /* aboard bar */
   #aboard { position:fixed; left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right)); bottom:calc(26px + env(safe-area-inset-bottom)); z-index:1400;
             display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px; background:var(--panel); border:1px solid var(--line); border-radius:12px; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
@@ -73,8 +73,7 @@
   .vpop .mmsi { color:#667; font-size:11px; }
   .vpop .ridebtn { margin-top:6px; background:#1d3346; color:#fff; border-radius:6px; padding:6px 10px; min-height:34px; }
   @media (max-width:640px) {
-    #ships { left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right)); width:auto; top:auto; height:46dvh; }
-    #feedMsg { top:auto; bottom:calc(46dvh + 36px + env(safe-area-inset-bottom)); }
+    #ships { width:min(200px, 52vw); top:calc(140px + env(safe-area-inset-top)); max-height:38dvh; }
   }
   /* Leaflet 1.9.4 essential layout rules, inlined (the external leaflet.css is not needed; without these rules tiles
      fall into a jumble of squares). Subset of leaflet.css (BSD-2-Clause, (c) Vladimir Agafonkin, CloudMade). */
