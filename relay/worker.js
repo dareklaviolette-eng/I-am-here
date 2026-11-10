@@ -127,7 +127,18 @@ async function aisRelay(request, env, url, headers) {
     try { upstream.close(1000, "done"); } catch (e) {}
     try { server.close(code || 1000, reason || "done"); } catch (e) {}
   };
-  upstream.addEventListener("message", (event) => { try { server.send(event.data); } catch (e) { closeBoth(); } });
+  upstream.addEventListener("message", async (event) => {
+    // aisstream sends JSON as binary frames; turn every frame into text before passing it on.
+    let d = event.data;
+    try {
+      if (typeof d !== "string") {
+        if (d instanceof ArrayBuffer || ArrayBuffer.isView(d)) d = new TextDecoder().decode(d);
+        else if (d && typeof d.arrayBuffer === "function") d = new TextDecoder().decode(await d.arrayBuffer());
+        else d = String(d);
+      }
+      server.send(d);
+    } catch (e) { try { server.send(JSON.stringify({ relayError: "relay could not pass on a ship report (" + (e && e.message || e) + ")" })); } catch (x) {} }
+  });
   upstream.addEventListener("close", (event) => {
     if (!open) return;
     const why = "aisstream.io closed the feed (code " + event.code + (event.reason ? ": " + event.reason : "") + ")";
