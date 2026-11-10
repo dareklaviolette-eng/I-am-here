@@ -23,6 +23,32 @@ export default {
     if (path === "/ais/status") {
       return new Response(JSON.stringify({ ais: true, key: !!(env && env.AISSTREAM_KEY) }), { headers });
     }
+    if (path === "/ais/probe") {
+      // Diagnostic: open aisstream for up to 12 s over Los Angeles and report what came back.
+      if (!env || !env.AISSTREAM_KEY) return new Response(JSON.stringify({ ok: false, why: "no key" }), { headers });
+      const out = { ok: false, opened: false, messages: 0, types: {}, first: null, closed: null };
+      try {
+        const reply = await fetch(AIS_UPSTREAM, { headers: { Upgrade: "websocket", "User-Agent": "imhere-prototype" } });
+        const ws = reply.webSocket;
+        if (!ws) return new Response(JSON.stringify({ ok: false, why: "upstream HTTP " + reply.status }), { headers });
+        ws.accept(); out.opened = true;
+        ws.send(JSON.stringify({ APIKey: env.AISSTREAM_KEY, BoundingBoxes: [[[33.3, -118.6], [34.0, -117.9]]] }));
+        await new Promise((resolve) => {
+          const t = setTimeout(resolve, 12000);
+          ws.addEventListener("message", (e) => {
+            out.messages++;
+            let text = typeof e.data === "string" ? e.data : new TextDecoder().decode(e.data);
+            if (!out.first) out.first = text.slice(0, 300);
+            try { const j = JSON.parse(text); const k = j.MessageType || (j.error ? "error" : "other"); out.types[k] = (out.types[k] || 0) + 1; } catch (x) {}
+            if (out.messages >= 25) { clearTimeout(t); resolve(); }
+          });
+          ws.addEventListener("close", (e) => { out.closed = e.code + " " + (e.reason || ""); clearTimeout(t); resolve(); });
+        });
+        try { ws.close(1000, "probe done"); } catch (x) {}
+        out.ok = out.messages > 0 && !out.types.error;
+      } catch (error) { out.why = String(error && error.message || error); }
+      return new Response(JSON.stringify(out, null, 1), { headers });
+    }
     if (path === "/ais") {
       return aisRelay(request, env, url, headers);
     }
