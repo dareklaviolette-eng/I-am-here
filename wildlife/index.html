@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>I'M HERE · Wildlife: ride along with a tagged animal</title>
+<style>
+:root{--bg:rgba(14,20,26,.78);--line:rgba(255,255,255,.14);--fg:#eef3f6;--dim:#9fb0bc;--acc:#ffb547;--ok:#7fd6a4;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0b141b;color:var(--fg);font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+#stage,#stage canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#map{position:fixed;inset:0;width:100%;height:100%;touch-action:none;background:#0b141b}
+#map[hidden]{display:none}
+button,select,.file{font:inherit;color:var(--fg);background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer;min-height:38px}
+button:hover,select:hover,.file:hover{background:rgba(255,255,255,.16)}
+button:disabled{opacity:.45;cursor:default}
+select option{background:#16212a}
+header{position:fixed;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;padding:calc(8px + env(safe-area-inset-top)) 10px 8px;background:linear-gradient(#0b141bcc,#0b141b00);z-index:5;flex-wrap:wrap}
+.brand{font-weight:600;letter-spacing:.02em;margin-right:auto;white-space:nowrap}
+.brand b{color:var(--acc)} .brand span{color:var(--dim);font-weight:400}
+.views{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.views button{border:0;border-radius:0;background:transparent;padding:8px 14px}
+.views button.on{background:var(--acc);color:#1b1205;font-weight:600}
+#vrslot button,#vrslot a{position:static!important;left:auto!important;bottom:auto!important;width:auto!important;font:inherit!important;font-size:13px!important;padding:8px 12px!important;border-radius:10px!important;border:1px solid var(--line)!important;background:rgba(255,255,255,.08)!important;opacity:1!important;min-height:38px;color:var(--fg)!important}
+aside{position:fixed;top:calc(64px + var(--imh-h,0px));left:10px;width:330px;max-height:calc(100% - 160px - var(--imh-h,0px));overflow:auto;background:var(--bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:10px 12px;z-index:4}
+aside h3{margin:6px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+#tracklist{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:6px}
+#tracklist li{border:1px solid var(--line);border-radius:10px;padding:7px 9px;cursor:pointer}
+#tracklist li.on{border-color:var(--acc);background:rgba(255,181,71,.10)}
+#tracklist .nm{font-weight:600}
+#tracklist .sp{color:var(--dim);font-style:italic;font-size:12px}
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px;margin-top:3px}
+.chip.sample{background:#ffb54733;color:#ffcf85;border:1px solid #ffb54788}
+.chip.real{background:#7fd6a422;color:var(--ok);border:1px solid #7fd6a466}
+.file{display:block;text-align:center;font-weight:600}
+.file input{display:none}
+.hint{color:var(--dim);font-size:12px;margin:6px 0}
+.row{display:flex;gap:8px;align-items:center;margin:6px 0}
+.row label{color:var(--dim);font-size:12px}
+.grid{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-variant-numeric:tabular-nums}
+.grid dt{color:var(--dim)} .grid dd{margin:0;text-align:right}
+.note{font-size:12px;border-left:3px solid var(--acc);padding:4px 8px;margin:8px 0;background:rgba(255,181,71,.07)}
+.note.gap{border-color:#7fb6ff;background:rgba(127,182,255,.08)}
+footer{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:center;padding:8px 10px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(#0b141b00,#0b141bdd);z-index:5;flex-wrap:wrap}
+#play{width:46px;padding:0;display:grid;place-items:center}
+#slider{flex:1 1 200px;accent-color:var(--acc);min-width:140px;height:30px}
+#clock{font-variant-numeric:tabular-nums;font-size:13px;white-space:nowrap}
+#clock small{color:var(--dim)}
+#mini{position:fixed;right:10px;bottom:74px;width:160px;height:160px;border-radius:12px;border:1px solid var(--line);z-index:4;cursor:pointer;background:#0b141b}
+#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#16212af0;border:1px solid var(--line);padding:10px 14px;border-radius:10px;z-index:9;max-width:90vw;display:none}
+#fatal{position:fixed;inset:0;display:none;place-items:center;text-align:center;padding:30px;z-index:20;background:#0b141b}
+#dropzone{position:fixed;inset:0;border:3px dashed var(--acc);z-index:30;display:none;place-items:center;font-size:20px;background:#0b141bcc}
+#menuBtn{display:none}
+@media (max-width:760px){
+  #menuBtn{display:inline-block}
+  aside{top:auto;bottom:118px;left:6px;right:6px;width:auto;max-height:52vh;display:none}
+  aside.open{display:block}
+  #mini{display:none}
+  .brand span{display:none}
+  .views button{padding:8px 11px}
+}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<canvas id="map" hidden></canvas>
+<header>
+  <div class="brand"><b>Wildlife</b> <span>· ride along with a tagged animal</span></div>
+  <div class="views" role="tablist">
+    <button data-view="ride" class="on">Ride</button><button data-view="chase">Chase</button><button data-view="map">Map</button>
+  </div>
+  <div id="vrslot"></div>
+  <button id="menuBtn">Tracks</button>
+</header>
+<aside id="panel">
+  <h3>Tracks</h3>
+  <p class="hint">Sample tracks are made up for the demo. Load a file to ride a real animal.</p>
+  <ul id="tracklist"></ul>
+  <label class="file">Load Movebank CSV or GPX file<input type="file" id="file" accept=".csv,.gpx,.txt,.xml,text/csv,application/gpx+xml" multiple></label>
+  <p class="hint">Files are read on this device only, nothing is uploaded. You can also drag a file onto the page.</p>
+  <div class="row"><label for="worldSel">Landscape</label>
+    <select id="worldSel"><option value="auto">Auto (from species)</option><option value="land">Land, lake &amp; river</option><option value="ocean">Ocean coast</option></select></div>
+  <h3>Now riding</h3>
+  <div id="info"></div>
+</aside>
+<canvas id="mini" title="Open map"></canvas>
+<footer>
+  <button id="play" aria-label="Play/pause"></button>
+  <input type="range" id="slider" min="0" max="10000" step="1" value="0" aria-label="Time">
+  <select id="speed" aria-label="Playback speed"><option value="1">x1</option><option value="10">x10</option><option value="100">x100</option><option value="1000">x1000</option></select>
+  <div id="clock"></div>
+</footer>
+<div id="toast"></div>
+<div id="dropzone">Drop a Movebank CSV or GPX file to ride it</div>
+<div id="fatal"><div><h2>The 3D engine could not load</h2><p id="fatalMsg">This page needs three.js from cdn.jsdelivr.net and a browser with WebGL.</p></div></div>
+
+<script>
+// Classic-script watchdog: if the module never starts (CDN blocked / no WebGL) show a friendly message.
+setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fatal'); if(f) f.style.display='grid'; } }, 15000);
+</script>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+} }
+</script>
+
+<!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
+<script id="imhere-mark">
+/* I'M HERE experience watermark (info card), v3. SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
+   Pasted inline into every prototype page between the IMHERE-MARK markers by
+   node /home/claude/shared/sync-mark.mjs <files...>  (artifact pages cannot share files).
+   Edit here, then re-run the sync. Self-contained: no network, no dependencies.
+
+   Founder's layout (final): one small top-left label (translucent navy, soft blur, 1px border, 8px radius/padding):
+   white title and subject, grey row labels, brighter values; the brand appears only here, not in page top bars.
+       I'M HERE  (faint watermark)      (i)  ×
+       subject · ID
+       • Location – Nashville International (BNA)
+       • Updated – Live | 3 hrs ago | Demo | Fixed | None
+       • Scene – Real | AI render | 3D render | ...
+       • Video – Live | Nov 9, 2026 | None
+   All four rows always shown (value "None" when missing). Only the word "Live" is green.
+   "Live" (Updated/Video) comes only from setLive()/video.live, which pages drive from real data freshness;
+   demo/simulated data never sets it. After ~6 s the card collapses to a small "I'M HERE" corner mark;
+   tapping the mark re-expands it. (i) opens the detail: live stats + provenance (source, last update,
+   live vs recorded/simulated, rendered vs actual imagery). In VR, xrPanel(THREE) is a small HUD panel low
+   in the corner of view, drawn the same way.
+
+   API
+     ImHereMark.init({ subject, id, location, position, scene, video, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.update({ ...same keys })
+        location  place name                                   e.g. 'Nashville International (BNA)'
+        position  value of the "Updated" row: 'Demo' | 'Fixed' | 'None' | { time: msEpoch } ("3 hrs ago"); "Live" while setLive(true)
+        scene     short value                                  e.g. 'Real', '3D render', 'AI render'
+        video     'None' | 'Live' (only for a truly live feed) | { date: msEpoch } (shown "Nov 9, 2026")
+        stats     [[label, value], ...]  shown in the (i) detail
+        tag       { text } status line for the detail ("Now: ...")
+        sceneNote plain sentence in the detail: AI-created/rendered vs actual imagery
+        items     provenance list: { kind, label, source, age, time, timeLabel, note, href, list: [{ text, time | age }] }
+                  kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
+        below     CSS selector(s): the card sits just under the lowest visible one (e.g. the page header)
+     ImHereMark.setLive(true|false)   Updated shows "Live" (green). Only while the data is really fresh.
+     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh HUD panel, kept up to date
+     ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
+   CSS variable --imh-h on <html>: height taken by the card (or the corner mark) + gap, so a page can push its
+   own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
+*/
+(function () {
+  'use strict';
+  if (window.ImHereMark) return;
+  var KINDS = {
+    live: ['LIVE', '#1f9d55'], recorded: ['RECORDED', '#3d82c9'], data: ['REAL DATA', '#2e8f5e'],
+    computed: ['CALCULATED', '#2b7f8c'], estimated: ['ESTIMATED', '#6f7f8f'], assumed: ['ASSUMED', '#6f7f8f'],
+    simulated: ['SIMULATED', '#c47a12'], sample: ['SAMPLE', '#c47a12'], illustrative: ['ILLUSTRATIVE', '#7d5cc4'], ai: ['AI-GENERATED', '#b44a8a']
+  };
+  var NAVY = 'rgba(20,30,50,0.6)', GREY = '#9fb0c0', VALUE = '#e8eef4', GREEN = '#3ddc84';
+  var FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  var COLLAPSE_MS = 6000;
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var CSS =
+    '.imh-box,.imh-mini{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imh-z,1500);' +
+    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.14);' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);font:11px/1.25 ' + FONT + ';' +
+    'letter-spacing:normal;text-align:left;text-shadow:none;pointer-events:auto;-webkit-tap-highlight-color:transparent}' +
+    '.imh-box[hidden],.imh-mini[hidden],.imh-src[hidden],.imh-box [hidden]{display:none}' +
+    '.imh-box{width:min(190px,45vw);padding:8px}' +
+    '.imh-box.imh-wide{width:min(300px,calc(100vw - 20px))}' +
+    '.imh-r1{display:flex;align-items:center;gap:5px;min-height:18px}' +
+    '.imh-brand{font-weight:300;font-size:11px;letter-spacing:.28em;flex:none;color:#fff;opacity:.3}' +   /* faint watermark, not a title */
+    '.imh-i,.imh-x{flex:none;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;' +
+    'color:#dfe7ee;user-select:none;-webkit-user-select:none;position:relative}' +
+    '.imh-i::after,.imh-x::after{content:"";position:absolute;inset:-7px}' +   /* bigger touch target */
+    '.imh-i{margin-left:auto;font:italic 700 10.5px/1 Georgia,serif;border:1.3px solid rgba(255,255,255,.55)}' +
+    '.imh-x{font-size:14px;line-height:1;background:rgba(255,255,255,.1)}' +
+    '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
+    '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
+    '.imh-r2{margin-top:2px;font-weight:600;font-size:11px;color:#fff;overflow-wrap:anywhere}' +
+    '.imh-rows{list-style:none;margin:3px 0 0;padding:0;color:' + GREY + ';font-size:11px;line-height:1.3}' +
+    '.imh-rows li{margin:0;padding:0 0 0 9px;position:relative;overflow-wrap:anywhere}' +
+    '.imh-rows li::before{content:"•";position:absolute;left:0;color:' + GREY + '}' +
+    '.imh-rows .imh-l{font-size:10px;color:' + GREY + '}' +
+    '.imh-rows .imh-v{color:' + VALUE + '}.imh-rows .imh-v.imh-g{color:' + GREEN + ';font-weight:700}' +
+    '.imh-src{margin-top:5px;max-height:min(46vh,360px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;' +
+    'border-top:1px solid rgba(255,255,255,.14);font-size:11px;line-height:1.3}' +
+    '.imh-ph{font-weight:700;font-size:11px;margin-top:5px;color:#fff}' +
+    '.imh-r3{display:flex;flex-wrap:wrap;gap:3px 12px;margin:4px 0 2px}' +
+    '.imh-st{display:flex;flex-direction:column;min-width:0}' +
+    '.imh-st i{font-style:normal;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:' + GREY + '}' +
+    '.imh-st b{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}' +
+    '.imh-it{border-bottom:1px solid rgba(255,255,255,.08);padding:5px 0 4px}' +
+    '.imh-k{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;padding:0 4px;border-radius:3px;color:#fff;margin-right:5px;vertical-align:1px}' +
+    '.imh-lb{font-weight:600}' +
+    '.imh-d{color:' + GREY + ';font-size:10.5px;margin-top:2px;white-space:pre-line}' +
+    '.imh-ls{margin:2px 0 0;padding:0;list-style:none;color:' + GREY + ';font-size:10.5px}' +
+    '.imh-ls li{display:flex;justify-content:space-between;gap:8px;margin:0;padding:0}.imh-ls li span:last-child{flex:none;font-variant-numeric:tabular-nums}' +
+    '.imh-ft{padding-top:5px;color:' + GREY + ';font-size:10px}' +
+    '.imh-box a{color:#a9d3ff}' +
+    '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
+    '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
+
+  var S = { subject: '', id: '', location: '', position: 'None', scene: '3D render', video: 'None', stats: [], tag: null,
+    sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
+  var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
+  var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function fmtAge(ms) {   // "3 s ago", "14 min ago", "3 hrs ago", "5 days ago", "7 yrs ago"
+    if (!(ms >= 0)) return ms < 0 ? 'just now' : '';
+    var s = Math.round(ms / 1000), n;
+    if (s < 2) return 'just now';
+    if (s < 90) return s + ' s ago';
+    if (s < 5400) return Math.round(s / 60) + ' min ago';
+    if (s < 172800) { n = Math.round(s / 3600); return n + (n === 1 ? ' hr' : ' hrs') + ' ago'; }
+    if (s < 63072000) { n = Math.round(s / 86400); return n.toLocaleString('en-US') + ' days ago'; }
+    return Math.round(s / 31557600) + ' yrs ago';
+  }
+  function fmtDate(ms) { var d = new Date(ms); return MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear(); }
+  function credText(c) { return typeof c === 'string' ? c : (c && c.text) || ''; }
+  function link(text, href) {
+    if (!href) return document.createTextNode(text);
+    var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
+  }
+  function line2() { return [S.subject, S.id].filter(function (x) { return x; }).join(' · '); }
+  function posText() {
+    if (S.live) return 'Live';
+    var p = S.position;
+    if (p && typeof p === 'object') return p.time ? fmtAge(Date.now() - p.time) : (p.text || 'None');
+    return p ? (String(p) === 'Live' ? 'None' : String(p)) : 'None';   // a plain "Live" string is never trusted
+  }
+  function videoText() {
+    var v = S.video;
+    if (v && typeof v === 'object') return v.live ? 'Live' : v.date ? fmtDate(v.date) : (v.text || 'None');
+    return v ? (String(v) === 'Live' ? 'None' : String(v)) : 'None';
+  }
+  function rows() { return [['Location', S.location || 'None'], ['Updated', posText()], ['Scene', S.scene || 'None'], ['Video', videoText()]]; }
+  function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
+  function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
+
+  function render() {
+    if (!S.mounted) return;
+    var R = rows();
+    var sig = JSON.stringify([line2(), R, S.dismissed, S.srcOpen, S.live]);
+    if (sig !== lastSig) {
+      lastSig = sig;
+      box.hidden = S.dismissed; mini.hidden = !S.dismissed; miniLive.hidden = !S.live;
+      box.classList.toggle('imh-wide', S.srcOpen);
+      r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
+      rowsEl.textContent = '';
+      R.forEach(function (r) {
+        var li = el('li'); li.appendChild(el('span', 'imh-l', r[0])); li.appendChild(document.createTextNode(' – '));
+        li.appendChild(el('span', 'imh-v' + (r[1] === 'Live' ? ' imh-g' : ''), r[1])); li.title = r[0] + ' – ' + r[1]; rowsEl.appendChild(li);
+      });
+      more.classList.toggle('imh-on', S.srcOpen);
+      more.setAttribute('aria-expanded', String(S.srcOpen));
+      box.setAttribute('aria-label', label());
+      src.hidden = !S.srcOpen;
+      drawXR();
+    }
+    renderSources(); place();
+  }
+  function renderSources() {
+    if (!S.mounted || !S.srcOpen) return;
+    var now = Date.now(), frag = document.createDocumentFragment();
+    var st = (S.stats || []).filter(Boolean);
+    if (st.length) {
+      var r3 = el('div', 'imh-r3');
+      st.forEach(function (s) { var d = el('div', 'imh-st'); d.appendChild(el('i', null, s[0])); d.appendChild(el('b', null, s[1] == null || s[1] === '' ? '–' : String(s[1]))); r3.appendChild(d); });
+      frag.appendChild(r3);
+    }
+    frag.appendChild(el('div', 'imh-ph', 'Where this comes from'));
+    var sc = el('div', 'imh-d'); sc.appendChild(el('b', null, 'Scene: ')); sc.appendChild(document.createTextNode(S.sceneNote || SCENE_NOTE_DEFAULT)); frag.appendChild(sc);
+    if (statusText()) frag.appendChild(el('div', 'imh-d', 'Now: ' + statusText()));
+    S.items.forEach(function (it) {
+      if (!it) return;
+      var k = KINDS[it.kind] || [String(it.kind || 'INFO').toUpperCase(), '#6f7f8f'];
+      var d = el('div', 'imh-it'), h = el('div'), kb = el('span', 'imh-k', k[0]);
+      kb.style.background = k[1]; h.appendChild(kb); h.appendChild(el('span', 'imh-lb', it.label || '')); d.appendChild(h);
+      var lines = [];
+      if (it.source) lines.push('Source: ' + it.source);
+      var age = it.time ? fmtAge(now - it.time) : it.age;
+      if (age) lines.push((it.time ? (it.timeLabel || 'Updated') + ' ' : '') + age);
+      if (it.note) lines.push(it.note);
+      if (lines.length) d.appendChild(el('div', 'imh-d', lines.join('\n')));
+      if (it.href) { var lk = el('div', 'imh-d'); lk.appendChild(link('More about this source', it.href)); d.appendChild(lk); }
+      if (it.list && it.list.length) {
+        var ul = el('ul', 'imh-ls'), max = 30;
+        it.list.slice(0, max).forEach(function (r) {
+          var li = el('li'); li.appendChild(el('span', null, r.text || ''));
+          li.appendChild(el('span', null, r.time ? fmtAge(now - r.time) : (r.age || ''))); ul.appendChild(li);
+        });
+        if (it.list.length > max) { var m = el('li'); m.appendChild(el('span', null, '+ ' + (it.list.length - max) + ' more')); ul.appendChild(m); }
+        d.appendChild(ul);
+      }
+      frag.appendChild(d);
+    });
+    var cr = S.credits.filter(credText);
+    if (cr.length) {
+      var ft = el('div', 'imh-ft'); ft.appendChild(document.createTextNode('Credits: '));
+      cr.forEach(function (c, i) { if (i) ft.appendChild(document.createTextNode(' · ')); ft.appendChild(link(credText(c), c.href)); });
+      frag.appendChild(ft);
+    }
+    var tmp = el('div'); tmp.appendChild(frag.cloneNode(true));
+    if (tmp.innerHTML === lastSrcSig) return;
+    lastSrcSig = tmp.innerHTML; src.textContent = ''; src.appendChild(frag);
+  }
+  function visible(e) {
+    if (!e || !e.getClientRects().length) return false;
+    var cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none';
+  }
+  var lastTop = null, lastH = null;
+  function place() {
+    if (!S.mounted) return;
+    var top = null;
+    S.below.forEach(function (sel) {
+      var list; try { list = document.querySelectorAll(sel); } catch (e) { return; }
+      for (var i = 0; i < list.length; i++) {
+        if (!visible(list[i])) continue;
+        var b = list[i].getBoundingClientRect();
+        if (b.bottom > 0 && b.bottom < innerHeight * 0.5) top = Math.max(top || 0, b.bottom + 6);
+      }
+    });
+    var t = top == null ? '' : Math.round(top) + 'px';
+    if (t !== lastTop) { lastTop = t; box.style.top = t; mini.style.top = t; }
+    // pages push their own top-left panels down by the compact card height (not the opened detail, which overlays)
+    var r = (S.dismissed ? mini : box).getBoundingClientRect(), h = S.srcOpen ? lastH : Math.round(r.height + 12) + 'px';   // +12: clear gap to any panel below
+    if (h && h !== lastH) { lastH = h; document.documentElement.style.setProperty('--imh-h', h); }
+  }
+  function expand() { collapseAt = Date.now() + COLLAPSE_MS; if (S.dismissed) { S.dismissed = false; render(); } }
+  function setDismissed(d, focus) {
+    S.dismissed = !!d; if (d) S.srcOpen = false; else collapseAt = Date.now() + COLLAPSE_MS;
+    render();
+    if (focus) try { (d ? mini : box).focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  }
+  function tick() {   // auto-collapse ~6 s after showing, unless the detail is open or the pointer/focus is on the card
+    if (!S.mounted || S.dismissed || S.srcOpen || hovering || box.contains(document.activeElement)) { collapseAt = Math.max(collapseAt, Date.now() + 1500); return; }
+    if (Date.now() >= collapseAt) setDismissed(true, false);
+  }
+  function stop(e) { e.stopPropagation(); }
+  function button(e, fn) {
+    e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0');
+    e.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); });
+    e.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fn(); } });
+  }
+  function mount() {
+    if (S.mounted) return;
+    if (!document.body) { document.addEventListener('DOMContentLoaded', mount); return; }
+    if (!document.getElementById('imh-style')) { var st = el('style', null, CSS); st.id = 'imh-style'; document.head.appendChild(st); }
+    box = el('div', 'imh-box'); box.id = 'imh-card'; box.setAttribute('role', 'region'); box.setAttribute('tabindex', '-1');
+    var r1 = el('div', 'imh-r1');
+    r1.appendChild(el('span', 'imh-brand', "I'M HERE"));
+    more = el('span', 'imh-i', 'i'); more.setAttribute('aria-label', 'Details: live stats, sources, last update, live or recorded'); more.title = 'Details and sources';
+    button(more, function () { S.srcOpen = !S.srcOpen; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); });
+    r1.appendChild(more);
+    var x = el('span', 'imh-x', '×'); x.setAttribute('aria-label', 'Hide the I\'M HERE card'); x.title = 'Hide';
+    button(x, function () { setDismissed(true, true); });
+    r1.appendChild(x); box.appendChild(r1);
+    r2 = el('div', 'imh-r2'); box.appendChild(r2);
+    rowsEl = el('ul', 'imh-rows'); box.appendChild(rowsEl);
+    var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
+    more.addEventListener('mouseenter', function () {
+      if (!S.srcOpen && window.matchMedia && matchMedia('(hover: hover)').matches) { hoverOpen = true; S.srcOpen = true; lastSrcSig = ''; render(); }
+    });
+    more.addEventListener('click', function (e) { if (hoverOpen) { hoverOpen = false; e.stopImmediatePropagation(); e.stopPropagation(); } }, true);   // pin, don't close
+    box.addEventListener('mouseenter', function () { hovering = true; });
+    box.addEventListener('mouseleave', function () { hovering = false; collapseAt = Math.max(collapseAt, Date.now() + 3000); if (hoverOpen) { hoverOpen = false; S.srcOpen = false; render(); } });
+    src = el('div', 'imh-src'); src.hidden = true; box.appendChild(src);
+    mini = el('div', 'imh-mini', "I'M HERE"); mini.id = 'imh-mark'; mini.hidden = true;
+    miniLive = el('span', 'imh-g', 'Live'); miniLive.hidden = true; mini.appendChild(miniLive);
+    mini.setAttribute('aria-label', "I'M HERE: show the info card"); mini.title = 'Show info';
+    button(mini, function () { setDismissed(false, true); });
+    ['pointerdown', 'pointermove', 'touchstart', 'touchmove', 'wheel', 'mousedown'].forEach(function (ev) {   // keep taps/scrolls off the 3D view underneath
+      box.addEventListener(ev, stop, { passive: true }); mini.addEventListener(ev, stop, { passive: true });
+    });
+    box.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.srcOpen) { S.srcOpen = false; render(); } });
+    document.body.appendChild(box); document.body.appendChild(mini);
+    S.mounted = true; collapseAt = Date.now() + COLLAPSE_MS;
+    document.documentElement.style.setProperty('--imh-z', String(S.z));
+    render();
+    addEventListener('resize', place);
+    setInterval(function () { render(); tick(); }, 1000);   // keeps "x ago" values current
+  }
+  function apply(o) {
+    if (!o) return;
+    ['subject', 'id', 'location', 'scene', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.position !== undefined) S.position = o.position;
+    if (o.video !== undefined) S.video = o.video;
+    if (o.stats) S.stats = [].concat(o.stats);
+    if (o.tag !== undefined) S.tag = o.tag;
+    if (o.items) S.items = [].concat(o.items);
+    if (o.credits) S.credits = [].concat(o.credits);
+    if (o.below) S.below = [].concat(o.below);
+    if (o.zIndex != null) S.z = +o.zIndex || 1500;
+  }
+
+  // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
+  function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  function drawXR() {
+    if (!xr) return;
+    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = 'rgba(20,30,50,0.78)'; rr(g, 3, 3, W - 6, H - 6, 22); g.fill();   // a bit denser in VR for legibility
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
+    g.textBaseline = 'alphabetic'; g.fillStyle = '#fff';
+    g.save(); g.globalAlpha = 0.3; g.font = '300 32px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '9px'; g.fillText("I'M HERE", 28, 54); g.restore();   // faint watermark
+    g.font = '600 30px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 98);
+    var y = 140;
+    rows().forEach(function (r) {
+      g.fillStyle = GREY; g.font = '400 26px ' + FONT; var lt = '•  ' + r[0] + ' – ';
+      g.fillText(lt, 28, y); var lw = g.measureText(lt).width;
+      g.font = (r[1] === 'Live' ? '700 ' : '400 ') + '28px ' + FONT; g.fillStyle = r[1] === 'Live' ? GREEN : VALUE;
+      g.fillText(fit(g, r[1], W - 56 - lw), 28 + lw, y); y += 38;
+    });
+    xr.tex.needsUpdate = true;
+  }
+  function xrPanel(THREE, o) {
+    o = o || {};
+    if (!xr) {
+      var c = document.createElement('canvas'); c.width = 512; c.height = 300;
+      var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+      xr = { canvas: c, tex: tex };
+    }
+    var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 300 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
+    m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
+    m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
+    drawXR(); return m;
+  }
+
+  window.ImHereMark = {
+    init: function (o) { apply(o); mount(); lastSig = ''; render(); return this; },
+    update: function (o) { apply(o); render(); return this; },
+    setLive: function (on) { on = !!on; if (on !== S.live) { S.live = on; render(); } return this; },
+    isLive: function () { return S.live; },
+    open: function () { if (!S.mounted) return; S.dismissed = false; S.srcOpen = true; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); },
+    close: function () { if (!S.mounted) return; S.srcOpen = false; render(); },
+    dismiss: function () { if (S.mounted) setDismissed(true, false); },
+    expand: function () { if (S.mounted) expand(); },
+    label: label, xrPanel: xrPanel,
+    items: function () { return S.items.slice(); }
+  };
+})();
+</script>
+<!-- IMHERE-MARK:END -->
+<script type="module" id="app">
+import * as THREE from 'three';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* CORE-BEGIN  (pure JS, no three.js: parsers, interpolation, procedural world, sample tracks) */
+const R_EARTH = 6371008.8, DEG = Math.PI / 180;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+const wrapAngle = a => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI; };
+const lerpAngle = (a, b, t) => a + wrapAngle(b - a) * t;
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const dLat = (lat2 - lat1) * DEG, dLon = (lon2 - lon1) * DEG;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * DEG) * Math.cos(lat2 * DEG) * Math.sin(dLon / 2) ** 2;
+  return 2 * R_EARTH * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// Movebank timestamps are UTC "YYYY-MM-DD HH:MM:SS.sss" (no zone). Also accepts ISO 8601 with Z/offset.
+function parseTimestamp(s) {
+  if (s == null) return NaN;
+  s = String(s).trim().replace(/^"|"$/g, '');
+  if (!s) return NaN;
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2})(\.\d+)?)?)?\s*(Z|UTC|[+-]\d{2}:?\d{2})?$/i.exec(s);
+  if (m) {
+    let ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0), m[7] ? Math.round(parseFloat(m[7]) * 1000) : 0);
+    const z = m[8];
+    if (z && /^[+-]/.test(z)) { const sg = z[0] === '-' ? -1 : 1; ms -= sg * (+z.slice(1, 3) * 60 + +z.slice(-2)) * 60000; }
+    return ms;
+  }
+  return Date.parse(s);
+}
+
+function splitCSVLine(line, d) {
+  if (line.indexOf('"') < 0) return line.split(d);
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true; else if (c === d) { out.push(cur); cur = ''; } else cur += c;
+  }
+  out.push(cur); return out;
+}
+const normHeader = h => String(h).replace(/^\uFEFF/, '').trim().replace(/^"|"$/g, '').toLowerCase().replace(/[\s._:]+/g, '-');
+const COLS = {
+  lon: ['location-long', 'location-lon', 'longitude', 'lon', 'long', 'lng'],
+  lat: ['location-lat', 'latitude', 'lat'],
+  time: ['timestamp', 'time', 'datetime', 'date-time', 'study-local-timestamp'],
+  id: ['individual-local-identifier', 'tag-local-identifier', 'individual-id', 'animal-id', 'id', 'name'],
+  taxon: ['individual-taxon-canonical-name', 'taxon', 'species'],
+  alt: ['height-above-ellipsoid', 'height-above-msl', 'height-above-mean-sea-level', 'altitude', 'gps-altitude', 'ele', 'elevation', 'height'],
+  depth: ['depth', 'depth-m', 'depth-meters'],
+};
+
+function parseMovebankCSV(text) {
+  text = String(text).replace(/^\uFEFF/, '');
+  const lines = text.split(/\r\n|\n|\r/);
+  let hi = 0; while (hi < lines.length && !lines[hi].trim()) hi++;
+  if (hi >= lines.length) throw new Error('The file is empty.');
+  const hl = lines[hi];
+  const delim = [',', ';', '\t'].map(d => [d, hl.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const header = splitCSVLine(hl, delim).map(normHeader);
+  const col = names => { for (const n of names) { const i = header.indexOf(n); if (i >= 0) return i; } return -1; };
+  const iLon = col(COLS.lon), iLat = col(COLS.lat), iT = col(COLS.time), iId = col(COLS.id), iTax = col(COLS.taxon);
+  const iAlt = col(COLS.alt), iDep = col(COLS.depth), iVis = col(['visible']);
+  const iO1 = col(['manually-marked-outlier']), iO2 = col(['algorithm-marked-outlier']);
+  if (iLon < 0 || iLat < 0) throw new Error('Could not find location-long / location-lat columns. Columns found: ' + header.slice(0, 12).join(', '));
+  const byId = new Map(); let rows = 0, skipped = 0, hidden = 0;
+  for (let li = hi + 1; li < lines.length; li++) {
+    const line = lines[li]; if (!line || !line.trim()) continue; rows++;
+    const f = splitCSVLine(line, delim);
+    const get = i => (i >= 0 && i < f.length) ? f[i].trim() : '';
+    if (iVis >= 0 && /^false$/i.test(get(iVis))) { hidden++; continue; }
+    if ((iO1 >= 0 && /^true$/i.test(get(iO1))) || (iO2 >= 0 && /^true$/i.test(get(iO2)))) { hidden++; continue; }
+    const lon = parseFloat(get(iLon)), lat = parseFloat(get(iLat));
+    if (!isFinite(lon) || !isFinite(lat) || Math.abs(lat) > 90 || Math.abs(lon) > 360 || (lat === 0 && lon === 0)) { skipped++; continue; }
+    const t = iT >= 0 ? parseTimestamp(get(iT)) : NaN;
+    let alt = NaN;
+    if (iAlt >= 0) alt = parseFloat(get(iAlt));
+    else if (iDep >= 0) { const d = parseFloat(get(iDep)); if (isFinite(d)) alt = -Math.abs(d); }
+    const id = (iId >= 0 && get(iId)) || 'track 1';
+    let tr = byId.get(id);
+    if (!tr) { tr = { id, taxon: get(iTax), points: [] }; byId.set(id, tr); }
+    if (!tr.taxon && iTax >= 0) tr.taxon = get(iTax);
+    tr.points.push({ t, lat, lon, alt });
+  }
+  return { tracks: [...byId.values()], rows, skipped, hidden, altKind: iAlt >= 0 ? header[iAlt] : (iDep >= 0 ? 'depth' : null) };
+}
+
+const xmlText = s => s == null ? '' : String(s).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').trim();
+function xmlAttr(tag, name) { const m = new RegExp('\\b' + name + '\\s*=\\s*["\']([^"\']*)["\']', 'i').exec(tag); return m ? m[1] : null; }
+function xmlChild(inner, name) { const m = new RegExp('<' + name + '\\b[^>]*>([\\s\\S]*?)</' + name + '>', 'i').exec(inner || ''); return m ? xmlText(m[1]) : null; }
+
+function parseGPX(text) {
+  text = String(text);
+  if (!/<gpx\b/i.test(text)) throw new Error('This does not look like a GPX file.');
+  let blocks = text.match(/<trk\b[\s\S]*?<\/trk>/gi) || [];
+  let tag = 'trkpt';
+  if (!blocks.length) { blocks = [text]; tag = /<rtept\b/i.test(text) ? 'rtept' : 'wpt'; }
+  const docName = xmlChild((/<metadata\b[\s\S]*?<\/metadata>/i.exec(text) || [''])[0], 'name');
+  const tracks = [];
+  blocks.forEach((b, bi) => {
+    const first = b.search(new RegExp('<' + tag + '\\b', 'i'));
+    const name = xmlChild(first > 0 ? b.slice(0, first) : '', 'name') || docName || ('GPX track ' + (bi + 1));
+    const re = new RegExp('<' + tag + '\\b([^>]*?)(?:/>|>([\\s\\S]*?)</' + tag + '>)', 'gi');
+    const points = []; let m;
+    while ((m = re.exec(b))) {
+      const lat = parseFloat(xmlAttr(m[1], 'lat')), lon = parseFloat(xmlAttr(m[1], 'lon'));
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      const ele = parseFloat(xmlChild(m[2], 'ele'));
+      points.push({ lat, lon, alt: isFinite(ele) ? ele : NaN, t: parseTimestamp(xmlChild(m[2], 'time')) });
+    }
+    if (points.length) tracks.push({ id: name, taxon: '', points });
+  });
+  if (!tracks.length) throw new Error('No track points found in the GPX file.');
+  return tracks;
+}
+
+function buildTrack(raw, opts = {}) {
+  let pts = raw.points.filter(p => isFinite(p.lat) && isFinite(p.lon));
+  const withT = pts.filter(p => isFinite(p.t));
+  let timesEstimated = false;
+  if (withT.length >= 2 && withT.length >= pts.length * 0.5) { pts = withT.slice().sort((a, b) => a.t - b.t); }
+  else {
+    timesEstimated = true;
+    const sp = opts.assumedSpeed || 10; let t = Date.UTC(2000, 0, 1); const src = pts;
+    pts = src.map((p, i) => { if (i > 0) t += Math.max(1000, haversine(src[i - 1].lat, src[i - 1].lon, p.lat, p.lon) / sp * 1000); return { ...p, t }; });
+  }
+  const P = [];
+  for (const p of pts) { if (P.length && p.t <= P[P.length - 1].t) continue; P.push(p); }
+  if (P.length < 2) throw new Error(`"${raw.id}" has fewer than 2 usable fixes.`);
+  const n = P.length;
+  const T = new Float64Array(n), lat = new Float64Array(n), lon = new Float64Array(n), alt = new Float64Array(n);
+  let prev = P[0].lon, off = 0, nAlt = 0;
+  for (let i = 0; i < n; i++) {
+    let L = P[i].lon + off;
+    if (L - prev > 180) { off -= 360; L -= 360; } else if (L - prev < -180) { off += 360; L += 360; }
+    lon[i] = L; prev = L; lat[i] = P[i].lat; T[i] = P[i].t; alt[i] = P[i].alt;
+    if (isFinite(P[i].alt)) nAlt++;
+  }
+  const hasAlt = nAlt >= 2 && nAlt >= n * 0.5;
+  let altMin = Infinity, altMax = -Infinity;
+  if (hasAlt) { // fill missing altitudes linearly in time
+    let last = -1;
+    for (let i = 0; i < n; i++) if (isFinite(alt[i])) {
+      if (last < 0) for (let k = 0; k < i; k++) alt[k] = alt[i];
+      else for (let k = last + 1; k < i; k++) alt[k] = lerp(alt[last], alt[i], (T[k] - T[last]) / (T[i] - T[last]));
+      last = i;
+    }
+    for (let k = last + 1; k < n; k++) alt[k] = alt[last];
+    for (let i = 0; i < n; i++) { altMin = Math.min(altMin, alt[i]); altMax = Math.max(altMax, alt[i]); }
+  }
+  const lat0 = lat[0], lon0 = lon[0], kx = R_EARTH * Math.cos(lat0 * DEG) * DEG, kz = R_EARTH * DEG;
+  const x = new Float64Array(n), z = new Float64Array(n), seg = new Float64Array(n), cum = new Float64Array(n);
+  for (let i = 0; i < n; i++) { x[i] = (lon[i] - lon0) * kx; z[i] = -(lat[i] - lat0) * kz; }
+  for (let i = 0; i < n - 1; i++) { seg[i] = haversine(lat[i], lon[i], lat[i + 1], lon[i + 1]); cum[i + 1] = cum[i] + seg[i]; }
+  const tang = a => { const m = new Float64Array(n);
+    for (let i = 0; i < n; i++) { const i0 = Math.max(0, i - 1), i1 = Math.min(n - 1, i + 1); m[i] = (a[i1] - a[i0]) / ((T[i1] - T[i0]) / 1000); }
+    return m; };
+  const dts = []; for (let i = 0; i < n - 1; i++) dts.push(T[i + 1] - T[i]); dts.sort((a, b) => a - b);
+  return {
+    id: raw.id, taxon: raw.taxon || '', name: opts.name || raw.id, isSample: !!opts.isSample, source: opts.source || '',
+    n, t: T, lat, lon, alt: hasAlt ? alt : null, x, z, seg, cum,
+    mx: tang(x), mz: tang(z), ma: hasAlt ? tang(alt) : null,
+    lat0, lon0, t0: T[0], t1: T[n - 1], totalDist: cum[n - 1], medianDt: dts[dts.length >> 1],
+    hasAlt, altMin, altMax, altBaseOverride: opts.altBase, timesEstimated,
+  };
+}
+
+function findSeg(tr, tm) { // largest i with t[i] <= tm, limited to [0, n-2]
+  const T = tr.t; let lo = 0, hi = tr.n - 1;
+  if (tm <= T[0]) return 0; if (tm >= T[hi]) return hi - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (T[mid] <= tm) lo = mid; else hi = mid; }
+  return lo;
+}
+
+// Cubic Hermite (time-parameterised Catmull-Rom style) interpolation between GPS fixes.
+function sampleTrack(tr, tm, out = {}) {
+  const T = tr.t; tm = clamp(tm, T[0], T[tr.n - 1]);
+  const i = findSeg(tr, tm), j = i + 1, h = (T[j] - T[i]) / 1000, s = h > 0 ? clamp((tm - T[i]) / 1000 / h, 0, 1) : 0;
+  const s2 = s * s, s3 = s2 * s;
+  const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
+  const d00 = 6 * s2 - 6 * s, d10 = 3 * s2 - 4 * s + 1, d01 = -6 * s2 + 6 * s, d11 = 3 * s2 - 2 * s;
+  const e00 = 12 * s - 6, e10 = 6 * s - 4, e01 = 6 - 12 * s, e11 = 6 * s - 2;
+  const P = (a, m) => h00 * a[i] + h10 * h * m[i] + h01 * a[j] + h11 * h * m[j];
+  const V = (a, m) => (d00 * a[i] + d10 * h * m[i] + d01 * a[j] + d11 * h * m[j]) / h;
+  const A = (a, m) => (e00 * a[i] + e10 * h * m[i] + e01 * a[j] + e11 * h * m[j]) / (h * h);
+  out.t = tm; out.i = i; out.s = s; out.gap = h;
+  out.x = P(tr.x, tr.mx); out.z = P(tr.z, tr.mz);
+  out.vx = V(tr.x, tr.mx); out.vz = V(tr.z, tr.mz);
+  const ax = A(tr.x, tr.mx), az = A(tr.z, tr.mz);
+  out.speed = Math.hypot(out.vx, out.vz);
+  out.omega = (out.vz * ax - out.vx * az) / (out.vx * out.vx + out.vz * out.vz + 1e-9); // d(yaw)/dt, yaw = atan2(vx, vz)
+  if (tr.hasAlt) { out.alt = P(tr.alt, tr.ma); out.valt = V(tr.alt, tr.ma); } else { out.alt = null; out.valt = 0; }
+  out.dist = tr.cum[i] + tr.seg[i] * s;
+  out.lat = lerp(tr.lat[i], tr.lat[j], s); out.lon = lerp(tr.lon[i], tr.lon[j], s);
+  return out;
+}
+
+const OCEAN_RE = /carcharodon|shark|selachi|carcharhin|rhincodon|whale|balaen|megaptera|orcinus|orca|dolphin|delphin|tursiops|seal|phoca|mirounga|zalophus|sea lion|turtle|chelonia|caretta|dermochelys|tuna|thunnus|salmo|manta|mobula|marlin|fish/i;
+const detectMode = (taxon, name) => OCEAN_RE.test((taxon || '') + ' ' + (name || '')) ? 'ocean' : 'land';
+
+// ---------- procedural world (deterministic noise) ----------
+function hash2(ix, iz, seed) {
+  let h = Math.imul(ix | 0, 374761393) ^ Math.imul(iz | 0, 668265263) ^ Math.imul((seed | 0) + 1013, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function vnoise(x, z, seed) {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
+  const ux = fx * fx * (3 - 2 * fx), uz = fz * fz * (3 - 2 * fz);
+  const a = hash2(ix, iz, seed), b = hash2(ix + 1, iz, seed), c = hash2(ix, iz + 1, seed), d = hash2(ix + 1, iz + 1, seed);
+  return (a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz) * 2 - 1;
+}
+function fbm(x, z, oct, seed) {
+  let s = 0, a = 0.5, f = 1, nrm = 0;
+  for (let o = 0; o < oct; o++) { s += a * vnoise(x * f + o * 17.3, z * f - o * 9.1, seed + o * 31); nrm += a; a *= 0.5; f *= 2.03; }
+  return s / nrm;
+}
+const riverX = z => 700 * Math.sin(z / 2600) + 260 * Math.sin(z / 830 + 1.3) + 110 * Math.sin(z / 310 + 0.4);
+const riverHalfWidth = z => 48 + 950 * Math.pow(Math.max(0, Math.sin(z / 7000 + 2.0)), 6); // reservoir bulges ~44 km apart
+const forestNoise = (x, z) => fbm(x / 900, z / 900, 3, 11);
+
+function landHeight(x, z) {
+  const rx = riverX(z), hw = riverHalfWidth(z) * (1 + 0.28 * fbm(x / 450, z / 450, 2, 7)), d = Math.abs(x - rx);
+  const hills = 58 + 48 * fbm(x / 3200, z / 3200, 4, 1) + 9 * fbm(x / 480, z / 480, 3, 2);
+  const valley = smooth(hw, hw + 1700, d);
+  const base = 1.6 + hills * (0.1 + 0.9 * valley);
+  const bed = -2 - 9 * (1 - Math.min(1, d / hw));
+  return lerp(base, bed, smooth(hw + 25, hw - 25, d));
+}
+const coastMeander = u => 2600 * Math.sin(u / 31000) + 1300 * Math.sin(u / 9000 + 1) + 420 * Math.sin(u / 2300 + 2);
+function oceanHeight(w, x, z) {
+  const u = x * w.ax + z * w.az, v = x * w.nx + z * w.nz;
+  const d = (w.coastV + coastMeander(u) + 350 * fbm(u / 1600, 3.7, 3, 5)) - v; // >0 = offshore distance
+  let h;
+  if (d > 0) h = -(d * 0.009 + 30 * (1 - Math.exp(-d / 300))) + 5 * fbm(x / 700, z / 700, 3, 9);
+  else h = (-d) * 0.02 + 25 * (1 - Math.exp(d / 400)) + 140 * smooth(0, 3500, -d) * (0.55 + fbm(x / 2200, z / 2200, 4, 3));
+  return Math.max(h - 1, -900);
+}
+function makeWorld(mode, tr) {
+  const w = { mode, ax: 0, az: 1, nx: 1, nz: 0, coastV: 0 };
+  if (mode === 'ocean' && tr) {
+    let mx = 0, mz = 0; const n = tr.n, st = Math.max(1, Math.floor(n / 2000)); let c = 0;
+    for (let i = 0; i < n; i += st) { mx += tr.x[i]; mz += tr.z[i]; c++; } mx /= c; mz /= c;
+    let sxx = 0, szz = 0, sxz = 0;
+    for (let i = 0; i < n; i += st) { const dx = tr.x[i] - mx, dz = tr.z[i] - mz; sxx += dx * dx; szz += dz * dz; sxz += dx * dz; }
+    const ang = 0.5 * Math.atan2(2 * sxz, sxx - szz);
+    let ax = Math.cos(ang), az = Math.sin(ang);
+    if ((tr.x[n - 1] - tr.x[0]) * ax + (tr.z[n - 1] - tr.z[0]) * az < 0) { ax = -ax; az = -az; }
+    if (Math.abs(sxx) + Math.abs(szz) < 1) { ax = 0; az = 1; }
+    w.ax = ax; w.az = az; w.nx = az; w.nz = -ax;
+    let mxv = -Infinity;
+    for (let i = 0; i < n; i++) { const u = tr.x[i] * w.ax + tr.z[i] * w.az, v = tr.x[i] * w.nx + tr.z[i] * w.nz; mxv = Math.max(mxv, v - coastMeander(u) + 350); }
+    w.coastV = mxv + 4500;
+  }
+  return w;
+}
+const terrainHeight = (w, x, z) => w.mode === 'ocean' ? oceanHeight(w, x, z) : landHeight(x, z);
+
+function renderAltitude(tr, w, s, groundH) {
+  if (w.mode === 'ocean') {
+    let y = (tr.hasAlt && s.alt != null) ? s.alt - (tr.altBaseOverride ?? 0) : -4;
+    y = Math.min(y, -0.6);
+    return Math.max(y, groundH + 2);
+  }
+  const ground = Math.max(groundH, 0);
+  const y = (tr.hasAlt && s.alt != null) ? s.alt - (tr.altBaseOverride ?? (tr.altMin - 10)) : ground + 120;
+  return Math.max(y, ground + 1.5);
+}
+
+// ---------- helpers ----------
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function xzToLatLon(x, z, lat0, lon0) { return [lat0 - z / (R_EARTH * DEG), lon0 + x / (R_EARTH * Math.cos(lat0 * DEG) * DEG)]; }
+const pad2 = v => String(v).padStart(2, '0');
+function formatUTC(ms) { const d = new Date(ms); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`; }
+function formatDuration(ms) { const s = Math.max(0, Math.floor(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return (d ? d + 'd ' : '') + (d || h ? h + 'h ' : '') + pad2(m) + 'm' + (d ? '' : ' ' + pad2(s % 60) + 's'); }
+const formatDist = m => m < 1000 ? Math.round(m) + ' m' : (m < 100000 ? (m / 1000).toFixed(2) : Math.round(m / 1000).toLocaleString('en-US')) + ' km';
+function chooseSpeed(durMs) { for (const s of [1, 10, 100, 1000]) if (durMs / s <= 10 * 60 * 1000) return s; return 1000; }
+function movebankRow(eid, ms, lon, lat, hae, taxon, id) {
+  const ts = formatUTC(ms) + '.000';
+  return [eid, 'true', ts, lon.toFixed(7), lat.toFixed(7), hae.toFixed(1), 'gps', taxon, id + '-tag', id, '"SAMPLE - synthetic, not real data"'].join(',');
+}
+const MB_HEADER = 'event-id,visible,timestamp,location-long,location-lat,height-above-ellipsoid,sensor-type,individual-taxon-canonical-name,tag-local-identifier,individual-local-identifier,study-name';
+
+// SAMPLE (synthetic) bald eagle: thermal soaring + glides along a river/reservoir; NOT real data.
+const EAGLE_ALT_BASE = 150;
+function genEagleCSV() {
+  const rnd = mulberry32(1776), lat0 = 36.295, lon0 = -86.6, t0 = Date.UTC(2025, 4, 17, 14, 0, 0);
+  let x = riverX(0) + riverHalfWidth(0) + 70, z = 0, y = Math.max(landHeight(x, z), 0) + 17;
+  let hdg = Math.PI, state = 'perch', timer = 45, dir = 1, cool = 240, sp = 0, vy = 0, weave = 0;
+  const wind = [1.6, 0.5], DUR = 5400, FIX = 5, rows = [MB_HEADER]; let eid = 1;
+  for (let sec = 0; sec <= DUR; sec++) {
+    const ground = Math.max(landHeight(x, z), 0), agl = y - ground, hw = riverHalfWidth(z), overWater = Math.abs(x - riverX(z)) < hw * 0.8;
+    cool--; let steer = false;
+    if (state === 'perch') { sp = 0; vy = 0; if (--timer <= 0 && sec < DUR - 300) state = 'climb'; }
+    else if (state === 'climb') { sp = Math.min(12, sp + 1.5); vy = 2.2; steer = true; if (agl > 70) state = 'glide'; }
+    else if (state === 'glide') {
+      sp = 15; vy = -0.9; steer = true;
+      if (agl < 110 && !overWater) { state = 'thermal'; timer = 150 + rnd() * 150; dir = rnd() < 0.5 ? -1 : 1; }
+      else if (agl < 110) vy = 0.3;
+      if (overWater && hw > 250 && cool <= 0 && rnd() < 0.02) { state = 'dive'; cool = 900; }
+      if (sec > DUR - 260) state = 'land';
+    }
+    else if (state === 'thermal') {   // soaring climb while travelling: gentle S-turns along the river, never full circles
+      sp = 11; vy = 2.0 + 0.8 * Math.sin(sec / 9);
+      const za = z - 1200, want = Math.atan2(riverX(za) + 260 * Math.sin(sec / 300) - x, za - z);
+      weave += 0.07; hdg = want + dir * 0.5 * Math.sin(weave);
+      if (agl > 650 || --timer <= 0) state = sec > DUR - 400 ? 'land' : 'glide';
+    }
+    else if (state === 'dive') { sp = 19; vy = -7; if (agl < 6) { state = 'skim'; timer = 5; } }
+    else if (state === 'skim') { sp = 10; vy = agl < 3 ? 0.5 : -1.5; if (--timer <= 0) state = 'climb'; }
+    else if (state === 'land') { sp = Math.max(4, sp - 0.05); vy = agl > 40 ? -3 : -1; steer = true; if (agl < 19 && !overWater) { state = 'perch'; timer = 1e9; } }
+    if (steer) {
+      const za = z - 1200, tx = riverX(za) + 260 * Math.sin(sec / 300), want = Math.atan2(tx - x, za - z);
+      hdg += clamp(wrapAngle(want - hdg), -0.05, 0.05) + (rnd() - 0.5) * 0.02;
+    }
+    hdg = wrapAngle(hdg);
+    if (state !== 'perch') {
+      const wf = state === 'thermal' ? 1 : 0.3;
+      x += Math.sin(hdg) * sp + wind[0] * wf; z += Math.cos(hdg) * sp + wind[1] * wf; y += vy;
+      const g2 = Math.max(landHeight(x, z), 0); if (y < g2 + 2) y = g2 + 2;
+    }
+    if (sec % FIX === 0) {
+      const [la, lo] = xzToLatLon(x + (rnd() - 0.5) * 3, z + (rnd() - 0.5) * 3, lat0, lon0);
+      rows.push(movebankRow(eid++, t0 + sec * 1000, lo, la, y + EAGLE_ALT_BASE + (rnd() - 0.5) * 2, 'Haliaeetus leucocephalus', 'SAMPLE-EAGLE-01'));
+    }
+  }
+  return rows.join('\n');
+}
+// SAMPLE (synthetic) white shark: 4-day coastal migration with dive cycles; NOT real data.
+function genSharkCSV() {
+  const rnd = mulberry32(4242), lat0 = 36.55, lon0 = -122.15, t0 = Date.UTC(2025, 10, 3, 6, 0, 0);
+  let x = 0, z = 0, hdg = 0.3; const DUR = 4 * 86400, STEP = 60, FIX = 1200, rows = [MB_HEADER]; let eid = 1;
+  for (let sec = 0; sec <= DUR; sec += STEP) {
+    if (sec % FIX === 0) {
+      const depth = 3 + 32 * Math.pow(0.5 + 0.5 * Math.sin(sec / 5400 * 2 * Math.PI), 2) + 18 * Math.max(0, Math.sin((sec / 86400 - 0.1) * 2 * Math.PI)) + rnd() * 3;
+      const [la, lo] = xzToLatLon(x, z, lat0, lon0);
+      rows.push(movebankRow(eid++, t0 + sec * 1000, lo, la, -depth, 'Carcharodon carcharias', 'SAMPLE-SHARK-01'));
+    }
+    hdg += (rnd() - 0.5) * 0.03 + (0.3 - hdg) * 0.004;
+    const sp = 1.25 + 0.35 * Math.sin(sec / 15000) + (rnd() - 0.5) * 0.1;
+    x += Math.sin(hdg) * sp * STEP; z += Math.cos(hdg) * sp * STEP;
+  }
+  return rows.join('\n');
+}
+/* CORE-END */
+
+// ======================= UI + rendering (needs three.js) =======================
+const $ = s => document.querySelector(s);
+const toastEl = $('#toast'); let toastTimer = 0;
+function toast(msg, ms = 4500) { toastEl.textContent = msg; toastEl.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.style.display = 'none', ms); }
+function fatal(msg) { $('#fatalMsg').textContent = msg; $('#fatal').style.display = 'grid'; }
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
+} catch (e) { fatal('WebGL is not available in this browser, so the 3D ride cannot start.'); throw e; }
+window.__wlReady = true;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.xr.enabled = true;
+$('#stage').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 90000);
+const rig = new THREE.Group(); rig.add(camera); scene.add(rig);
+const SUN_DIR = new THREE.Vector3(-0.45, 0.6, -0.66).normalize();
+const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x4a5a3a, 1.15); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff0d8, 2.4); sun.position.copy(SUN_DIR).multiplyScalar(1000); scene.add(sun);
+
+const C = h => new THREE.Color(h);
+const PAL = {
+  land: { zenith: C('#3f78c4'), horizon: C('#c9dbe6'), fog: [1200, 9000], deep: C('#1f4a52'), shallow: C('#3d7a78') },
+  ocean: { zenith: C('#3a74bd'), horizon: C('#d2e1ea'), fog: [2500, 18000], deep: C('#0c3a55'), shallow: C('#2b7a8c') },
+  under: C('#0c4d68'),
+};
+const fogAbove = new THREE.Fog(PAL.land.horizon.clone(), 1500, 12000);
+const fogUnder = new THREE.Fog(PAL.under.clone(), 0.5, 85);
+scene.fog = fogAbove; scene.background = PAL.land.horizon.clone();
+
+// ---- sky dome ----
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+  uniforms: { uZenith: { value: PAL.land.zenith.clone() }, uHorizon: { value: PAL.land.horizon.clone() }, uSun: { value: SUN_DIR } },
+  vertexShader: `#include <common>
+    #include <logdepthbuf_pars_vertex>
+    varying vec3 vDir;
+    void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    #include <logdepthbuf_vertex>
+    }`,
+  fragmentShader: `#include <common>
+    #include <logdepthbuf_pars_fragment>
+    uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uSun; varying vec3 vDir;
+    void main(){
+      #include <logdepthbuf_fragment>
+      vec3 d = normalize(vDir); float h = d.y;
+      vec3 col = mix(uHorizon, uZenith, pow(clamp(h,0.0,1.0), 0.55));
+      if (h < 0.0) col = uHorizon * (1.0 + h*0.25);
+      float sd = max(dot(d, uSun), 0.0);
+      col += vec3(1.0,0.92,0.75) * (pow(sd, 900.0)*25.0 + pow(sd, 12.0)*0.25);
+      gl_FragColor = vec4(col, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(70000, 32, 16), skyMat); sky.renderOrder = -10; sky.frustumCulled = false; scene.add(sky);
+
+// ---- water (procedural normals, fresnel sky reflection, sun glint, Snell window from below) ----
+const waterMat = new THREE.ShaderMaterial({
+  fog: true, side: THREE.DoubleSide,
+  uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+    uTime: { value: 0 }, uOffset: { value: new THREE.Vector2() }, uDeep: { value: PAL.land.deep.clone() }, uShallow: { value: PAL.land.shallow.clone() },
+    uSky: { value: PAL.land.zenith.clone() }, uHorizon: { value: PAL.land.horizon.clone() }, uSunDir: { value: SUN_DIR.clone() }, uUnder: { value: PAL.under.clone() },
+  }]),
+  vertexShader: `#include <common>
+    #include <fog_pars_vertex>
+    #include <logdepthbuf_pars_vertex>
+    varying vec3 vWorld;
+    void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vWorld = wp.xyz; vec4 mvPosition = viewMatrix * wp;
+      gl_Position = projectionMatrix * mvPosition;
+      #include <logdepthbuf_vertex>
+      #include <fog_vertex>
+    }`,
+  fragmentShader: `#include <common>
+    #include <fog_pars_fragment>
+    #include <logdepthbuf_pars_fragment>
+    uniform float uTime; uniform vec2 uOffset; uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uHorizon; uniform vec3 uSunDir; uniform vec3 uUnder;
+    varying vec3 vWorld;
+    vec2 wv(vec2 p, vec2 d, float f, float sp){ return d * cos(dot(p,d)*f + uTime*sp) * f; }
+    void main(){
+      #include <logdepthbuf_fragment>
+      vec2 p = vWorld.xz + uOffset;
+      vec2 g = wv(p, normalize(vec2(1.0,0.3)), 0.05, 1.3)*0.6 + wv(p, normalize(vec2(-0.4,1.0)), 0.11, 1.9)*0.35
+             + wv(p, normalize(vec2(0.7,-0.8)), 0.23, 2.7)*0.2 + wv(p, normalize(vec2(-0.9,-0.2)), 0.47, 3.6)*0.12
+             + wv(p, normalize(vec2(0.2,0.95)), 1.13, 5.1)*0.06;
+      vec3 n = normalize(vec3(-g.x*0.45, 1.0, -g.y*0.45));
+      float dist = length(cameraPosition - vWorld);
+      n = normalize(mix(n, vec3(0.0,1.0,0.0), clamp(dist/4000.0, 0.0, 0.85)));
+      vec3 V = normalize(cameraPosition - vWorld);
+      vec3 col;
+      if (cameraPosition.y >= 0.0) {
+        float fres = 0.02 + 0.98*pow(1.0 - max(dot(n,V),0.0), 5.0);
+        vec3 R = reflect(-V, n);
+        vec3 skyc = mix(uHorizon, uSky, clamp(R.y*1.6, 0.0, 1.0));
+        float sd = max(dot(R, uSunDir), 0.0);
+        vec3 body = mix(uDeep, uShallow, 0.25 + 0.25*g.x);
+        col = mix(body, skyc, fres) + vec3(1.0,0.95,0.85)*(pow(sd,500.0)*8.0 + pow(sd,40.0)*0.25);
+      } else {
+        float c = max(-V.y, 0.0);
+        col = mix(uUnder*0.7, uShallow*2.2 + vec3(0.25), smoothstep(0.62, 0.95, c + g.x*0.05));
+      }
+      gl_FragColor = vec4(col, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`,
+});
+const water = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), waterMat); scene.add(water);
+
+// ---- marine snow (underwater motion cue) ----
+const SNOW_N = 900, SNOW_BOX = 70;
+const snowGeo = new THREE.BufferGeometry(); const snowBase = new Float32Array(SNOW_N * 3);
+for (let i = 0; i < SNOW_N * 3; i++) snowBase[i] = Math.random() * SNOW_BOX;
+snowGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SNOW_N * 3), 3));
+const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({ color: 0xcfe9f0, size: 0.09, transparent: true, opacity: 0.7, depthWrite: false }));
+snow.frustumCulled = false; snow.visible = false; scene.add(snow);
+
+// ---- terrain tile that follows the animal (floating origin) ----
+const ORIGIN = { x: 0, z: 0 };
+const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+const TC = { mud: C('#5e523a'), bank: C('#9c8b62'), grass: C('#6b8b3e'), pasture: C('#93a957'), forest: C('#32502a'), rock: C('#8f8b7d'),
+  sand: C('#d6c596'), seabedS: C('#b9a77c'), seabedD: C('#2f4650'), dry: C('#a8995c'), scrub: C('#5c683b'), cliff: C('#7b6d5a') };
+const tmpC = new THREE.Color();
+function terrainColor(w, x, z, h, slope, out) {
+  if (w.mode === 'ocean') {
+    if (h < -1) return out.copy(TC.seabedS).lerp(TC.seabedD, clamp(-h / 160, 0, 1));
+    if (h < 3) return out.copy(TC.sand);
+    if (slope > 0.6) return out.copy(TC.cliff);
+    return out.copy(TC.dry).lerp(TC.scrub, smooth(-0.1, 0.25, fbm(x / 800, z / 800, 2, 21)));
+  }
+  if (h < -0.5) return out.copy(TC.mud);
+  if (h < 2.6) return out.copy(TC.bank);
+  if (slope > 0.5) return out.copy(TC.rock);
+  const f = forestNoise(x, z);
+  if (f > 0.05) return out.copy(TC.forest).lerp(TC.grass, 0.15 * fbm(x / 150, z / 150, 1, 4));
+  return out.copy(TC.grass).lerp(TC.pasture, smooth(-0.1, 0.3, fbm(x / 600, z / 600, 2, 13)));
+}
+const MAX_CEDAR = 3500, MAX_HARD = 7000;
+const cedars = new THREE.InstancedMesh(new THREE.ConeGeometry(3.8, 15, 6).translate(0, 7.5, 0), new THREE.MeshStandardMaterial({ roughness: 1 }), MAX_CEDAR);
+const hards = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(5.5, 0).scale(1, 1.25, 1).translate(0, 9, 0), new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), MAX_HARD);
+cedars.frustumCulled = hards.frustumCulled = false; scene.add(cedars, hards);
+const terrain = { mesh: null, geo: null, key: '', cx: 0, cz: 0, built: 0, size: 0 };
+function buildTerrain(w, cx, cz) {
+  const size = w.mode === 'ocean' ? 26000 : 18000, seg = w.mode === 'ocean' ? 170 : 200, key = size + ':' + seg;
+  if (terrain.key !== key) {
+    if (terrain.mesh) { scene.remove(terrain.mesh); terrain.geo.dispose(); }
+    terrain.geo = new THREE.PlaneGeometry(size, size, seg, seg).rotateX(-Math.PI / 2);
+    terrain.geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(terrain.geo.attributes.position.count * 3), 3));
+    terrain.mesh = new THREE.Mesh(terrain.geo, terrainMat); terrain.mesh.frustumCulled = false; scene.add(terrain.mesh); terrain.key = key;
+  }
+  ORIGIN.x = cx; ORIGIN.z = cz; terrain.cx = cx; terrain.cz = cz; terrain.size = size;
+  const pos = terrain.geo.attributes.position, col = terrain.geo.attributes.color, N = seg + 1, step = size / seg;
+  const H = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) H[i] = terrainHeight(w, cx + pos.getX(i), cz + pos.getZ(i));
+  for (let i = 0; i < pos.count; i++) {
+    const ix = i % N, iz = (i / N) | 0;
+    const dx = (H[ix < N - 1 ? i + 1 : i] - H[ix > 0 ? i - 1 : i]) / (2 * step), dz = (H[iz < N - 1 ? i + N : i] - H[iz > 0 ? i - N : i]) / (2 * step);
+    pos.setY(i, H[i]);
+    terrainColor(w, cx + pos.getX(i), cz + pos.getZ(i), H[i], Math.hypot(dx, dz), tmpC);
+    col.setXYZ(i, tmpC.r, tmpC.g, tmpC.b);
+  }
+  pos.needsUpdate = true; col.needsUpdate = true; terrain.geo.computeVertexNormals();
+  // water plane follows the tile
+  const ws = w.mode === 'ocean' ? 300000 : size; water.scale.set(ws, 1, ws); water.position.set(0, 0, 0);
+  waterMat.uniforms.uOffset.value.set(cx, cz);
+  placeTrees(w, cx, cz);
+  terrain.built = performance.now();
+}
+const tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpV = new THREE.Vector3(), tmpS = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+const cedarC = C('#2c4a2a'), hardC = [C('#3d5f2c'), C('#4f6e2f'), C('#5b7a33'), C('#36552a')];
+function placeTrees(w, cx, cz) {
+  let nc = 0, nh = 0;
+  if (w.mode === 'land') {
+    const R = 4200, cell = 55;
+    for (let gx = Math.floor((cx - R) / cell); gx <= Math.floor((cx + R) / cell); gx++)
+      for (let gz = Math.floor((cz - R) / cell); gz <= Math.floor((cz + R) / cell); gz++) {
+        const wx = (gx + hash2(gx, gz, 5)) * cell, wz = (gz + hash2(gx, gz, 6)) * cell, ddx = wx - cx, ddz = wz - cz;
+        if (ddx * ddx + ddz * ddz > R * R) continue;
+        const p = forestNoise(wx, wz) > 0.05 ? 0.8 : 0.05; if (hash2(gx, gz, 99) > p) continue;
+        const h = landHeight(wx, wz); if (h < 2.8) continue;
+        const k = hash2(gx, gz, 7), sc = 0.75 + hash2(gx, gz, 8) * 0.7;
+        tmpQ.setFromAxisAngle(UP, k * 6.283); tmpS.set(sc, sc * (0.85 + k * 0.4), sc); tmpV.set(ddx, h - 0.6, ddz); tmpM.compose(tmpV, tmpQ, tmpS);
+        if (k < 0.3) { if (nc < MAX_CEDAR) { cedars.setMatrixAt(nc, tmpM); cedars.setColorAt(nc, tmpC.copy(cedarC).multiplyScalar(0.85 + k)); nc++; } }
+        else if (nh < MAX_HARD) { hards.setMatrixAt(nh, tmpM); hards.setColorAt(nh, hardC[(k * 40 | 0) % 4]); nh++; }
+      }
+  }
+  cedars.count = nc; hards.count = nh;
+  cedars.instanceMatrix.needsUpdate = hards.instanceMatrix.needsUpdate = true;
+  if (cedars.instanceColor) cedars.instanceColor.needsUpdate = true;
+  if (hards.instanceColor) hards.instanceColor.needsUpdate = true;
+  cedars.visible = nc > 0; hards.visible = nh > 0;
+}
+
+// ---- animal models (forward = +z, up = +y) ----
+function buildEagle() {
+  const g = new THREE.Group();
+  const brown = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 0.85, side: THREE.DoubleSide });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf1ede3, roughness: 0.8, side: THREE.DoubleSide });
+  const yellow = new THREE.MeshStandardMaterial({ color: 0xe5b012, roughness: 0.5 });
+  const black = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.3 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 14), brown); body.scale.set(1, 0.85, 3); g.add(body);
+  const neck = new THREE.Mesh(new THREE.SphereGeometry(0.095, 16, 12), white); neck.position.set(0, 0.03, 0.31); g.add(neck);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.085, 16, 12), white); head.scale.set(0.95, 0.95, 1.2); head.position.set(0, 0.05, 0.42); g.add(head);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.1, 10).rotateX(Math.PI / 2), yellow); beak.position.set(0, 0.025, 0.54); beak.rotation.x = 0.25; g.add(beak);
+  for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), black); e.position.set(sx * 0.055, 0.075, 0.47); g.add(e); }
+  const tailShape = new THREE.Shape([new THREE.Vector2(-0.06, 0), new THREE.Vector2(0.06, 0), new THREE.Vector2(0.17, -0.33), new THREE.Vector2(0, -0.36), new THREE.Vector2(-0.17, -0.33)]);
+  const tail = new THREE.Mesh(new THREE.ShapeGeometry(tailShape).rotateX(Math.PI / 2), white); tail.position.set(0, 0.01, -0.3); g.add(tail);
+  const V2 = (a, b) => new THREE.Vector2(a, b);
+  const innerGeo = new THREE.ShapeGeometry(new THREE.Shape([V2(0, 0.12), V2(0.3, 0.14), V2(0.56, 0.14), V2(0.56, -0.2), V2(0.3, -0.24), V2(0, -0.2)])).rotateX(Math.PI / 2);
+  const outerGeo = new THREE.ShapeGeometry(new THREE.Shape([V2(0, 0.14), V2(0.3, 0.12), V2(0.5, 0.06), V2(0.64, -0.01), V2(0.66, -0.05), V2(0.55, -0.055),
+    V2(0.63, -0.1), V2(0.52, -0.105), V2(0.58, -0.15), V2(0.46, -0.15), V2(0.5, -0.2), V2(0.37, -0.19), V2(0.3, -0.23), V2(0, -0.2)])).rotateX(Math.PI / 2);
+  const shoulders = [], elbows = [];
+  for (const side of [1, -1]) {
+    const root = new THREE.Group(); root.position.set(side * 0.07, 0.06, 0.06); root.scale.x = side; g.add(root);
+    const sh = new THREE.Group(); root.add(sh); sh.add(new THREE.Mesh(innerGeo, brown));
+    const el = new THREE.Group(); el.position.x = 0.55; sh.add(el); el.add(new THREE.Mesh(outerGeo, brown));
+    shoulders.push(sh); elbows.push(el);
+  }
+  g.scale.setScalar(0.92);
+  return { group: g, shoulders, elbows, tail, eye: new THREE.Vector3(0, 0.24, 0.22), chase: { back: 5.5, up: 1.4 }, phase: 0, flap: 0, fold: 0, burst: 0 };
+}
+function buildShark() {
+  const prof = [[0, 2.25], [0.12, 2.15], [0.26, 1.95], [0.42, 1.5], [0.53, 0.8], [0.55, 0.3], [0.48, -0.4], [0.34, -1.1], [0.2, -1.7], [0.11, -2.1], [0.09, -2.3], [0, -2.32]]
+    .reverse().map(([r, zz]) => new THREE.Vector2(r, zz)); // ascending y so lathe normals face outward
+  const parts = [];
+  const body = new THREE.LatheGeometry(prof, 28).rotateX(Math.PI / 2); body.scale(0.85, 1, 1); parts.push([body, null]);
+  const fin = (pts, mapFn) => { const geo = new THREE.ShapeGeometry(new THREE.Shape(pts.map(([a, b]) => new THREE.Vector2(a, b)))); mapFn(geo); return geo; };
+  // dorsal (shape u = -z, v = y) in the y-z plane
+  parts.push([fin([[-0.6, 0], [0.15, 0.85], [0.32, 0.8], [0.45, 0]], g => g.rotateY(Math.PI / 2).translate(0, 0.4, 0)), null]);
+  // caudal fin (two lobes) at the tail
+  parts.push([fin([[2.15, 0], [2.75, 0.95], [2.62, 0.95], [2.42, 0.25], [2.42, -0.15], [2.65, -0.75], [2.55, -0.78], [2.15, -0.08]], g => g.rotateY(Math.PI / 2)), null]);
+  // pectoral fins (u = x, v = z) laid flat then drooped
+  for (const sd of [1, -1]) parts.push([fin([[0, 0.35], [sd * 1.05, -0.35], [sd * 0.95, -0.5], [0, -0.25]], g => g.rotateX(Math.PI / 2).rotateZ(sd * -0.3).translate(sd * 0.38, -0.28, 0.55)), null]);
+  // small second dorsal / anal fins
+  parts.push([fin([[1.55, 0], [1.7, 0.2], [1.8, 0]], g => g.rotateY(Math.PI / 2).translate(0, 0.18, 0)), null]);
+  parts.push([fin([[1.55, 0], [1.7, -0.18], [1.8, 0]], g => g.rotateY(Math.PI / 2).translate(0, -0.15, 0)), null]);
+  for (const sd of [1, -1]) parts.push([new THREE.SphereGeometry(0.045, 8, 6).translate(sd * 0.27, 0.12, 1.75), C('#080808')]);
+  const grey = C('#5d6a74'), belly = C('#eef0ee');
+  const geos = parts.map(([geo, fixed]) => {
+    const p = geo.attributes.position, cols = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) { if (fixed) tmpC.copy(fixed); else tmpC.copy(belly).lerp(grey, smooth(-0.2, 0.05, p.getY(i))); cols.set([tmpC.r, tmpC.g, tmpC.b], i * 3); }
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    if (!geo.index) geo.setIndex([...Array(p.count).keys()]);
+    for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) geo.deleteAttribute(k);
+    return geo;
+  });
+  const geo = mergeGeometries(geos, false);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side: THREE.DoubleSide }));
+  mesh.frustumCulled = false;
+  const g = new THREE.Group(); g.add(mesh);
+  return { group: g, mesh, base: geo.attributes.position.array.slice(), eye: new THREE.Vector3(0, 0.62, 1.25), chase: { back: 9, up: 2.2 }, phase: 0 };
+}
+const eagle = buildEagle(), shark = buildShark();
+scene.add(eagle.group, shark.group);
+
+function animateEagle(m, dt, st) {
+  const perched = st.hspeed < 1 && st.agl < 30;
+  m.burst -= dt; if (m.burst < -14 + Math.random() * 0.02) m.burst = 1.3; // occasional flap bursts while gliding
+  const wantFlap = !perched && (st.valt > 2.8 || st.agl < 25 || st.hspeed < 7 || m.burst > 0);
+  m.flap = lerp(m.flap, wantFlap ? 1 : 0, 1 - Math.exp(-dt * 4));
+  m.fold = lerp(m.fold, perched ? 1 : 0, 1 - Math.exp(-dt * 3));
+  m.phase += dt * 2 * Math.PI * 2.6 * (0.3 + 0.7 * m.flap);
+  const t = performance.now() / 1000;
+  const sh = 0.09 + m.flap * 0.75 * Math.sin(m.phase) + (1 - m.flap) * 0.03 * Math.sin(t * 1.3);
+  const el = m.flap * 0.5 * Math.sin(m.phase - 0.9) - 0.05;
+  for (let k = 0; k < 2; k++) {
+    m.shoulders[k].rotation.set(0, m.fold * 1.25, lerp(sh, -0.35, m.fold));
+    m.elbows[k].rotation.set(0, m.fold * 2.3, lerp(el, 0.3, m.fold));
+  }
+  m.tail.rotation.y = 0.15 * Math.sin(t * 0.7) * (1 - m.fold);
+}
+function animateShark(m, dt, st) {
+  const amp = 0.12 + clamp(st.hspeed / 2.5, 0, 1) * 0.18;
+  m.phase += dt * 2 * Math.PI * (0.45 + 0.35 * clamp(st.hspeed / 2, 0, 1));
+  const p = m.mesh.geometry.attributes.position, b = m.base;
+  for (let i = 0; i < p.count; i++) {
+    const z = b[i * 3 + 2], s = clamp((0.9 - z) / 3.6, 0, 1.25);
+    p.array[i * 3] = b[i * 3] + amp * s * s * Math.sin(m.phase - 2.2 * s) - amp * 0.12 * Math.max(0, (z - 0.9) / 1.35) * Math.sin(m.phase);
+  }
+  p.needsUpdate = true;
+}
+
+// ================= state =================
+const tracks = [];
+let cur = null, world = null, simT = 0, playing = true, speed = 10, view = 'ride', snap = true, worldPref = 'auto';
+const st = { yaw: 0, pitch: 0, bank: 0, y: 0, hspeed: 0, valt: 0, agl: 0, ground: 0 };
+const S = {};
+const camPos = new THREE.Vector3();
+const look = { yaw: 0, pitch: 0, drag: false, px: 0, py: 0 };
+// VR comfort camera: level horizon (no roll), yaw follows the low-passed direction of travel, capped at 30 deg/s,
+// and holds its heading while the animal circles tightly (thermalling), so the view never spins with it.
+const COMFORT = { maxYawRate: 30 * DEG, tau: 3, circleRate: 20 * DEG };
+const cam = { yaw: 0, pitch: 0, evx: 0, evz: 0, holding: false };
+function comfortStep(dt, snapNow) {
+  const rate = playing ? Math.abs(S.omega || 0) * speed : 0;                 // how fast the animal turns, in real time
+  const k = 1 - Math.exp(-dt / COMFORT.tau);
+  cam.evx += ((S.vx || 0) - cam.evx) * (snapNow ? 1 : k); cam.evz += ((S.vz || 0) - cam.evz) * (snapNow ? 1 : k);   // low-passed travel vector
+  cam.holding = rate > COMFORT.circleRate;
+  const travel = Math.hypot(cam.evx, cam.evz) > 0.3 ? Math.atan2(cam.evx, cam.evz) : st.yaw;
+  if (snapNow) { cam.yaw = travel; cam.pitch = 0; return; }
+  if (!cam.holding) {
+    const want = wrapAngle(travel - cam.yaw) * (1 - Math.exp(-dt * 1.2)), cap = COMFORT.maxYawRate * dt;
+    cam.yaw = wrapAngle(cam.yaw + clamp(want, -cap, cap));
+  }
+  cam.pitch += (clamp(st.pitch * 0.5, -0.25, 0.25) - cam.pitch) * (1 - Math.exp(-dt * 1.5));
+}
+
+function addTrack(tr) { tracks.push(tr); renderTrackList(); return tr; }
+function selectTrack(tr) {
+  cur = tr; const mode = worldPref === 'auto' ? detectMode(tr.taxon, tr.name) : worldPref;
+  world = makeWorld(mode, tr);
+  simT = tr.t0; speed = chooseSpeed(tr.t1 - tr.t0); $('#speed').value = String(speed);
+  eagle.group.visible = mode === 'land'; shark.group.visible = mode === 'ocean';
+  const P = PAL[mode]; skyMat.uniforms.uZenith.value.copy(P.zenith); skyMat.uniforms.uHorizon.value.copy(P.horizon);
+  waterMat.uniforms.uDeep.value.copy(P.deep); waterMat.uniforms.uShallow.value.copy(P.shallow);
+  waterMat.uniforms.uSky.value.copy(P.zenith); waterMat.uniforms.uHorizon.value.copy(P.horizon);
+  fogAbove.color.copy(P.horizon); fogAbove.near = P.fog[0]; fogAbove.far = P.fog[1];
+  sampleTrack(tr, simT, S); buildTerrain(world, S.x, S.z);
+  st.yaw = Math.atan2(S.vx, S.vz) || 0; st.pitch = 0; st.bank = 0; snap = true; look.yaw = look.pitch = 0;
+  mapCache.key = ''; miniCache.key = '';
+  renderTrackList(); renderInfoStatic(); refreshMark();
+}
+// ---- I'M HERE label (shared/imhere-mark.js, inlined above). Nothing here is live. ----
+// Common names for the label (Latin stays in the (i) details) and a small gazetteer so Location is a place, not coordinates.
+const COMMON = { 'haliaeetus leucocephalus': 'Bald eagle', 'carcharodon carcharias': 'White shark', 'ciconia ciconia': 'White stork',
+  'aquila chrysaetos': 'Golden eagle', 'pandion haliaetus': 'Osprey', 'gyps fulvus': 'Griffon vulture', 'buteo jamaicensis': 'Red-tailed hawk',
+  'grus americana': 'Whooping crane', 'grus grus': 'Common crane', 'orcinus orca': 'Killer whale', 'megaptera novaeangliae': 'Humpback whale',
+  'balaenoptera musculus': 'Blue whale', 'chelonia mydas': 'Green turtle', 'dermochelys coriacea': 'Leatherback turtle', 'galeocerdo cuvier': 'Tiger shark',
+  'rhincodon typus': 'Whale shark', 'ursus arctos': 'Brown bear', 'canis lupus': 'Gray wolf', 'odocoileus virginianus': 'White-tailed deer',
+  'anser anser': 'Greylag goose', 'branta canadensis': 'Canada goose', 'larus fuscus': 'Lesser black-backed gull' };
+const commonName = (tr, fallback) => COMMON[String(tr.taxon || '').trim().toLowerCase()] || (tr.taxon ? tr.taxon : fallback);
+const PLACES = [   // [name, lat, lon]; extend as real tracks arrive
+  ['Old Hickory Lake', 36.30, -86.60], ['Percy Priest Lake', 36.10, -86.52], ['Cumberland River, Nashville', 36.17, -86.78],
+  ['Kentucky Lake', 36.60, -88.05], ['Center Hill Lake', 36.05, -85.80], ['Chickamauga Lake', 35.25, -85.10],
+  ['Monterey Bay', 36.80, -121.95], ['Big Sur coast', 36.25, -121.80], ['Farallon Islands', 37.70, -123.00], ['San Francisco Bay', 37.75, -122.35],
+  ['Cape Cod', 41.70, -70.10], ['Chesapeake Bay', 37.80, -76.10], ['Lake Constance', 47.63, 9.37], ['Strait of Gibraltar', 35.95, -5.60],
+  ['Puget Sound', 47.60, -122.45], ['Salish Sea', 48.60, -123.20], ['Gulf of Maine', 43.00, -69.00], ['Everglades', 25.60, -80.90] ];
+// Coarse "where is this" for the I'M HERE label: ocean / sea or continent name from lat/lon.
+// isLand(lat, lon) is optional (space page passes its Natural Earth land mask); without it, `water` says which to prefer.
+function coarseRegion(lat, lon, isLand) {
+  lon = ((lon + 540) % 360) - 180;
+  const land = isLand ? isLand(lat, lon) : null;
+  if (land === true) {
+    if (lat < -60) return 'Antarctica';
+    if (lat > 59 && lon > -75 && lon < -10) return 'Greenland';
+    if (lon > -170 && lon < -50 && lat > 7) return 'North America';
+    if (lon > -93 && lon < -32 && lat <= 13) return 'South America';
+    if (lon > -25 && lon < 45 && lat > 36) return 'Europe';
+    if (lon > -18 && lon < 52 && lat <= 37 && lat > -36) return lon > 33 && lat > 12 ? 'Middle East' : 'Africa';
+    if (lon > 112 && lon < 155 && lat < -10 && lat > -45) return 'Australia';
+    if (lon > 165 || (lon > 110 && lat < -10)) return 'Oceania';
+    return 'Asia';
+  }
+  if (lat < -60) return 'Southern Ocean';
+  if (lat > 66) return 'Arctic Ocean';
+  if (lat > 30 && lat < 46 && lon > -6 && lon < 37) return 'Mediterranean Sea';
+  if (lat > 18 && lat < 31 && lon > -98 && lon < -81) return 'Gulf of Mexico';
+  if (lat > 9 && lat < 22 && lon > -88 && lon < -60) return 'Caribbean Sea';
+  if ((lon > 20 && lon < 120 && lat < 30) || (lon >= 120 && lon < 147 && lat < -10)) return 'Indian Ocean';
+  const pacificEdge = lat > 15 ? -100 : lat > 8 ? -84 : lat > -20 ? -76 : -68;
+  if (lon > pacificEdge && lon < 20) return 'Atlantic Ocean';
+  return 'Pacific Ocean';
+}
+function placeFor(lat, lon, water) {
+  let best = null, bd = Infinity;
+  for (const [n, la, lo] of PLACES) { const d = haversine(lat, lon, la, lo); if (d < bd) { bd = d; best = n; } }
+  if (bd < 15000) return best;
+  if (bd < 60000) return 'Near ' + best;
+  return coarseRegion(lat, lon, () => !water);
+}
+const MARK = window.ImHereMark;
+if (MARK) MARK.init({ subject: 'Tagged animal', below: ['header'], zIndex: 4 });
+const markXR = MARK ? MARK.xrPanel(THREE) : null;   // the I'M HERE card: small HUD tag low in the corner of view in VR
+if (markXR) { markXR.visible = false; camera.add(markXR);
+  renderer.xr.addEventListener('sessionstart', () => { markXR.visible = true; }); renderer.xr.addEventListener('sessionend', () => { markXR.visible = false; }); }
+function refreshMark() {
+  if (!MARK || !cur || !world) return;
+  const tr = cur, ocean = world.mode === 'ocean', animal = ocean ? 'Shark' : 'Eagle';
+  const range = `${formatUTC(tr.t0)} to ${formatUTC(tr.t1)} UTC`, ago = Math.round((Date.now() - tr.t1) / 86400000);
+  const items = [tr.isSample
+    ? { kind: 'sample', label: 'Track: ' + tr.name, source: 'Generated by I\'M HERE to demo the ride (synthetic). Not a real animal.',
+        note: `${tr.n.toLocaleString('en-US')} made-up fixes. Load a real Movebank CSV or GPX export to ride a real one.` }
+    : { kind: 'recorded', label: 'Track: ' + tr.name + (tr.taxon ? ' (' + tr.taxon + ')' : ''), source: 'Your file: ' + tr.source,
+        age: `Recorded ${range}` + (ago >= 1 ? ` (last fix ${ago.toLocaleString('en-US')} day${ago === 1 ? '' : 's'} ago)` : ''),
+        note: `${tr.n.toLocaleString('en-US')} GPS fixes. The file is read on this device only; nothing is uploaded.` },
+    { kind: 'estimated', label: 'Motion between fixes', source: 'Interpolated in the page; positions and times at each fix come from the track' }];
+  if (tr.timesEstimated) items.push({ kind: 'estimated', label: 'Times', source: 'The file has no timestamps, so times are estimated from distance (10 m/s)' });
+  items.push(tr.hasAlt
+    ? { kind: tr.isSample ? 'sample' : 'recorded', label: ocean ? 'Depth' : 'Altitude', source: tr.isSample ? 'Part of the synthetic sample track' : 'From the file' }
+    : { kind: 'estimated', label: ocean ? 'Depth' : 'Altitude', source: 'Not in the data: estimated for the ride' });
+  items.push({ kind: 'illustrative', label: 'Landscape, water and sky', source: 'Procedural, not the real terrain or weather at these coordinates' },
+    { kind: 'illustrative', label: animal + ' model', source: 'Generic animal drawn by I\'M HERE; not the tagged individual' });
+  const lon = ((S.lon + 540) % 360) - 180, brg = (Math.atan2(S.vx, -S.vz) / DEG + 360) % 360;
+  MARK.update({ subject: commonName(tr, animal), location: placeFor(S.lat, lon, ocean),
+    position: tr.isSample ? 'Demo' : { time: tr.t[S.i] ?? tr.t0 }, scene: '3D render', video: 'None',
+    id: tr.isSample ? 'Sample tag' : 'Tag ' + tr.id,
+    tag: tr.isSample ? { text: 'Sample track, not real', kind: 'sample' } : { text: 'Recorded ' + formatUTC(tr.t[S.i] ?? tr.t0).slice(0, 10), kind: 'recorded' },
+    stats: [ocean ? ['Depth', Math.max(0, -st.y).toFixed(1) + ' m' + (tr.hasAlt ? '' : ' (est.)')] : ['Alt', (tr.hasAlt ? Math.round(S.alt) : Math.round(st.y)) + ' m' + (tr.hasAlt ? '' : ' (est.)')],
+      ['Speed', (S.speed * 3.6).toFixed(1) + ' km/h'], ['Heading', Math.round(brg) + '°'],
+      ['Lat/Lon', `${Math.abs(S.lat).toFixed(3)}°${S.lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(3)}°${lon >= 0 ? 'E' : 'W'}`], ['Species', tr.taxon || 'not given']],
+    items });
+  MARK.setLive(false);   // tracks are files (sample or recorded), never live
+}
+function renderTrackList() {
+  const ul = $('#tracklist'); ul.innerHTML = '';
+  tracks.forEach(tr => {
+    const li = document.createElement('li'); if (tr === cur) li.className = 'on';
+    li.innerHTML = `<div class="nm"></div><div class="sp"></div>` + (tr.isSample ? '' : '<span class="chip real"></span>');
+    li.querySelector('.nm').textContent = tr.name;
+    li.querySelector('.sp').textContent = (tr.taxon || 'species not given') + ' · ' + tr.n.toLocaleString('en-US') + ' fixes';
+    if (!tr.isSample) li.querySelector('.chip').textContent = 'Your data: ' + tr.source;
+    li.onclick = () => { selectTrack(tr); if (innerWidth <= 760) $('#panel').classList.remove('open'); };
+    ul.appendChild(li);
+  });
+}
+let infoDyn = null;
+function renderInfoStatic() {
+  const tr = cur, el = $('#info'); el.innerHTML = '';
+  const add = (html, cls) => { const d = document.createElement('div'); if (cls) d.className = cls; d.innerHTML = html; el.appendChild(d); return d; };
+  const head = add('<div style="font-weight:700;font-size:15px"></div><div class="sp" style="color:var(--dim);font-style:italic"></div>');
+  head.children[0].textContent = tr.name; head.children[1].textContent = tr.taxon || 'species not given';
+  add('<span class="hint"></span>').firstChild.textContent = 'Sources and details: tap (i) on the I\'M HERE label.';
+  infoDyn = add('<dl class="grid"></dl>').firstChild;
+  const gap = add('', 'note gap'); gap.id = 'gapNote'; gap.style.display = 'none';
+}
+function updateInfo() {
+  if (!infoDyn || !cur) return;
+  const ocean = world.mode === 'ocean', brg = (Math.atan2(S.vx, -S.vz) / DEG + 360) % 360;
+  const rows = [
+    ['Time (UTC)', formatUTC(simT)], ['Elapsed', formatDuration(simT - cur.t0) + ' of ' + formatDuration(cur.t1 - cur.t0)],
+    ['Distance', formatDist(S.dist) + ' of ' + formatDist(cur.totalDist)], ['Speed', (S.speed * 3.6).toFixed(1) + ' km/h'],
+    ocean ? ['Depth', Math.max(0, -st.y).toFixed(1) + ' m' + (cur.hasAlt ? '' : ' (est.)')] : ['Altitude', (cur.hasAlt ? Math.round(S.alt) + ' m (data)' : Math.round(st.y) + ' m (est.)')],
+    ['Heading', Math.round(brg) + '°'], ['Position', `${Math.abs(S.lat).toFixed(4)}°${S.lat >= 0 ? 'N' : 'S'}, ${Math.abs(((S.lon + 540) % 360) - 180).toFixed(4)}°${((S.lon + 540) % 360) - 180 >= 0 ? 'E' : 'W'}`],
+    ['GPS fix', (S.i + 1).toLocaleString('en-US') + ' of ' + cur.n.toLocaleString('en-US')],
+  ];
+  infoDyn.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  const gap = $('#gapNote'), big = S.gap * 1000 > Math.max(3 * cur.medianDt, 30 * 60000);
+  gap.style.display = big ? 'block' : 'none';
+  if (big) gap.textContent = `No GPS fixes for ${formatDuration(S.gap * 1000)} here, so this stretch is interpolated.`;
+  $('#clock').innerHTML = `${formatUTC(simT)} UTC <small>· ${formatDist(S.dist)} travelled</small>`;
+}
+
+// ================= map (2D top-down) =================
+const mapCanvas = $('#map'), miniCanvas = $('#mini');
+const mapCache = { key: '' }, miniCache = { key: '' };
+function mapFit(tr, W, H, pad) {
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < tr.n; i++) { minX = Math.min(minX, tr.x[i]); maxX = Math.max(maxX, tr.x[i]); minZ = Math.min(minZ, tr.z[i]); maxZ = Math.max(maxZ, tr.z[i]); }
+  const bw = Math.max(maxX - minX, 1500), bh = Math.max(maxZ - minZ, 1500), s = Math.min((W - 2 * pad) / bw, (H - 2 * pad) / bh);
+  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+  return { s, cx, cz, W, H, sx: x => W / 2 + (x - cx) * s, sy: z => H / 2 + (z - cz) * s, wx: px => cx + (px - W / 2) / s, wz: py => cz + (py - H / 2) / s };
+}
+function buildMapCache(cache, canvas, pad) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), W = canvas.clientWidth * dpr, H = canvas.clientHeight * dpr;
+  const key = cur.id + cur.n + world.mode + W + 'x' + H;
+  if (cache.key === key) return cache;
+  canvas.width = W; canvas.height = H;
+  const f = mapFit(cur, W, H, pad * dpr), cols = Math.min(260, Math.ceil(W / 4)), rows = Math.min(260, Math.ceil(H / 4));
+  const Hs = new Float32Array(cols * rows);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) Hs[r * cols + c] = terrainHeight(world, f.wx((c + 0.5) / cols * W), f.wz((r + 0.5) / rows * H));
+  const off = document.createElement('canvas'); off.width = cols; off.height = rows;
+  const ctx = off.getContext('2d'), img = ctx.createImageData(cols, rows), ocean = world.mode === 'ocean';
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const i = r * cols + c, h = Hs[i], shade = clamp(1 + (h - Hs[Math.max(0, i - cols - 1)]) * f.s * cols / W * 3, 0.7, 1.3);
+    let rgb;
+    if (h < 0) { const k = clamp(-h / (ocean ? 250 : 12), 0, 1); rgb = [lerp(120, 30, k), lerp(185, 80, k), lerp(215, 125, k)]; }
+    else { const k = clamp(h / (ocean ? 250 : 110), 0, 1); rgb = ocean ? [lerp(205, 120, k) * shade, lerp(190, 125, k) * shade, lerp(130, 80, k) * shade] : [lerp(150, 95, k) * shade, lerp(180, 130, k) * shade, lerp(110, 75, k) * shade]; }
+    img.data.set([rgb[0], rgb[1], rgb[2], 255], i * 4);
+  }
+  ctx.putImageData(img, 0, 0);
+  const stride = Math.max(1, Math.floor(cur.n / 4000)), pts = [];
+  for (let i = 0; i < cur.n; i += stride) pts.push(i); if (pts[pts.length - 1] !== cur.n - 1) pts.push(cur.n - 1);
+  Object.assign(cache, { key, f, bg: off, pts, dpr, W, H });
+  return cache;
+}
+function drawMap(canvas, cache, full) {
+  if (!cur || !canvas.clientWidth) return;
+  const m = buildMapCache(cache, canvas, full ? 50 : 10), ctx = canvas.getContext('2d'), f = m.f, d = m.dpr;
+  ctx.imageSmoothingEnabled = true; ctx.drawImage(m.bg, 0, 0, m.W, m.H);
+  const path = upto => { ctx.beginPath(); let first = true;
+    for (const i of m.pts) { if (upto != null && i > upto) break; const X = f.sx(cur.x[i]), Y = f.sy(cur.z[i]); first ? ctx.moveTo(X, Y) : ctx.lineTo(X, Y); first = false; }
+    if (upto != null) ctx.lineTo(f.sx(S.x), f.sy(S.z)); };
+  ctx.lineJoin = ctx.lineCap = 'round';
+  path(null); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2 * d; ctx.setLineDash([5 * d, 5 * d]); ctx.stroke(); ctx.setLineDash([]);
+  path(S.i); ctx.strokeStyle = '#ffb547'; ctx.lineWidth = 3.2 * d; ctx.stroke();
+  ctx.fillStyle = '#7fd6a4'; ctx.beginPath(); ctx.arc(f.sx(cur.x[0]), f.sy(cur.z[0]), 5 * d, 0, 7); ctx.fill();
+  const X = f.sx(S.x), Y = f.sy(S.z), a = Math.atan2(S.vx, S.vz);
+  ctx.save(); ctx.translate(X, Y); ctx.rotate(-a); ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1b1205'; ctx.lineWidth = 2 * d;
+  ctx.beginPath(); ctx.moveTo(0, 13 * d); ctx.lineTo(8 * d, -8 * d); ctx.lineTo(0, -3 * d); ctx.lineTo(-8 * d, -8 * d); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+  if (!full) return;
+  // scale bar + north arrow + caption
+  const target = m.W * 0.22 / f.s, p10 = Math.pow(10, Math.floor(Math.log10(target))), nice = [1, 2, 5, 10].map(k => k * p10).filter(v => v <= target).pop() || p10;
+  const bx = 20 * d, by = m.H - 120 * d; ctx.fillStyle = '#fff'; ctx.fillRect(bx, by, nice * f.s, 4 * d);
+  ctx.font = `${12 * d}px system-ui,sans-serif`; ctx.fillText(formatDist(nice), bx, by - 6 * d);
+  ctx.fillText('N', m.W - 30 * d, 100 * d); ctx.beginPath(); ctx.moveTo(m.W - 26 * d, 72 * d); ctx.lineTo(m.W - 32 * d, 86 * d); ctx.lineTo(m.W - 20 * d, 86 * d); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  ctx.fillText((cur.isSample ? 'SAMPLE track, not real data · ' : '') + 'background terrain is procedural · tap the track to jump there', bx, by + 22 * d);
+}
+function mapPick(ev) {
+  if (!cur || !mapCache.f) return;
+  const r = mapCanvas.getBoundingClientRect(), d = mapCache.dpr, f = mapCache.f;
+  const wx = f.wx((ev.clientX - r.left) * d), wz = f.wz((ev.clientY - r.top) * d);
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < cur.n; i++) { const dd = (cur.x[i] - wx) ** 2 + (cur.z[i] - wz) ** 2; if (dd < bd) { bd = dd; best = i; } }
+  if (Math.sqrt(bd) * f.s < 40 * d) seek(cur.t[best]);
+}
+mapCanvas.addEventListener('pointerdown', mapPick);
+miniCanvas.addEventListener('click', () => setView('map'));
+
+// ================= controls =================
+function seek(t) { simT = clamp(t, cur.t0, cur.t1); snap = true; }
+function setView(v) {
+  view = v; document.querySelectorAll('.views button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  mapCanvas.hidden = v !== 'map'; miniCanvas.style.visibility = v === 'map' ? 'hidden' : 'visible';
+  look.yaw = look.pitch = 0; snap = true;
+}
+document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
+const ICON_PLAY = '<svg width="18" height="18" viewBox="0 0 18 18"><path d="M4 2l12 7-12 7z" fill="currentColor"/></svg>';
+const ICON_PAUSE = '<svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 2h4v14H3zM11 2h4v14h-4z" fill="currentColor"/></svg>';
+const setPlay = p => { playing = p; $('#play').innerHTML = p ? ICON_PAUSE : ICON_PLAY; };
+$('#play').onclick = () => setPlay(!playing); setPlay(true);
+const slider = $('#slider'); let sliding = false;
+slider.addEventListener('input', () => { sliding = true; seek(cur.t0 + slider.value / 10000 * (cur.t1 - cur.t0)); });
+slider.addEventListener('change', () => { sliding = false; });
+$('#speed').onchange = e => { speed = +e.target.value; };
+$('#worldSel').onchange = e => { worldPref = e.target.value; const t = simT; selectTrack(cur); seek(t); };
+$('#menuBtn').onclick = () => $('#panel').classList.toggle('open');
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === ' ') { setPlay(!playing); e.preventDefault(); }
+  else if (e.key === '1') setView('ride'); else if (e.key === '2') setView('chase'); else if (e.key === '3') setView('map');
+  else if (e.key === 'ArrowRight') seek(simT + (cur.t1 - cur.t0) * 0.02); else if (e.key === 'ArrowLeft') seek(simT - (cur.t1 - cur.t0) * 0.02);
+});
+const cv = renderer.domElement;
+cv.addEventListener('pointerdown', e => { look.drag = true; look.px = e.clientX; look.py = e.clientY; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointermove', e => { if (!look.drag) return;
+  look.yaw -= (e.clientX - look.px) * 0.006; look.pitch = clamp(look.pitch - (e.clientY - look.py) * 0.005, -1.2, 1.2); look.px = e.clientX; look.py = e.clientY; });
+const endDrag = () => { look.drag = false; };
+cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+
+// ---- file loading (local only) ----
+async function loadFiles(files) {
+  for (const file of files) {
+    try {
+      const text = await file.text();
+      const isGPX = /\.gpx$/i.test(file.name) || /<gpx\b/i.test(text.slice(0, 2000));
+      let raws, extra = '';
+      if (isGPX) raws = parseGPX(text);
+      else { const r = parseMovebankCSV(text); raws = r.tracks; extra = (r.hidden ? `, ${r.hidden} hidden/outlier rows skipped` : '') + (r.skipped ? `, ${r.skipped} rows without a position skipped` : ''); }
+      const added = []; const errs = [];
+      for (const raw of raws) { try { added.push(addTrack(buildTrack(raw, { source: file.name, name: raw.id }))); } catch (e) { errs.push(e.message); } }
+      if (!added.length) throw new Error(errs[0] || 'No usable tracks.');
+      selectTrack(added[0]); setPlay(true);
+      toast(`Loaded ${added.length} animal${added.length > 1 ? 's' : ''} from ${file.name} (${added.reduce((a, t) => a + t.n, 0).toLocaleString('en-US')} fixes${extra}).`);
+    } catch (e) { toast(`Could not read ${file.name}: ${e.message}`, 8000); }
+  }
+}
+$('#file').addEventListener('change', e => { loadFiles([...e.target.files]); e.target.value = ''; });
+const dz = $('#dropzone'); let dragN = 0;
+addEventListener('dragenter', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { dragN++; dz.style.display = 'grid'; e.preventDefault(); } });
+addEventListener('dragleave', () => { if (--dragN <= 0) { dragN = 0; dz.style.display = 'none'; } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => { e.preventDefault(); dragN = 0; dz.style.display = 'none'; if (e.dataTransfer.files.length) loadFiles([...e.dataTransfer.files]); });
+
+// ---- WebXR (harmless when unavailable) ----
+function vrUnavailable() { $('#vrslot').innerHTML = ''; }   // no headset: no VR button (keeps the phone header uncluttered)
+try {
+  if (navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-vr').then(ok => { if (ok) $('#vrslot').appendChild(VRButton.createButton(renderer)); else vrUnavailable(); }).catch(vrUnavailable);
+  else vrUnavailable();
+} catch (e) { vrUnavailable(); }
+
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); mapCache.key = ''; miniCache.key = ''; });
+if (innerWidth > 760) $('#panel').classList.add('open');
+
+// ================= frame loop =================
+const clock = new THREE.Clock(); let infoT = 0, miniT = 0, markT = 0, errShown = false;
+const mLook = new THREE.Matrix4(), vTarget = new THREE.Vector3(), vDesired = new THREE.Vector3();
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.1);
+  try {
+    if (!cur) return;
+    if (playing) { simT += dt * 1000 * speed; if (simT >= cur.t1) { simT = cur.t0; snap = true; } }
+    sampleTrack(cur, simT, S);
+    const tileHalf = terrain.size * 0.25;
+    if ((Math.abs(S.x - terrain.cx) > tileHalf || Math.abs(S.z - terrain.cz) > tileHalf) && performance.now() - terrain.built > 250) buildTerrain(world, S.x, S.z);
+    const ocean = world.mode === 'ocean', model = ocean ? shark : eagle;
+    st.ground = terrainHeight(world, S.x, S.z);
+    st.y = renderAltitude(cur, world, S, st.ground); st.agl = st.y - Math.max(st.ground, 0);
+    st.hspeed = S.speed; st.valt = S.valt;
+    const k = snap ? 1 : 1 - Math.exp(-dt * 5);
+    if (S.speed > (ocean ? 0.05 : 0.6)) st.yaw = lerpAngle(st.yaw, Math.atan2(S.vx, S.vz), k);
+    const bankT = ocean ? clamp(-Math.atan(S.speed * S.omega / 9.81) * 0.5, -0.3, 0.3) : clamp(-Math.atan(S.speed * S.omega / 9.81), -1.0, 1.0);
+    const pitchT = S.speed > 0.3 ? clamp(Math.atan2(cur.hasAlt ? S.valt : 0, S.speed), ocean ? -0.45 : -0.7, ocean ? 0.45 : 0.6) : 0;
+    st.bank = lerp(st.bank, isFinite(bankT) ? bankT : 0, k); st.pitch = lerp(st.pitch, pitchT, k);
+    const g = model.group;
+    g.position.set(S.x - ORIGIN.x, st.y, S.z - ORIGIN.z);
+    g.rotation.set(-st.pitch, st.yaw, st.bank, 'YXZ');
+    if (ocean) animateShark(shark, dt, st); else animateEagle(eagle, dt, st);
+    g.updateMatrixWorld(true);
+
+    const xr = renderer.xr.isPresenting;
+    comfortStep(dt, snap);
+    if (view === 'ride' || (view === 'map' && xr)) {
+      if (!look.drag) { look.yaw *= Math.exp(-dt * 0.8); look.pitch *= Math.exp(-dt * 0.8); }
+      vTarget.copy(model.eye).applyMatrix4(g.matrixWorld); rig.position.copy(vTarget);
+      if (xr) rig.rotation.set(0, cam.yaw + Math.PI, 0, 'YXZ');                                   // level, rate-capped
+      else rig.rotation.set(cam.pitch + look.pitch, cam.yaw + Math.PI + look.yaw, 0, 'YXZ');      // no roll
+      camPos.copy(rig.position);
+    } else if (view === 'chase') {
+      const yc = cam.yaw + look.yaw, ch = model.chase;
+      vDesired.set(g.position.x - Math.sin(yc) * ch.back, g.position.y + ch.up - look.pitch * ch.back, g.position.z - Math.cos(yc) * ch.back);
+      if (snap) camPos.copy(vDesired); else camPos.lerp(vDesired, 1 - Math.exp(-dt * 4));
+      const gh = terrainHeight(world, camPos.x + ORIGIN.x, camPos.z + ORIGIN.z);
+      if (g.position.y < 0) camPos.y = clamp(camPos.y, gh + 1, -0.4); else camPos.y = Math.max(camPos.y, Math.max(gh, 0) + 1);
+      rig.position.copy(camPos);
+      vTarget.copy(g.position); vTarget.y += 0.3;
+      // look along the comfort heading (never chase the animal round a tight circle); tilt only on screens
+      const tilt = xr ? 0 : clamp(Math.atan2(vTarget.y - camPos.y, Math.hypot(vTarget.x - camPos.x, vTarget.z - camPos.z)), -0.6, 0.6);
+      rig.rotation.set(tilt, yc + Math.PI, 0, 'YXZ');
+    }
+    snap = false;
+
+    const under = rig.position.y < 0;
+    scene.fog = under ? fogUnder : fogAbove; scene.background = under ? PAL.under : fogAbove.color;
+    sky.visible = !under; snow.visible = under; sky.position.copy(rig.position);
+    hemi.intensity = under ? 0.8 : 1.15; sun.intensity = under ? 1.2 : 2.4;
+    waterMat.uniforms.uTime.value = performance.now() / 1000;
+    if (under) {
+      const a = snowGeo.attributes.position.array, H = SNOW_BOX, md = v => ((v % H) + H) % H;
+      const lx = rig.position.x - H / 2, ly = rig.position.y - H / 2, lz = rig.position.z - H / 2;
+      for (let i = 0; i < SNOW_N; i++) { // world-anchored particles wrapped into a box around the camera
+        a[i * 3] = lx + md(snowBase[i * 3] - ORIGIN.x - lx);
+        a[i * 3 + 1] = ly + md(snowBase[i * 3 + 1] - ly);
+        a[i * 3 + 2] = lz + md(snowBase[i * 3 + 2] - ORIGIN.z - lz);
+      }
+      snowGeo.attributes.position.needsUpdate = true;
+    }
+
+    const now = performance.now();
+    if (now - markT > 1000) { markT = now; refreshMark(); }
+    if (now - infoT > 250) { infoT = now; updateInfo(); if (!sliding) slider.value = String(Math.round((simT - cur.t0) / Math.max(1, cur.t1 - cur.t0) * 10000)); }
+    if (view === 'map') drawMap(mapCanvas, mapCache, true);
+    else if (now - miniT > 300 && miniCanvas.clientWidth > 0) { miniT = now; drawMap(miniCanvas, miniCache, false); }
+    if (view !== 'map' || xr) renderer.render(scene, camera);
+  } catch (e) {
+    if (!errShown) { errShown = true; toast('Something went wrong while drawing: ' + e.message, 9000); }
+  }
+}
+
+// ---- boot: two clearly labelled SAMPLE tracks ----
+function parseSample(csv, name, opts) { const raw = parseMovebankCSV(csv).tracks[0]; return buildTrack(raw, { name, isSample: true, source: 'sample (synthetic)', ...opts }); }
+const eagleTrack = addTrack(parseSample(genEagleCSV(), 'Bald eagle, lake & river soar (SAMPLE)', { altBase: EAGLE_ALT_BASE }));
+addTrack(parseSample(genSharkCSV(), 'White shark, coastal migration (SAMPLE)', { altBase: 0 }));
+selectTrack(eagleTrack);
+renderer.setAnimationLoop(frame);
+</script>
+</body>
+</html>

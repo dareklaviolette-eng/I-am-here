@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>I'M HERE · Space &amp; Earth</title>
+<style>
+  :root { --fg: #e9eef7; --dim: #9aa7bd; --acc: #7cc4ff; --warn: #ffb35c; --live: #5cf2a2; --panel: rgba(8, 12, 22, 0.72); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--fg); font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; overscroll-behavior: none; }
+  #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .panel { position: fixed; background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; }
+  #info { top: calc(10px + env(safe-area-inset-top) + var(--imh-h, 0px)); left: 10px; padding: 9px 12px; max-width: min(360px, calc(100vw - 20px)); font-size: 12.5px; }
+  #info h1 { margin: 0 0 4px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--acc); font-weight: 650; display: flex; gap: 8px; align-items: center; cursor: pointer; user-select: none; }
+  #info h1 .chev { margin-left: auto; color: var(--dim); font-size: 11px; }
+  #info.collapsed .body { display: none; }
+  .row { display: flex; justify-content: space-between; gap: 12px; }
+  .row span:first-child { color: var(--dim); }
+  .note { color: var(--dim); font-size: 11px; margin-top: 6px; }
+  #bar { left: 50%; transform: translateX(-50%); bottom: calc(10px + env(safe-area-inset-bottom)); padding: 8px; width: min(560px, calc(100vw - 16px)); display: flex; flex-direction: column; gap: 7px; }
+  .btns { display: flex; gap: 6px; }
+  .btns button { flex: 1; min-height: 40px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: var(--fg); border-radius: 9px; font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; padding: 4px 6px; }
+  .btns button.on { background: rgba(124,196,255,0.22); border-color: var(--acc); color: #fff; }
+  .btns.small button { min-height: 32px; font-size: 12px; font-weight: 550; }
+  .time { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .time input { flex: 1; accent-color: var(--acc); height: 28px; }
+  #when { min-width: 132px; text-align: right; font-variant-numeric: tabular-nums; }
+  #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .lbl { position: absolute; transform: translate(8px, -50%); font-size: 12px; color: #dfe8f7; text-shadow: 0 0 4px #000, 0 0 2px #000; white-space: nowrap; }
+  .lbl.sun { color: #ffd77a; }
+  #hint { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: 10px; font-size: 11px; color: var(--dim); text-align: right; pointer-events: none; text-shadow: 0 0 3px #000; }
+  #vrslot button { position: static !important; margin: 0 !important; left: auto !important; bottom: auto !important; width: 100% !important; }
+  #err { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 24px; color: var(--dim); }
+  @media (max-width: 480px) { #info { font-size: 11.5px; } #hint { display: none; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="hint">Drag to look · pinch or scroll to zoom</div>
+<div id="info" class="panel">
+  <h1 id="infoHead">Details <span class="chev" id="chev">hide</span></h1>
+  <div class="body" id="infoBody">Loading…</div>
+</div>
+<div id="bar" class="panel">
+  <div class="btns" id="views">
+    <button data-v="ride">Ride the ISS</button><button data-v="chase">Chase</button><button data-v="earth">Whole Earth</button><button data-v="planets">Planets now</button>
+  </div>
+  <div class="time">
+    <span>Time</span><input id="slider" type="range" min="-1" max="1" step="0.0005" value="0" aria-label="Time offset in days"><span id="when">now</span>
+  </div>
+  <div class="btns small" id="speeds">
+    <button data-s="1" class="on">Real time</button><button data-s="60">60×</button><button data-s="600">600×</button><button data-s="86400">1 day/s</button><button id="nowBtn">Now</button>
+  </div>
+  <div id="vrslot"></div>
+</div>
+<div id="err">This view needs WebGL. Try a recent version of Chrome, Safari or Firefox.</div>
+
+<!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
+<script id="imhere-mark">
+/* I'M HERE experience watermark (info card), v3. SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
+   Pasted inline into every prototype page between the IMHERE-MARK markers by
+   node /home/claude/shared/sync-mark.mjs <files...>  (artifact pages cannot share files).
+   Edit here, then re-run the sync. Self-contained: no network, no dependencies.
+
+   Founder's layout (final): one small top-left label (translucent navy, soft blur, 1px border, 8px radius/padding):
+   white title and subject, grey row labels, brighter values; the brand appears only here, not in page top bars.
+       I'M HERE  (faint watermark)      (i)  ×
+       subject · ID
+       • Location – Nashville International (BNA)
+       • Updated – Live | 3 hrs ago | Demo | Fixed | None
+       • Scene – Real | AI render | 3D render | ...
+       • Video – Live | Nov 9, 2026 | None
+   All four rows always shown (value "None" when missing). Only the word "Live" is green.
+   "Live" (Updated/Video) comes only from setLive()/video.live, which pages drive from real data freshness;
+   demo/simulated data never sets it. After ~6 s the card collapses to a small "I'M HERE" corner mark;
+   tapping the mark re-expands it. (i) opens the detail: live stats + provenance (source, last update,
+   live vs recorded/simulated, rendered vs actual imagery). In VR, xrPanel(THREE) is a small HUD panel low
+   in the corner of view, drawn the same way.
+
+   API
+     ImHereMark.init({ subject, id, location, position, scene, video, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.update({ ...same keys })
+        location  place name                                   e.g. 'Nashville International (BNA)'
+        position  value of the "Updated" row: 'Demo' | 'Fixed' | 'None' | { time: msEpoch } ("3 hrs ago"); "Live" while setLive(true)
+        scene     short value                                  e.g. 'Real', '3D render', 'AI render'
+        video     'None' | 'Live' (only for a truly live feed) | { date: msEpoch } (shown "Nov 9, 2026")
+        stats     [[label, value], ...]  shown in the (i) detail
+        tag       { text } status line for the detail ("Now: ...")
+        sceneNote plain sentence in the detail: AI-created/rendered vs actual imagery
+        items     provenance list: { kind, label, source, age, time, timeLabel, note, href, list: [{ text, time | age }] }
+                  kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
+        below     CSS selector(s): the card sits just under the lowest visible one (e.g. the page header)
+     ImHereMark.setLive(true|false)   Updated shows "Live" (green). Only while the data is really fresh.
+     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh HUD panel, kept up to date
+     ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
+   CSS variable --imh-h on <html>: height taken by the card (or the corner mark) + gap, so a page can push its
+   own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
+*/
+(function () {
+  'use strict';
+  if (window.ImHereMark) return;
+  var KINDS = {
+    live: ['LIVE', '#1f9d55'], recorded: ['RECORDED', '#3d82c9'], data: ['REAL DATA', '#2e8f5e'],
+    computed: ['CALCULATED', '#2b7f8c'], estimated: ['ESTIMATED', '#6f7f8f'], assumed: ['ASSUMED', '#6f7f8f'],
+    simulated: ['SIMULATED', '#c47a12'], sample: ['SAMPLE', '#c47a12'], illustrative: ['ILLUSTRATIVE', '#7d5cc4'], ai: ['AI-GENERATED', '#b44a8a']
+  };
+  var NAVY = 'rgba(20,30,50,0.6)', GREY = '#9fb0c0', VALUE = '#e8eef4', GREEN = '#3ddc84';
+  var FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  var COLLAPSE_MS = 6000;
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var CSS =
+    '.imh-box,.imh-mini{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imh-z,1500);' +
+    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.14);' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);font:11px/1.25 ' + FONT + ';' +
+    'letter-spacing:normal;text-align:left;text-shadow:none;pointer-events:auto;-webkit-tap-highlight-color:transparent}' +
+    '.imh-box[hidden],.imh-mini[hidden],.imh-src[hidden],.imh-box [hidden]{display:none}' +
+    '.imh-box{width:min(190px,45vw);padding:8px}' +
+    '.imh-box.imh-wide{width:min(300px,calc(100vw - 20px))}' +
+    '.imh-r1{display:flex;align-items:center;gap:5px;min-height:18px}' +
+    '.imh-brand{font-weight:300;font-size:11px;letter-spacing:.28em;flex:none;color:#fff;opacity:.3}' +   /* faint watermark, not a title */
+    '.imh-i,.imh-x{flex:none;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;' +
+    'color:#dfe7ee;user-select:none;-webkit-user-select:none;position:relative}' +
+    '.imh-i::after,.imh-x::after{content:"";position:absolute;inset:-7px}' +   /* bigger touch target */
+    '.imh-i{margin-left:auto;font:italic 700 10.5px/1 Georgia,serif;border:1.3px solid rgba(255,255,255,.55)}' +
+    '.imh-x{font-size:14px;line-height:1;background:rgba(255,255,255,.1)}' +
+    '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
+    '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
+    '.imh-r2{margin-top:2px;font-weight:600;font-size:11px;color:#fff;overflow-wrap:anywhere}' +
+    '.imh-rows{list-style:none;margin:3px 0 0;padding:0;color:' + GREY + ';font-size:11px;line-height:1.3}' +
+    '.imh-rows li{margin:0;padding:0 0 0 9px;position:relative;overflow-wrap:anywhere}' +
+    '.imh-rows li::before{content:"•";position:absolute;left:0;color:' + GREY + '}' +
+    '.imh-rows .imh-l{font-size:10px;color:' + GREY + '}' +
+    '.imh-rows .imh-v{color:' + VALUE + '}.imh-rows .imh-v.imh-g{color:' + GREEN + ';font-weight:700}' +
+    '.imh-src{margin-top:5px;max-height:min(46vh,360px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;' +
+    'border-top:1px solid rgba(255,255,255,.14);font-size:11px;line-height:1.3}' +
+    '.imh-ph{font-weight:700;font-size:11px;margin-top:5px;color:#fff}' +
+    '.imh-r3{display:flex;flex-wrap:wrap;gap:3px 12px;margin:4px 0 2px}' +
+    '.imh-st{display:flex;flex-direction:column;min-width:0}' +
+    '.imh-st i{font-style:normal;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:' + GREY + '}' +
+    '.imh-st b{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}' +
+    '.imh-it{border-bottom:1px solid rgba(255,255,255,.08);padding:5px 0 4px}' +
+    '.imh-k{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;padding:0 4px;border-radius:3px;color:#fff;margin-right:5px;vertical-align:1px}' +
+    '.imh-lb{font-weight:600}' +
+    '.imh-d{color:' + GREY + ';font-size:10.5px;margin-top:2px;white-space:pre-line}' +
+    '.imh-ls{margin:2px 0 0;padding:0;list-style:none;color:' + GREY + ';font-size:10.5px}' +
+    '.imh-ls li{display:flex;justify-content:space-between;gap:8px;margin:0;padding:0}.imh-ls li span:last-child{flex:none;font-variant-numeric:tabular-nums}' +
+    '.imh-ft{padding-top:5px;color:' + GREY + ';font-size:10px}' +
+    '.imh-box a{color:#a9d3ff}' +
+    '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
+    '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
+
+  var S = { subject: '', id: '', location: '', position: 'None', scene: '3D render', video: 'None', stats: [], tag: null,
+    sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
+  var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
+  var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function fmtAge(ms) {   // "3 s ago", "14 min ago", "3 hrs ago", "5 days ago", "7 yrs ago"
+    if (!(ms >= 0)) return ms < 0 ? 'just now' : '';
+    var s = Math.round(ms / 1000), n;
+    if (s < 2) return 'just now';
+    if (s < 90) return s + ' s ago';
+    if (s < 5400) return Math.round(s / 60) + ' min ago';
+    if (s < 172800) { n = Math.round(s / 3600); return n + (n === 1 ? ' hr' : ' hrs') + ' ago'; }
+    if (s < 63072000) { n = Math.round(s / 86400); return n.toLocaleString('en-US') + ' days ago'; }
+    return Math.round(s / 31557600) + ' yrs ago';
+  }
+  function fmtDate(ms) { var d = new Date(ms); return MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear(); }
+  function credText(c) { return typeof c === 'string' ? c : (c && c.text) || ''; }
+  function link(text, href) {
+    if (!href) return document.createTextNode(text);
+    var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
+  }
+  function line2() { return [S.subject, S.id].filter(function (x) { return x; }).join(' · '); }
+  function posText() {
+    if (S.live) return 'Live';
+    var p = S.position;
+    if (p && typeof p === 'object') return p.time ? fmtAge(Date.now() - p.time) : (p.text || 'None');
+    return p ? (String(p) === 'Live' ? 'None' : String(p)) : 'None';   // a plain "Live" string is never trusted
+  }
+  function videoText() {
+    var v = S.video;
+    if (v && typeof v === 'object') return v.live ? 'Live' : v.date ? fmtDate(v.date) : (v.text || 'None');
+    return v ? (String(v) === 'Live' ? 'None' : String(v)) : 'None';
+  }
+  function rows() { return [['Location', S.location || 'None'], ['Updated', posText()], ['Scene', S.scene || 'None'], ['Video', videoText()]]; }
+  function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
+  function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
+
+  function render() {
+    if (!S.mounted) return;
+    var R = rows();
+    var sig = JSON.stringify([line2(), R, S.dismissed, S.srcOpen, S.live]);
+    if (sig !== lastSig) {
+      lastSig = sig;
+      box.hidden = S.dismissed; mini.hidden = !S.dismissed; miniLive.hidden = !S.live;
+      box.classList.toggle('imh-wide', S.srcOpen);
+      r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
+      rowsEl.textContent = '';
+      R.forEach(function (r) {
+        var li = el('li'); li.appendChild(el('span', 'imh-l', r[0])); li.appendChild(document.createTextNode(' – '));
+        li.appendChild(el('span', 'imh-v' + (r[1] === 'Live' ? ' imh-g' : ''), r[1])); li.title = r[0] + ' – ' + r[1]; rowsEl.appendChild(li);
+      });
+      more.classList.toggle('imh-on', S.srcOpen);
+      more.setAttribute('aria-expanded', String(S.srcOpen));
+      box.setAttribute('aria-label', label());
+      src.hidden = !S.srcOpen;
+      drawXR();
+    }
+    renderSources(); place();
+  }
+  function renderSources() {
+    if (!S.mounted || !S.srcOpen) return;
+    var now = Date.now(), frag = document.createDocumentFragment();
+    var st = (S.stats || []).filter(Boolean);
+    if (st.length) {
+      var r3 = el('div', 'imh-r3');
+      st.forEach(function (s) { var d = el('div', 'imh-st'); d.appendChild(el('i', null, s[0])); d.appendChild(el('b', null, s[1] == null || s[1] === '' ? '–' : String(s[1]))); r3.appendChild(d); });
+      frag.appendChild(r3);
+    }
+    frag.appendChild(el('div', 'imh-ph', 'Where this comes from'));
+    var sc = el('div', 'imh-d'); sc.appendChild(el('b', null, 'Scene: ')); sc.appendChild(document.createTextNode(S.sceneNote || SCENE_NOTE_DEFAULT)); frag.appendChild(sc);
+    if (statusText()) frag.appendChild(el('div', 'imh-d', 'Now: ' + statusText()));
+    S.items.forEach(function (it) {
+      if (!it) return;
+      var k = KINDS[it.kind] || [String(it.kind || 'INFO').toUpperCase(), '#6f7f8f'];
+      var d = el('div', 'imh-it'), h = el('div'), kb = el('span', 'imh-k', k[0]);
+      kb.style.background = k[1]; h.appendChild(kb); h.appendChild(el('span', 'imh-lb', it.label || '')); d.appendChild(h);
+      var lines = [];
+      if (it.source) lines.push('Source: ' + it.source);
+      var age = it.time ? fmtAge(now - it.time) : it.age;
+      if (age) lines.push((it.time ? (it.timeLabel || 'Updated') + ' ' : '') + age);
+      if (it.note) lines.push(it.note);
+      if (lines.length) d.appendChild(el('div', 'imh-d', lines.join('\n')));
+      if (it.href) { var lk = el('div', 'imh-d'); lk.appendChild(link('More about this source', it.href)); d.appendChild(lk); }
+      if (it.list && it.list.length) {
+        var ul = el('ul', 'imh-ls'), max = 30;
+        it.list.slice(0, max).forEach(function (r) {
+          var li = el('li'); li.appendChild(el('span', null, r.text || ''));
+          li.appendChild(el('span', null, r.time ? fmtAge(now - r.time) : (r.age || ''))); ul.appendChild(li);
+        });
+        if (it.list.length > max) { var m = el('li'); m.appendChild(el('span', null, '+ ' + (it.list.length - max) + ' more')); ul.appendChild(m); }
+        d.appendChild(ul);
+      }
+      frag.appendChild(d);
+    });
+    var cr = S.credits.filter(credText);
+    if (cr.length) {
+      var ft = el('div', 'imh-ft'); ft.appendChild(document.createTextNode('Credits: '));
+      cr.forEach(function (c, i) { if (i) ft.appendChild(document.createTextNode(' · ')); ft.appendChild(link(credText(c), c.href)); });
+      frag.appendChild(ft);
+    }
+    var tmp = el('div'); tmp.appendChild(frag.cloneNode(true));
+    if (tmp.innerHTML === lastSrcSig) return;
+    lastSrcSig = tmp.innerHTML; src.textContent = ''; src.appendChild(frag);
+  }
+  function visible(e) {
+    if (!e || !e.getClientRects().length) return false;
+    var cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none';
+  }
+  var lastTop = null, lastH = null;
+  function place() {
+    if (!S.mounted) return;
+    var top = null;
+    S.below.forEach(function (sel) {
+      var list; try { list = document.querySelectorAll(sel); } catch (e) { return; }
+      for (var i = 0; i < list.length; i++) {
+        if (!visible(list[i])) continue;
+        var b = list[i].getBoundingClientRect();
+        if (b.bottom > 0 && b.bottom < innerHeight * 0.5) top = Math.max(top || 0, b.bottom + 6);
+      }
+    });
+    var t = top == null ? '' : Math.round(top) + 'px';
+    if (t !== lastTop) { lastTop = t; box.style.top = t; mini.style.top = t; }
+    // pages push their own top-left panels down by the compact card height (not the opened detail, which overlays)
+    var r = (S.dismissed ? mini : box).getBoundingClientRect(), h = S.srcOpen ? lastH : Math.round(r.height + 12) + 'px';   // +12: clear gap to any panel below
+    if (h && h !== lastH) { lastH = h; document.documentElement.style.setProperty('--imh-h', h); }
+  }
+  function expand() { collapseAt = Date.now() + COLLAPSE_MS; if (S.dismissed) { S.dismissed = false; render(); } }
+  function setDismissed(d, focus) {
+    S.dismissed = !!d; if (d) S.srcOpen = false; else collapseAt = Date.now() + COLLAPSE_MS;
+    render();
+    if (focus) try { (d ? mini : box).focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  }
+  function tick() {   // auto-collapse ~6 s after showing, unless the detail is open or the pointer/focus is on the card
+    if (!S.mounted || S.dismissed || S.srcOpen || hovering || box.contains(document.activeElement)) { collapseAt = Math.max(collapseAt, Date.now() + 1500); return; }
+    if (Date.now() >= collapseAt) setDismissed(true, false);
+  }
+  function stop(e) { e.stopPropagation(); }
+  function button(e, fn) {
+    e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0');
+    e.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); });
+    e.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fn(); } });
+  }
+  function mount() {
+    if (S.mounted) return;
+    if (!document.body) { document.addEventListener('DOMContentLoaded', mount); return; }
+    if (!document.getElementById('imh-style')) { var st = el('style', null, CSS); st.id = 'imh-style'; document.head.appendChild(st); }
+    box = el('div', 'imh-box'); box.id = 'imh-card'; box.setAttribute('role', 'region'); box.setAttribute('tabindex', '-1');
+    var r1 = el('div', 'imh-r1');
+    r1.appendChild(el('span', 'imh-brand', "I'M HERE"));
+    more = el('span', 'imh-i', 'i'); more.setAttribute('aria-label', 'Details: live stats, sources, last update, live or recorded'); more.title = 'Details and sources';
+    button(more, function () { S.srcOpen = !S.srcOpen; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); });
+    r1.appendChild(more);
+    var x = el('span', 'imh-x', '×'); x.setAttribute('aria-label', 'Hide the I\'M HERE card'); x.title = 'Hide';
+    button(x, function () { setDismissed(true, true); });
+    r1.appendChild(x); box.appendChild(r1);
+    r2 = el('div', 'imh-r2'); box.appendChild(r2);
+    rowsEl = el('ul', 'imh-rows'); box.appendChild(rowsEl);
+    var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
+    more.addEventListener('mouseenter', function () {
+      if (!S.srcOpen && window.matchMedia && matchMedia('(hover: hover)').matches) { hoverOpen = true; S.srcOpen = true; lastSrcSig = ''; render(); }
+    });
+    more.addEventListener('click', function (e) { if (hoverOpen) { hoverOpen = false; e.stopImmediatePropagation(); e.stopPropagation(); } }, true);   // pin, don't close
+    box.addEventListener('mouseenter', function () { hovering = true; });
+    box.addEventListener('mouseleave', function () { hovering = false; collapseAt = Math.max(collapseAt, Date.now() + 3000); if (hoverOpen) { hoverOpen = false; S.srcOpen = false; render(); } });
+    src = el('div', 'imh-src'); src.hidden = true; box.appendChild(src);
+    mini = el('div', 'imh-mini', "I'M HERE"); mini.id = 'imh-mark'; mini.hidden = true;
+    miniLive = el('span', 'imh-g', 'Live'); miniLive.hidden = true; mini.appendChild(miniLive);
+    mini.setAttribute('aria-label', "I'M HERE: show the info card"); mini.title = 'Show info';
+    button(mini, function () { setDismissed(false, true); });
+    ['pointerdown', 'pointermove', 'touchstart', 'touchmove', 'wheel', 'mousedown'].forEach(function (ev) {   // keep taps/scrolls off the 3D view underneath
+      box.addEventListener(ev, stop, { passive: true }); mini.addEventListener(ev, stop, { passive: true });
+    });
+    box.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.srcOpen) { S.srcOpen = false; render(); } });
+    document.body.appendChild(box); document.body.appendChild(mini);
+    S.mounted = true; collapseAt = Date.now() + COLLAPSE_MS;
+    document.documentElement.style.setProperty('--imh-z', String(S.z));
+    render();
+    addEventListener('resize', place);
+    setInterval(function () { render(); tick(); }, 1000);   // keeps "x ago" values current
+  }
+  function apply(o) {
+    if (!o) return;
+    ['subject', 'id', 'location', 'scene', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.position !== undefined) S.position = o.position;
+    if (o.video !== undefined) S.video = o.video;
+    if (o.stats) S.stats = [].concat(o.stats);
+    if (o.tag !== undefined) S.tag = o.tag;
+    if (o.items) S.items = [].concat(o.items);
+    if (o.credits) S.credits = [].concat(o.credits);
+    if (o.below) S.below = [].concat(o.below);
+    if (o.zIndex != null) S.z = +o.zIndex || 1500;
+  }
+
+  // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
+  function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  function drawXR() {
+    if (!xr) return;
+    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = 'rgba(20,30,50,0.78)'; rr(g, 3, 3, W - 6, H - 6, 22); g.fill();   // a bit denser in VR for legibility
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
+    g.textBaseline = 'alphabetic'; g.fillStyle = '#fff';
+    g.save(); g.globalAlpha = 0.3; g.font = '300 32px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '9px'; g.fillText("I'M HERE", 28, 54); g.restore();   // faint watermark
+    g.font = '600 30px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 98);
+    var y = 140;
+    rows().forEach(function (r) {
+      g.fillStyle = GREY; g.font = '400 26px ' + FONT; var lt = '•  ' + r[0] + ' – ';
+      g.fillText(lt, 28, y); var lw = g.measureText(lt).width;
+      g.font = (r[1] === 'Live' ? '700 ' : '400 ') + '28px ' + FONT; g.fillStyle = r[1] === 'Live' ? GREEN : VALUE;
+      g.fillText(fit(g, r[1], W - 56 - lw), 28 + lw, y); y += 38;
+    });
+    xr.tex.needsUpdate = true;
+  }
+  function xrPanel(THREE, o) {
+    o = o || {};
+    if (!xr) {
+      var c = document.createElement('canvas'); c.width = 512; c.height = 300;
+      var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+      xr = { canvas: c, tex: tex };
+    }
+    var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 300 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
+    m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
+    m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
+    drawXR(); return m;
+  }
+
+  window.ImHereMark = {
+    init: function (o) { apply(o); mount(); lastSig = ''; render(); return this; },
+    update: function (o) { apply(o); render(); return this; },
+    setLive: function (on) { on = !!on; if (on !== S.live) { S.live = on; render(); } return this; },
+    isLive: function () { return S.live; },
+    open: function () { if (!S.mounted) return; S.dismissed = false; S.srcOpen = true; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); },
+    close: function () { if (!S.mounted) return; S.srcOpen = false; render(); },
+    dismiss: function () { if (S.mounted) setDismissed(true, false); },
+    expand: function () { if (S.mounted) expand(); },
+    label: label, xrPanel: xrPanel,
+    items: function () { return S.items.slice(); }
+  };
+})();
+</script>
+<!-- IMHERE-MARK:END -->
+<script type="module" id="app">
+import * as THREE from 'three';
+
+// ASTRO-BEGIN (this block is copied verbatim into space.html and unit-tested in Node)
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+const norm360 = (x) => ((x % 360) + 360) % 360;
+const jdOf = (ms) => ms / 86400000 + 2440587.5;
+const centuries = (ms) => (jdOf(ms) - 2451545.0) / 36525;
+// JPL "Keplerian Elements for Approximate Positions of the Major Planets" (E.M. Standish), Table 1, valid 1800-2050.
+// [a AU, e, I deg, L deg, long.peri deg, long.node deg] and rates per Julian century. J2000 ecliptic & equinox.
+const ELEMENTS = {
+  Mercury: [[0.38709927, 0.20563593, 7.00497902, 252.25032350, 77.45779628, 48.33076593], [0.00000037, 0.00001906, -0.00594749, 149472.67411175, 0.16047689, -0.12534081]],
+  Venus:   [[0.72333566, 0.00677672, 3.39467605, 181.97909950, 131.60246718, 76.67984255], [0.00000390, -0.00004107, -0.00078890, 58517.81538729, 0.00268329, -0.27769418]],
+  Earth:   [[1.00000261, 0.01671123, -0.00001531, 100.46457166, 102.93768193, 0.0], [0.00000562, -0.00004392, -0.01294668, 35999.37244981, 0.32327364, 0.0]],
+  Mars:    [[1.52371034, 0.09339410, 1.84969142, -4.55343205, -23.94362959, 49.55953891], [0.00001847, 0.00007882, -0.00813131, 19140.30268499, 0.44441088, -0.29257343]],
+  Jupiter: [[5.20288700, 0.04838624, 1.30439695, 34.39644051, 14.72847983, 100.47390909], [-0.00011607, -0.00013253, -0.00183714, 3034.74612775, 0.21252668, 0.20469106]],
+  Saturn:  [[9.53667594, 0.05386179, 2.48599187, 49.95424423, 92.59887831, 113.66242448], [-0.00125060, -0.00050991, 0.00193609, 1222.49362201, -0.41897216, -0.28867794]],
+  Uranus:  [[19.18916464, 0.04725744, 0.77263783, 313.23810451, 170.95427630, 74.01692503], [-0.00196176, -0.00004397, -0.00242939, 428.48202785, 0.40805281, 0.04240589]],
+  Neptune: [[30.06992276, 0.00859048, 1.77004347, -55.12002969, 44.96476227, 131.78422574], [0.00026291, 0.00005105, 0.00035372, 218.45945325, -0.32241464, -0.00508664]],
+};
+function elementsAt(name, T) {
+  const [e0, r] = ELEMENTS[name];
+  return e0.map((v, i) => v + r[i] * T);
+}
+// Heliocentric ecliptic J2000 coordinates (AU) from elements; optional M override (deg) for drawing orbits.
+function helioFromElements(el, Mdeg) {
+  const [a, e, I, L, wbar, node] = el;
+  const w = wbar - node;
+  let M = Mdeg !== undefined ? Mdeg : L - wbar;
+  M = ((((M + 180) % 360) + 360) % 360) - 180;
+  const Mr = M * D2R;
+  let E = Mr + e * Math.sin(Mr);
+  for (let k = 0; k < 30; k++) {
+    const dE = (E - e * Math.sin(E) - Mr) / (1 - e * Math.cos(E));
+    E -= dE;
+    if (Math.abs(dE) < 1e-12) break;
+  }
+  const xp = a * (Math.cos(E) - e), yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
+  const cw = Math.cos(w * D2R), sw = Math.sin(w * D2R), cO = Math.cos(node * D2R), sO = Math.sin(node * D2R), cI = Math.cos(I * D2R), sI = Math.sin(I * D2R);
+  return [
+    (cw * cO - sw * sO * cI) * xp + (-sw * cO - cw * sO * cI) * yp,
+    (cw * sO + sw * cO * cI) * xp + (-sw * sO + cw * cO * cI) * yp,
+    sw * sI * xp + cw * sI * yp,
+  ];
+}
+function helio(name, ms) { return helioFromElements(elementsAt(name, centuries(ms))); }
+// Geocentric ecliptic longitude/latitude (deg, J2000) and distance (AU) of a planet or the Sun.
+function geocentric(name, ms) {
+  const E = helio('Earth', ms);
+  const P = name === 'Sun' ? [0, 0, 0] : helio(name, ms);
+  const d = [P[0] - E[0], P[1] - E[1], P[2] - E[2]];
+  const dist = Math.hypot(d[0], d[1], d[2]);
+  return { lon: norm360(Math.atan2(d[1], d[0]) * R2D), lat: Math.asin(d[2] / dist) * R2D, dist };
+}
+// Greenwich mean sidereal time (deg), IAU 1982 expression in UT.
+function gmstDeg(ms) {
+  const d = jdOf(ms) - 2451545.0, T = d / 36525;
+  return norm360(280.46061837 + 360.98564736629 * d + 0.000387933 * T * T - (T * T * T) / 38710000);
+}
+// Sub-solar point (deg). Sun longitude from Earth elements, precessed to equinox of date, with aberration.
+function subsolar(ms) {
+  const T = centuries(ms);
+  const g = geocentric('Sun', ms);
+  const lam = (g.lon + 1.3969713 * T - 20.4898 / 3600 / g.dist) * D2R;
+  const eps = (23.43929111 - 0.0130042 * T) * D2R;
+  const ra = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam));
+  const dec = Math.asin(Math.sin(eps) * Math.sin(lam));
+  let lon = norm360(ra * R2D - gmstDeg(ms));
+  if (lon > 180) lon -= 360;
+  return { lat: dec * R2D, lon, distAU: g.dist, eclLon: norm360(lam * R2D) };
+}
+// ISS-like circular orbit with J2 nodal regression. All angles radians, times ms.
+const EARTH_R_KM = 6371, MU = 398600.4418, J2 = 1.08263e-3, RE_EQ = 6378.137;
+function makeOrbit({ incDeg = 51.64, altKm = 420, periodMin = 92.7, node0 = 0, u0 = 0, t0 = 0 } = {}) {
+  const a = EARTH_R_KM + altKm, n = (2 * Math.PI) / (periodMin * 60000);
+  const i = incDeg * D2R;
+  const nRadS = n * 1000;
+  const nodeRate = (-1.5 * nRadS * J2 * (RE_EQ / a) ** 2 * Math.cos(i)) / 1000; // rad per ms
+  return { a, altKm, n, i, node0, u0, t0, nodeRate, periodMin, incDeg };
+}
+function orbitLatLon(o, ms) {
+  const u = o.u0 + o.n * (ms - o.t0), node = o.node0 + o.nodeRate * (ms - o.t0);
+  const x = Math.cos(node) * Math.cos(u) - Math.sin(node) * Math.sin(u) * Math.cos(o.i);
+  const y = Math.sin(node) * Math.cos(u) + Math.cos(node) * Math.sin(u) * Math.cos(o.i);
+  const z = Math.sin(u) * Math.sin(o.i);
+  let lon = (Math.atan2(y, x) * R2D - gmstDeg(ms)) % 360;
+  if (lon > 180) lon -= 360; if (lon < -180) lon += 360;
+  return { lat: Math.asin(z) * R2D, lon, altKm: o.altKm };
+}
+// Fit the orbit phase and node so it passes through an observed sub-point at time ms.
+function fitOrbit(o, latDeg, lonDeg, ms, ascending) {
+  const s = Math.max(-1, Math.min(1, Math.sin(latDeg * D2R) / Math.sin(o.i)));
+  let u = Math.asin(s);
+  if (!ascending) u = Math.PI - u;
+  const dAlpha = Math.atan2(Math.cos(o.i) * Math.sin(u), Math.cos(u));
+  const alpha = (lonDeg + gmstDeg(ms)) * D2R;
+  return { ...o, u0: u, node0: alpha - dAlpha, t0: ms };
+}
+// ASTRO-END
+
+// ---------------------------------------------------------------- data: land mask (Natural Earth 1:50m land minus 1:110m lakes, public domain)
+const LAND_W = 2048, LAND_H = 1024;
+let LAND_MASK = null;   // kept after the texture is built: also used to name what the ISS is over
+const isLand = (lat, lon) => { if (!LAND_MASK) return null; const x = Math.floor((lon + 180) / 360 * LAND_W) % LAND_W, y = Math.min(LAND_H - 1, Math.max(0, Math.floor((90 - lat) / 180 * LAND_H))); return !!LAND_MASK[y * LAND_W + x]; };
+// Coarse "where is this" for the I'M HERE label: ocean / sea or continent name from lat/lon.
+// isLand(lat, lon) is optional (space page passes its Natural Earth land mask); without it, `water` says which to prefer.
+function coarseRegion(lat, lon, isLand) {
+  lon = ((lon + 540) % 360) - 180;
+  const land = isLand ? isLand(lat, lon) : null;
+  if (land === true) {
+    if (lat < -60) return 'Antarctica';
+    if (lat > 59 && lon > -75 && lon < -10) return 'Greenland';
+    if (lon > -170 && lon < -50 && lat > 7) return 'North America';
+    if (lon > -93 && lon < -32 && lat <= 13) return 'South America';
+    if (lon > -25 && lon < 45 && lat > 36) return 'Europe';
+    if (lon > -18 && lon < 52 && lat <= 37 && lat > -36) return lon > 33 && lat > 12 ? 'Middle East' : 'Africa';
+    if (lon > 112 && lon < 155 && lat < -10 && lat > -45) return 'Australia';
+    if (lon > 165 || (lon > 110 && lat < -10)) return 'Oceania';
+    return 'Asia';
+  }
+  if (lat < -60) return 'Southern Ocean';
+  if (lat > 66) return 'Arctic Ocean';
+  if (lat > 30 && lat < 46 && lon > -6 && lon < 37) return 'Mediterranean Sea';
+  if (lat > 18 && lat < 31 && lon > -98 && lon < -81) return 'Gulf of Mexico';
+  if (lat > 9 && lat < 22 && lon > -88 && lon < -60) return 'Caribbean Sea';
+  if ((lon > 20 && lon < 120 && lat < 30) || (lon >= 120 && lon < 147 && lat < -10)) return 'Indian Ocean';
+  const pacificEdge = lat > 15 ? -100 : lat > 8 ? -84 : lat > -20 ? -76 : -68;
+  if (lon > pacificEdge && lon < 20) return 'Atlantic Ocean';
+  return 'Pacific Ocean';
+}
+
+const LAND_RLE = "/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8AOwQGE/8A/wD/AP8Ar/8A/wD/ACdC/wD/AP8A/wCe/wD/AP8ACwkHCAVH/wD/AP8A/wCY/wD/AFMHCQcCCoUsAkz/AP8A/wD/AJH/AP8AOw8DEQIoBwJqf/8A/wD/AP8AjP8A/wA1GgJIXwIGhv8A/wD/AP8AgP8A/wAvbAQEUgwEgv8A/wD/AP8Af/8A/wAbCwd5JQIIAQoPCQwCfP8A/wD/AP8AhP8A/wAXEwEFAQEBcBcXAwUJEgoFAWD/AP8A/wD/AKL/AP8ACBEChREgAwoIFghUBhULDAkD/wD/AP8A/wBw/wD6nQ8LAxwDLgJzBg0MARAN/wCZCP8A/wCw/wD4lBnkCQEQGP8Aqgj/AP8Al/8A/gkBfAQIFRcBygYOBSD/AIYI/wD/ALb/AOkKEIoY4AUx/wCDDgQDzQP/AOD/AOsMCkACRRHoBDL/AGoCKQEOBBAGjQgQDf8A3P8A4hcNEAQjBUAO/wAh/wBvBBQPAgkHBgsNTgdIFv8A2v8A4hoLDAIlBzwQ/wAj/wBbDAQNDxQCBQMQAwufHv8A1P8A3iAXDwYICT4P/wAc/wBgDAUDAwsQAQkDERCvGf8A2P8A3gEBJgMDJEYO/wAjywQMBIMBBA8SAhUMBAEFAq4f/wDY/wDdKQMGBg8FSBL/ACHGAgMOBAUDCyoDSw0FAgwIBwIDDr4f/wDY/wDHCAw2AxUDQxX/AAwMAsszdgELAQIEGwYMBLMFBQcDEgQB/wDP/wDIBw02AxgDPCT+Bgq+CQQyhQXjDgMUAQv/AMn/AN40BRkDLQMGJv8ABQQEoxICBAUMBSv/AHYHBCT/AMf/AOE3AQICQy7/AAarDwQHAwsCAwci/wAfB1om/wDJ/wCyAS4NBSoDMD3/AAirGgMQDAUFEf8Ahx8LAgEF/wC3/wCoEDgsBjcy/wALqwMCFgIUEwb/AJIcCQr/ALj/AKkQAgYpKwswBQQh/wAYtDH/AKwYBgoBCf8Ar/8ArAIDEREDFSEBBAYOAy8f/wAargMENicBBAH/AIQNCBj/AKv/AIgIIhcJCxAfBkcR/wAhtAMEDwECASIfAf8Aoh3/AKr/AH8UGR4IEQ4YAgEERBH/ACW3AwQNBAMEEQUK/wC9Hf8Aqv8AfQMEBAMHGwYEEwkSDw8CBAYOATcO/wAmCwKvAgQICBMJCv8AuhwJAv8Aov8AiwEqAQsLCg4XAxAFAwQDNRD/ACYLA78YCw7/ALIJIgP/AJ3/AHMGBRMzCgkNNzYV/wAiDQG6GxEK/wCzA/8AyP8AdQUDERgBEwgHAQ8BBw0eCwQOARsn/wAbAgkJA7QGAwIBDRAT/wD/AP8Ad/8AfRIXBTIRDAYMDQMKAR4tEQT/AAYFAgcBtgICFA8S/wDCC/8ArP8AaAYRDB0FOwUNCQsOAQEFDwERIQUNAQ//AAfEFRIBCAf/AMAV/wCm/wBaFjkGTwQQJAQCPf8AILoS/wCZA0UVCgL/AJ3/AFcVcwIoNS7/AC6+DP8AvgYbGQMB/wCk/wBUGggEYBIZQCn/ACzACv8AGgy3Jf8Anv8AURABCwcHFwYqAxUVDwUBQS//AA4DAw4CxQb/ABcRtyEHEtUDr/8AThEDCCYHFwYLAgMIAgYLHwIiAQoCFDX/AA4PA/8A3xS2IQMf/wCA/wBIFgQFBwoVDBYIBgQEEAsiCAUDAgUJEwo3/wARDwL/ANcZogEMTf8AgP8ARxIBAw8UEAoWCgMGAxAbFC8FQBgEAQrvBgL/AMYmnQcBAQgFA0oCApEB6f8ARwoCBggDBhkPCgYECgsDCQEOHA4+Aj4HJOcGAf8AwSWVEgcBAVuJCwkF2P8AUAEDAwYGBxwLDwEIDQQBGw8DDBAoAQ8DcOL/AL8mnXeHDwQQzv8AWgcGIQ0UEB4eEAMBFRl93v8AuyGafAIDfAMHHAQLyP8AXQEIQh8QAhEKEgENBCN63v8Atx1tASmLfAMHHAMOBwK9/wBkFAItBgYREAoOB0p33wMF/wCqHHEDJY+EHwIMCA2z/wBoDgMHAgQCHgcGEw8HEQdHfNMHAQMJ/wCiAwEZlJWIIAIJChYCAab/AG4BAwELFwIKJgMSEQhIfdECAwcG/wCkGZMEApCOHxcUp/8AeBVTDQkxARGEzgEF/wCvGZMCAo+UCRABIAms/wB3E0wBCQIEBhEIBB0CEYbT/wCsFQEClZD/AIj/AEMOKgiPARsBkMUBD9gDzRICAZACCQMBhQkI/wB8/wA8HAYG/wBbxQEP/wCoFZ2GCgmaBN7/AD0eAQxqAxENyQEEwf8AuBSJAQIDE4GVAhcG3f8APi1cAgMHAQIOGsXI/wCrFaQBAnsGCEsBQQEfA9f/AEAuNggWFwkBARoQEAsGBgWIy/8ApxaYDgN4BxU9BFsM0/8APzExDRIYCRsPEQgOAxR5sgUU/wCpEmgCGpgREgMcGgxVEdD/AD0zMwsSGAkaDREGFAIWe7QDCf8AsQ9KCDMfAXcNGAEcHBECCEICBg3Q/wA8LgQKIgkDBxgPDRgNEQUZAxV5pAET/wCzEk0JMpIKPR0eTQbQ/wA7KgQPIRMOBAkLAQIEAgYXDREFHAIWdbz/ALERTwEWAxgDB48CTAEDESH/ACP/ADooAxMDCQgGCA8QBwYSCRUPDwYdAxZ2AgGrAg7/AKoUShAQARQGB40BhEIE3P8AOiMFFAMPBgcFEA8jBgkYEQYeDQh1BQKsAQ7/AKkSTBUMAx7/ABVDE8v/ADkiBCgDDQQPEiAHChUUBRsNEXKvAwz/AKoPTRYNAwoFD/8AEzwlwf8ANyMGNwUPEx0ICRYUCBgDBgIBARNvsgUH/wCqEEwXDQQHDwr/AAkBCDgfAgcCAQIHtP8ANh8JOgQQGBcICBcUBRoDHm+2BgH/AKcVSxYOAwsRCv8ABwIEOAECIgEVrf8ANSAHPQQPGhUJAxoVAxwBJWu5/wCoFksXCgYFBQYPCf8ABz8jAgEBFKv/ADwYCD0FEBsSBwYCARYXAz9rDAGw/wClF0kXBwoEHgv/AAQBAhEDJx4FFqz/AEAUC1AcDQgMFRkDOwEEBAVeCwKy/wCkGEYYBg0EJwL/AAQSBQ4DFTmsAAv/ADYRDwoCQh0GEA0TGgM4AQcBC1sIBpoCEQED/wCkAgYPQhkHDQgjA/8ABg8JB1qlAgAOdgO7CB5GIAENExYWA01jAQOcBRL/AKUFAw88HwcNCgECGQX/AAgOHwNOmwYADXUJAgG1AxpOLRUeDgFNYwMIlQgQSwO+AwkBjgIEEDohBhgDFgX/AAsLcxYIeQgCA3oKAgUGA8ZQLBQVYAEJaYoBDQcPSAG9BAICBAEDB44UOCIGMAICAv8ADwR1CxxxBQJzKsRQKhYUaAIIUwoIhQEOBw79AwUIAwMDBgIEjhM2IAguAQQC/wCxdXAwywUNOgwCFxcTZAIPTw4EgwIMCw74BQIEAQYDBQIHAQuUATgBBB8IMgT/ALJzbkV0BFg3IRkVCgEpAyoBEFKc/wAaDQIfngMtHwgzBP8As3JlUwUDaAU/Uh0cHSsENgIESQkDkQER+QEEAQMKAgoBHp8GKx8HMwL/ALZyZGIFCUMIBwgMAildGhgbBQMCAxYBDQYyAgdHCwSMAhzrAwIBAwEGKqgIJyAH/wDrLwEMBjBidD0JCQoKAyldEAIJFisDCQUCAwcCCTxGDgYDApztBQMCATYLApkHJCEG/wDrLgkGDgIQFmB7AQEmAQoLAhUHBwUNFlMEAQICDwYKEicQCwcGAgY1SREDAgGa7wgBAwFHlwUBDxQhBv8A8A0HEwMBBgUlE2CJGgMFBwECBBkGBQUQFk4BAQcCDgoFAwYWHRAOAQcCCzFPCwUBAZftAwECAQkBRV0CPxcQAQMbB/8A8QECAiQNKgxfjBIJAQkCRBU1AxMBBRMNBAEHAwETGxIUAwUEBDRICAqW7V0CA1AJPBkSGgf/APEBAQEmDi8GXZENEQJQGyYFGQ0TCxMIBBQWDgMGAgcsAgZYlOgCBQYBZkYLOx0OGQcIBv8A/wARDDECWpoHEAJWCAMMIw0SCAMDFQgVBgcUEg4DDDNekukCCm1CCRUDGgIKHwwYFAIE/wDgAS0INAAFSa8BdQcbCwcLBQUBBgMIFAQDAhIEChEWGgQGKF6R5ggBAgVyPgcTBhcHCCULFQwLBf8A/wBIAAdH/wAoBhYHEBIDFgwMEgQLDBkiAwIDASBXBQaL6QwBeR8BMggMBAUKAywIGgYOBP8A/wBIAAtC/wArBgIYCwMDAwMlBAMCDRQDDAwWJgIGJ0+P9QYCfB8MIAQCCAYXBS4DHAUQBP8A/wBHAA4//wArHwgFCCQMDSQMFBECDQcMJAMBSgoBbQEQ8wMBBQaBHgwZEQMCAmkHEAP/AP8ARwASPv8AIi0PIw4IJAcEAhYdCwsnSgcDbgUE+QQJBAGEAQEYDRWDCQ8B/wD/AEkAFj//ABwcAg0bGQ4DKggDARccDAIHAyoBA0F5/wABAgqQFg8PhwkOAv8A/wBJABk//wAgCxAIIgULAgUEBgMrBx0ZDQQFBS89CAFu/wAPlBMKEIsJDwH/AP8ASQAbP/8AOwUBAUEFKwgdFw0OMTt0/wATAQGSEQcQjAr/AP8AWwAdPv8APgEBAkEFLAQgFwsQMDp0/wASlw8HEIwJ/wD/AF0AHT//AD8CRAItASEZBRY0NHT/ABKZDgkOiwr/AP8AXQAdAgg3/wA9A5MyNgMBMnL/ABFoAzARCAuKC/8A/wBeAB4EDTQCA+4DQQGSNEAwbv8AEGsDLxIKBIwL/wD/AGAAHQUPMwIB6AjVM0Qubf8AD3EDKQkBCowCAwEICP8A/wBjAB8CEiQFDQIF2A4MAb8CBDUmAR4tbWgBpnIHAQIhFI8BAwMBCf8A/wBmACIBExsLDtcisAgIAgI0JAECAxgBAy5rQwQhBQMCnnULGwkKA5wE/wD/AGcABAIBATIUAQILDNMntQgBOScHFzFZAwpFAQMGEAEDAgQBAwmcAQJ5EQ4LDAL/AP8A/wAIAAEFNBHzI7UFAgMDNiMCBAcDARIyVwEKRgYBBgYCAwYBFZl/I/8A/wD/ABsAAgUvEf8AAhmfAxIDBgMDOCIOETRWAgdJDgUEARucfiD/AP8A/wAdAAMFLg7/AAQQqwUMBAUBAgYBNyEBAQ0PNVQDAwECSQ8EAQEkkwECOQ44H/8A/wD/AB8AAwYFBxca/xKtBQgFBj0pCws9SFgGBgYCKZM4EzUd/wD/AP8AIQADFBUh9gkDB7oGCyYIAjENCT1KYjGTNhU0Hv8A/wD/ACEAARYVH/kFBQS/BRAgPQ0BAQY+R2MzkTcVNQUCBgMP/wD/AP8AHxgTIv8AAgHBBRIdDgEzUUBhOowCATgTAQM2CggN/wD/AP8AHQEaDyQcBP8AowYVGUhMCAE6XgIFMo85EzsJDQf/AP8A/wAKBAEBCgUgCiQWCP8AowcZFRQCM0sFAQUBOGYtkDwQPQv/AP8A/wAjDiIGAQIqAQwBB/8AowgbFQ0EAQgwSkNoKo8+Dz8L/wD/AP8AIg5s/wCgChoaAxQtS0BsJJM9D0YL/wD/AP8AIgls/wCWAQcLEQIIAgMuLE0+aSKVPg9JCf8A/wD/ACIJbf8AgAETERMHCy0uSj5mI5UIATYOTwP/AP8A/wAmBy8BBgE2/wCIAQoREwgMLixKPnIQlQIFPQ3/AP8A/wB7By4LLAEF/wCOGAIGCBAEFAQdEAQCAQ4BAks8dQ2WBAEGAjQP/wD/AP8AewgvAgUIJv8AmR0GIgUFARsUBg0BAkw5/wAYAQI9Ev8A/wD/AH4GOAgYBAb/AJsdAycEIRQIClA4/wAZPQ0CAf8A/wD/AIQEOgIb/wA1BG0wAT8TBwEBCFAz/wAXQBH/AP8A/wCFBFb/ADMKZywJPhYJA1Mx/wAWQRH/AP8A/wCHA1b/ABcDFwxjLwksAhIDBQ8JAVQs/wAZAwI8EU4D/wD/AP8AKQEOAlT/ABsFEgdlMggbBioQCQNQLv8AFEITUAL/AP8A2QlDCQYEU/8AHQgLBWoyBhAEBw0CAQUHGQ5dLMgBR0MWTAEDAv8A/wDYBUUPAQVS/wAgCAUHakgGBh8eCVwrxgRDRxVKCf8A/wDWBkEZUf8AIRJrSQUIHyIDBQFZKckBQ0YWSwj/AP8A1gU+HU//ACETa0oECSIoAVgp/wANRxdLCP8A/wC7BQIDEAU8H0//AB8Ta04CCyIkBFgn/wAPRRkzBBQI/wD/ALESDAQBBDclUP8AEAQGFWxcIiYCWSbKAUNFGDIIFAf/AP8ArhMMCjUnUVYBuhptXSOBJP8AEEUYMA0SBv8A/wCuEwoMMylSAQJPB7oVb1wrfQ0BE/8ADgEBRRgxDg4H/wD/AK0UCQ0yK1VMBQ4BAwaqCHhcLQICeggBAQET/wAQRhc0Df8A/wDAGAQPMC1VBAIBAkIDEQv/AClfLnoCBgMBE+0CIUUYNA3/AP8AvRkDDDIwKAErSgUTDAUB/wAfYC0JAn0Q7AMjSRMnAwsN/wD/ALwmMjMpAyADBkkFEgIBBQMFAgH/AB9gLQgDEQNsDO4CIkwJAQoBARYBAQ0MCv8A/wC7JxgBBQ4GNUgKBgsCNwYTAgECAQ7/AB1iLRoDbQ3sAyIBAQQBRwUECAECAQEQFQsF/wD/AL0oFgQDEQQ2SQkICQI3BRMBAQICEgMJ/wAOYiwbBW4J7gEkThUBAggfBwP/AP8AvScVBgMTAzZMBQkGBjQGDQoCIwkB/1MBDywZBnIC/wAXAgJLFwEg/wD/AMwnDQcCBgFOZzIICjv/UgEOLhcJ/wCKTjT/AP8AtAUYJg1fZy4MBz2tBE9gLxgJ/wCJTSMMBv8A/wC0CAIDEiEQX2ctCwdCqA9GYDAWDP8AWQEBASsEARoBEAEcH/8A/wCpDQQEBAMDEBQcEl9nLFiiCk5eMhUN/wBXATQZAw0FGR3/AP8ApjMLAwMCARwTBwJXaAcBJ1cHAQgBiwVWXTMBARIP/wBWAzAXAQEGCwUXGAQD/wD/AKU0BgEDJhMFBVdnBAEBBwUBBwIVWAcBkARbAgFXMQIHDRL/AFQBMRYLBwcVHAME/wD/AKNlEQYDWmcCAgIJAwMBBBVbCAIEAYgBZVM6ChX/AFIEMRQMBwUUHwMBAgH/AP8AomQSBgFddwIHFAcCVgcBBALuVDsFGf8AQQEGCzMRDh8eBwP/AP8AnmYRZoATBgZXAQQBAgMB7Vc5ARv/AD8DBgs3DBEeHQYHAQH/AP8AmGUUZn8SBwVaCALvWFX/ADwEBQo7BxQeHwEM/wD/AJdlFWZ/DwkDXQkBAwEBAbMEMlpW/wA5AgYKWB0MAh3/AP8AmGAaAwJhfw0JCFwHAgQCsQUzWlX/AEALWRsKBB7/AP8All4lX34MBwMBCVwHAQQCsAU1SAEQVv8ANQIEAgIXQgQIGwgEEAYJ/wD/AJRhI2B8CwkLYQQDAwOuBTZaVf8AOgMCFkIFCBsIBA8JCP8A/wCRYyJhegwKCmEGAQMErgU2BwRPVf8ANgEFGUEGCRkCAQYDEAoG/wD/AJBkImJ5DAwCAQICAWUEBAMBAQGsA0VMV/8AMwEKFDwLCxgBAgcBEA0C/wD/AJBkJGJ5ChECaAQCAgEFAasBTTMBElf/AD0UPAMCBwwZGP8A/wCeZCZidgp/AwIJAacBAQFQMwEQV/8AOxU9DA0VAQEZ/wD/AJ1kKWByCxMBAQFtAgMCAQMBAgGmAVQzAQ5V/wA8BAEQPRALEwECGP8A/wCdZSpfcAuGAQIDAQIB/wACLQIBBQtW/wA7AwIQPRAKFAEBGf8A/wCcZScBA19vDIkCAgMCBAH7LQYMV/8APhA+DQwUHP8A/wCbZiUCBF9qAwIJjwECAwECAf4qBQ1Z/wA7AQEBAQIBDTwMCg4m/wD/AJhoJGZmDxUBfQYCAgH/AAI2Xv8ANAMCAgIROQsDAQQHAQgn/wD/AJZpJGdlC5kGAQIB/wAGMWD/ADQBAwMCETgKBwkCByf/APcDmGwkZ2MFAQMBAZkDAQUC/wAJLWL/ADcCAQECEjoGAQUCBwMIKP8A9QSWbiNoYgUGA5gCAQUC/wATIWMDAf8AKgMMEzoGAQYCBzL/APUElW8jFwNOXwQBAgsBAgGVAQEFAgIB/wAWGG3/ACINBhQ5BQQDBQMPAiL/APUEkwsDZCQYAU5ZBQEBBAGmBgMBAgQB/wARFHH/ACAPBBU3CgQBAQICBCv/APsEkggCAQRkJRgCTFcIrQEDAQgBAf8AEhB7/wAYEQQBAgEFDTcBAQcGBB8IB/8A+wWSDQJkJRkBBQJFVgS9AQL/ABMPfv8AGRALDzgGEgIRDAb/APsGmmwjZ1cBCgG3/wASEXz/ABgRBgEFETQKDAcPDgT/APsGm2wbb1IByLYCWBJ7/wAQGAYCBhIzDQYIDP8A/wARB5sDAgYHDgNJGXFPAroFAQIGAgGpAggFWBJ1AQb/AA4XEg8zDAQOBP8A/wAWBpwCAgcIDgJKF3JJBb0HBq0DBQdZEXADCv8ADRUTEDL/AP8AOAecAgQDCw4BShdySgO+BAECCaoCBQhZEWwFCwID/wAKFRIRKgMD/wD/ADcHAQGgBA4LA0kXckMCBAPABggCAacDBQlYEWwCFf8ABxYSESgGAf8A/wA3BrgJA0kXckIGxQQKBgGiBAQJWBKD/wAHFQkCBAEBFB//AP8AQwm4BAhJFnJAAswFCgEBqQ5WAgUMhP8ACRMJGxkBA/8A/wBECboDCEkTAgFyPwLPAw6rClYCBguD/wAJFAgbAgEXAQH/AP8ARAm6BQhJEE4DJzkC1QIPrApWBAQLgv8ACRMIAQMgEv8A/wBFCrwDCUgOUQMmNALbAw2uCFgRgv8ABxUMIRD/AP8ARQm+AwhKDXr/ABQBD60IWBGC/wAGFA0hEP8A/wBCCr8DCUoNVQEkIAIIAekCEaoIVxGC/wAEAQEUDCIP/wD/AEEGxgIJSwt7HQQBBf+sB1gQgv8AAxIOJA//AP8AQQXJAQlLC3sTAf8AFAEBqgdaBwEDg/8ABA8OJg//AP8APwfJAglLCm0BBQEFAQILAgIBAgP/ABStBVsKgf8ACAoSJA7/AP8AOwzJAwlLCX3/ACivBVsGAQN+/wAMBRodD/8A/wA9CcoFCUoIdwEG/wArrQVaBXwEAQMF/wAoAwIUAwEL/wD/AP8AEQcISgaA/wAqrgVdAXkKBf8AKAQBGgj/AP8A/wAUCAhKBIH/ACuuBNYKB/8AJR8H/wD/AP8AFgkISgKD/wAoAQQDAagE1AsH/wAlHgb/AP8A/wAZCAnP/wAnBQWpBNILB/8AJRUP/wD/AP8AGQkKRQOG/wAoCAGpAtIMB/8AJQgd/wD/AP8AGQkKRAKI/wApDgEBAf8AdA0G/wAkCh3/AP8A/wAZCQpCA4n/ACr/AGAYBRMG/wAjBCT/AP8A/wAbCAtAA4r/AC0MAv8ASzMGAwL/AEb/AP8A/wAcCAvN/wAvCwIDAf8ARQ4HHwYBBf8AQf8A/wD/AB8JDMz/AC8MAgEB/wBFEgcbDAkB/wAqBAj/AP8A/wAiCAzM/wAxCwT/AEQUCBcOAQEDAv8ALQMI/wD/AP8AIQkNOwGP/wAzCwb/AD4YCBURAQj/ACj/AP8A/wAsCQ07AY//ADULBP8AOgkLCwYUGv8AKf8A/wD/ACoKBgYCyv8ANwIBBwEBA/8ANQkQIRv/ACr/AP8A/wAqCQcIAcn/ADkKBMMFagcTIBv/ACADCP8A/wD/ACoJBtP/ADsIAQICwQ1hBRgdHgIC/wAVCgH/AP8A/wAwCQbT/wA/BAS/EGEEGCEf/wAU/wD/AP8AOwsE1P8AOwMJvhJfAhkhH/8AF/8A/wD/ADkMBNT/ADzIFFwDEgIEIh8DAf8AFP8A/wD/ADgOAtX/ADzFHFcBFgYBHSEBAv8AFv8A/wD/ADUPA9X/AD3BIFUBGAEEHxIBCQIBAQMBAf8AGf8A/wD/AC8QA9X/AD2/IlQBHRIBGgEFAwIEAgUBAv8AHP8A/wD/ACsPBdT/AD68EQETUQIeEAEmAwQH/wAf/wD/AP8AKBEF0/8APrsPBBNQAh4RASQDBgb/ACLqAf8A/wA5EgbS/wA/uA8FFE8BITABAgQGAgEE/wAi4QlDBf8A7xQGMwGe/wA/twQCBwsScAMCEgMWAQIBCQECBP8AIt8IRA//AOcTCDABoP8AQL4DDwcGBHACAhEEJgEBAf8AJNoKRBF7DQkD/wBSFAQBBc//AEDRAgsCAgFuAwUDBAUE/wBPuQUXDEIVeAcEEf8AUhQDBQLP/wA/4wJuBAkGBP8AUbcGFBA/FncFFAH/AFQVAwYBz/8AQOMLaAUCBgn/AE+1CQ8UPBh1Bv8AaRYCLQKo/wBA2QQGEWIGAQYEAQT/AE61EggRPRl1BP8AahgBLAGq/wBA1SFlBQECAwEE/wBQshIKEDwadQT/AGpEAqv/AEDRDQQWWAEY/wBTUARbEg0OOB52BP8AaUQBrf8AQNANBxQkATECFP8AV00HXBAQBAIHOCB1A/8AaBUBAwIlArH/AEDPDQoTUgcBAhH/AFVNBwQCVhMUATwXgAL/AGYbAyACAQGz/wA/zwICCgsTTAkT/wBZTQgDAVcWEAI8F4EB/wBlHAQeArb/AD/OAgIHDwsBCEkJEv8AXE4HAgEBAQEBUxcJDDgW/wDoHQUbArj/AD/OAQIHEAwBB0gBAQYQ/wBgTQ5QGwYQNhj/AOYeBxgCuf8AP9EHEAsFA0YKDv8AY00OUBoFFTIUBAL/AOQfCBYCuv8AP9AHEQtHAQMMCv8AaE0QThwCFzIT/wDoIQoOA7//AD/QBxALRxAK/wBoOAYRD006LxX/AOQiCwgCAwHB/wA/zwcQCxcBAwQpEAn/AGk3Cg8PTDsvFf8A4yIPAwIDAcL/AD/PBw8DBAURDiUVB/8AajUNEA5LPS4U/wDiIhUBAsP/AD7QBw8CBQUNEyIZA/8ARgQiMRESDkk+LRX/AN8jFsb/AD7PCBcEDBMi/wBiEgYDCx8BERMTDUdBKxb/AN4jFsb/AD3QCRYEDAUIAyT/AF9ICAkVEw9DRCoW/wDcIAEEFwEBw/8APdAJFgJB/wBfRw0FFxMPAQM9RygY/wDIAQIBDCIdxP8APdAKWP8AXkcjAQYTEEBKJRn/AMYFCiQZyP8APdAKJAUu/wBhRSMBBAECEhQ8SyUc/wDBCAUmFc3/AD3QChwBAwcx/wBgRSAECREXN04kG/8AvgEBMhXP/wA90AoZDTH/AGJEHwUJEhg0TyUa/wC+MwQCAgUI0P8APdEIGA0z/wBiRR4GCxEYM08lGf8AvTUDCwbQ/wA+0AcXDTb/AGBFHwUNERgzTiYYBQL/ALQ0AQIFDALR/wA+0QUTDzoCAf8AXEUfBQ8XETIdDCUmFwMG/wCxOgXe/wA+0QQTDUD/AFxEIQQQFhMxGBEkKBYBB/8AsToDAQLd/wA/6Qk9AQH/AGBBIwMSFBQxFhgeKhUCB/8ArzoD4f8AP0AC6QQC/wBgPzwTEjURGh0sHv8Arj8D3P8AP0ED3/8AbjwqARgSEDkKIRUvH/8ArTwCAQTb/wA/QgLcBgL/AGo3LQQYEwxpBgUEMh//AKw8AgMC2/8APv8AKP8AazcqCBkTCx0BAQQLCnMUAQn/AKw8B9v/AD7/ACX/AG43KggbFAgaAwIHBwxzEwUB/wB+Bio8Cdv/AD3/ACD/AHQ1LAkdEgcTAQYJAQYBBQEFeQ//AIQIKD0K2v8APf8AIP8AdDQuBx4LAwYFEwIGDIkO/wCDCSY/C9n/AD7/AB//AHM0LwcfCQcDBhIDAQIBCgIBhRL/AIIJJkAL2f8AP/8AHv8AczMWAhgHIgYHAwgQBAEJAgSEFP8AfgskQgzZ/wBA/wAd/wBzMhADHgcjBBISDQEFhBf/AHkLDAECAhJGDNj/AEH/ABv/AHMzDwYcByMFEQEBEBOEGP8AdwwJCRFHC9j/AEH/ABr1AXwzEgMdByQGEAEBEREBA4AV/wB6CwcQDUYM2P8AQf8ADwEEAQT/AHQzMgckBxIOAQIOAwKAGP8Adw4EEQxHDNj/AEH/AA4BBQMB/wB0NQkBJwQnBxMOAQEPAwJ/Gv8AbQICEgMSDkUL2f8AQf8ADgEG/wB3NQgCKAIpBRUBAQ0GAQ19HP8AbRMDFBBDC9r/AEL/AA0BB/8AEAJkN1sDFgEBDAEDEn0d/wBrFAEXEUEK2/8AQ/8ADAEH/wAIAQMBajVaBBkOAQQJAQIBAX4c/wBsKxM/C9v/AET/AAsBB/8ACgJuMFwEFwECEgoBAYAc/wBtKBU+DNv/AEX/AAsCBf8Aei9aBhcCBQQDCAkCAYAc/wBuJxY3AQUJ3v8ARQMB/wAGAwT/AHovSwcCCAEDHQgBBwECDX0c/wB0IhU2AgUJ3v8ARwEB/wAHAwL/ABsBYC5LEB4BAgwDAgQBDXwb/wB0IwMBETUCAgze/wBIAQH/AAYCAv8AfS5LEB8BAgsEAQ9/G/8AdAgEHg83Dd7/AEj/AAgCAv8AfSxQDCUKDwEGfhr/AHMHBx0PCQEsDd7/AEj/AAgCAf8AfilVCiUHGYIW/wBzBRAXDyoDBw7e/wBJ/wAH/wCAKT4GFAkkBwkBBQEKghX/AHQDEBgPKgEHEN7/AEr/AAb/ACQBaBsvAgMCBwgEARIGJAgMAwcBAYUT/wCHFhEqAQQT3v8ATP8ABv8AjBkdCwUaAQMTBCYBAgQXAQIvAVQOAwH/AIIaEykCARTf/wBM/wAH/wCMCygvQQECARwBBQkGEAQDAlkD/wCJHRMoGN//AEv/AAj/AIwJITdGASIICQwJ/wDlIBEnGOD/AEz/AAf/AI0FITlGARsDBQcKCwr/AOQhEBYBEBng/wBN/wAE/wCRAiA7YgIZBQ7/AOEBASIQJhrg/wBO/wADAQH/ALA8FQFMAS3/AOEkESUb3/8AT/8ABP8AjgQaQlwBMf8A4CYQJRvf/wBQ/wAD/wCOBBhFSAESASgBB/8A4CYRGwYDFgEE4P8AUfwBAv8AjwYWRkcEAgIyAwn/AN0nERMoAQPh/wBR/f8AkQgFBgdIRw0BAiUGC/8A3CgQEyYCBeH/AFL7/wCRY00JIwoK/wDcJw0BAhMjAgIDAuP/AFP8/wCPYnoHDf8A2ykOEhoBCgEC6f8AU/v/AI9ifAUO/wDcJgEBBgEBFw8CCgQGAgLp/wBT9v8AlGGQ/wDeJQQCAQoCCw4ICPb/AFnv/wCUYJH/AOIkAQ4BCQ0IAgEK9f8AW+v/AJZfkv8A4zIBCQcIBgMH+P8AVQEBAgTp/wCVYJH/AOQ8BwMCAgcDBvn/AF/j/wCXYwMCi/8A5DkDBwECCwMG+f8AYt7/AJdojP8A5jgEAgEFCwUE+v8AY9z/AJVtiv8A5iEDEQoEC/8ABf8AZNv/AJNwiP8A6B8EDg0EBf8AC/8AZdn/AJN0hf8A6DMMAwX/AAv/AGbW/wCUd4L/AOouAQMDAQkDA/8ADP8AZtX/AGUDLIIpCUb/AOosAQUEAQgEAf8ADf8AZtT/AJOHJA1D/wDrLAEKB/8AE/8AZ9D/AJaLHhBC/wDtMQr/ABT/AGfP/wCXjBsSQv8A7jABAgf/ABT/AGjN/wCYjRoXPf8A7zEH/wAV/wBpy/8AmI4ZHTf/AOsBBTAH/wAV/wBpy/8Al48ZHjb/AO0BAzAH/wAV/wBpCwMCAbn/AJeRGSQbARL/AO8BAjACAQT/ABX/AGoKB7j/AJeSGCkRCQ7/APIxAgEC/wAX/wBrCQm1/wCYmBIsDAwBAQn/APUxAQEC/wAX/wBrCQm1/wCYnA4xBf8A/wAP/wBM/wBsCAm1/wCYnwv/AP8ARP8ATf8AbQgJtP8AmKAJ/wD/AEM3Af8AF/8AbQgJjgEl/wCZoQb/AP8AQv8AUf8AbgcKgQEECAMHG/8AmaMCqAH/AJg4Af8AGv8AbgcKgAMBFhn/AJn/AE4DAwH/AJf/AE7/AG4ICoUWBgMP/wCY/wBJAQIJ/wCZAQL/AEn/AG8ICYQXBAYO/wCX8QFZC/8Amv8ASv8AcAgJZAEDCAQBAQELIw3/AJbxAlkM/wCX/wBM/wByBwIBBWQVBwECIw3/AJTzAVYQ/wCX/wBL/wBzCgVjFQcCAyIM/wCT9QELAUsO/wCX/wBL/wBfARUGBmMgAiQL/wB/AhD2AgkBTA//AJT/AE3/AHUHBWJIC/8AfQER9wIJAU0O/wCU/wBN/wB2BwddSgv/AGYBFQEQ+gIIAU0P/wCT/wBN/wB4BgdXAgFMDP8AZQEIAQwBD/sCCAFODv8Akv8ATv8AeAcHV04M/wBrAwwCDv0CBgFPD/8AkiwC/wAf/wBxAQYHCFRPDf8AawMMAgz/AAECBQFQDv8Ajy4C/wAg/wB3CQhRUQ3/AGwBBAMQ/wAGAgQETQ//AI3/AFH/AHMBAgoMTFIN/wBxAg7/AAoCAgZND/8Aiy4B/wAj/wBzDgtNUwz/AGMBG/8ACwtME/8Ah/8AUv8AdA4KTFMN/wB//wALC04T/wCE/wBT/wB1DQpJAQFUDv8Aff8ADQtNFP8Ag/8AU/8Adg0LSVUN/wB9/wAOC04T/wCB/wBU/wB5CwxHVQkBA/8AfP8ADwtPFRAE/wBp/wBV/wB6DApHVwcBBP8Ae/8ADwxQFAsBAgX/AGguAf8AJ/8AfgkLRlYMBwQEAf8Aav8AEA1PGQMCAQj/AGYBAS0B/wAo/wB/CAxFVgwQAf8AZ/8AEw1OKP8AZi0B/wAp/wCABwxFVwsPAf8AZv8AFgxPIgEE/wBlLQH/ACr/AIIGC0VYCg8B/wBl/wAXDU0CAQMBGwIE/wBkLgH/ACr/AIMGCUZZCBAB/wBl/wAYDUwCAQIDGgIF/wBk/wBY/wCDBQtFWgf/AHb/ABkMTQQDGQMF/wBj/wBZ/wCDBgtEWwX/AHb/ABoNTAMEFwUK/wBeAQH/AFf/AIMHDEFcBf8Adv8AGw1MAgQWBg8BAiQD/wAtAgH/AFj/AIMHDj9cBRcB/wBd/wAcDU0BBRQHGg4GAQv/ACwNAf8ATf8AgwkOPW0BAwH/AGT/AB0NTAEFEwg6/wArDAX/AEv/AIIKDjxuAgkB/wBd/wAdDVETCTr/ACoMBf8ATP8AhAcQO20E/wBm/wAeDFESCzz/ACYMBv8ATP8AhAcROm0E/wBl/wAfDU8SDDz/ACMBAQwH/wBM/wCHBRE5bwH/AGX/ACEMUAoBBQ48/wAiDQgLAQEB/wA+/wCIBw83cAMMAf8AVf8AIw1QBQEEAgEQO/8AIQ4H/wBN/wCKBhA1cQL/AGD/ACYObDv/AB8OCP8ATf8AiwYQNHEC/wBf/wAmEG06AQH/ABsPCP8ATf8AjQUQM/8A0v8AJhFzNv8AGQ8J/wBN/wCOBRAy/wDS/wAmEnM2/wAVEgj/AE7/AI4FEDL/ANH/ACcSczf/ABMTCP8ATv8AjgQSMVcHAQL/AHD/ACgRdDf/ABEUCP8ATv8AjwIUMFIT/wBs/wAoEnQ3/wAPFQf/AE//AKYvTxgeAf8ASv8AKhJ0OQID9gEIAQEbBf8AUP8Apy5NCAYMIAH/AEj/ACwQdTx2AQECfQIEIAT/AFH/AKgtTAcGEgMCHAH/AEL/AC4Pdzd5AQEBAQF8AgIjA/8AUXQB/wAzLUwGCBQCAf8AXf8AMQ12NH0BAQN8AgElAv8AUXMD/wAyLUsDEREBAf8AW/8AMwx2NRIBYwECAQEHeCwB/wBRcAEDAf8AMy5IAQECBgIODyAB/wA6/wAzDHU3EANbAQUCAgh3AQH/AH7/AKktUgMQD/8AV/8ANAx1OBACVwEGEF4BEgQC/wB/fAL/ACwsMwYBAhYDFgr/AFb/ADQMdDsOAlMbXQUCAQv/AIZ8A/8AKy0tDy8L/wBU/wA1C3M8DgJSHFkNBv8AioED/wAmLSoTLg4OBP8AP/8ANgtxPgwDUR5YDAT/AI2FAf8AJC4nFDAQCwP/AED/ADYLcEEIBlAeVgEBDAX/AIyDAQED/wAhLycUMQ//AFD/ADQMbkMFCFEeVA8E/wCNhgL/ACIuJhQ2D/8ATP8ANA1tUFEfUREE/wCN/wCoMSUTAQE3D/8ATP8AMg1pAQIBAU9QIU8TBP8AjP8AqDIkEjoR/wBK/wAyD2cEAU9PI04TA/8AjYkC/wAdMyMSOBMHAf8AQ/8AMRFkVU4lTBgB/wCLiQT/ABwzIhI3EAsC/wBB/wAyEmNUTiYBAkgTCP8AiogG/wAcMyASUAcDB/8ANP8AMxNiVEgBAi1GEgv/AImJBv8AHDIgElET/wAx/wAzFGFVSC9FEgv/AIqJBv8AHDIgElQR/wAw/wAzFWBVRy9GEQv/AIuJA/8AITEeE1QU/wAt/wA0FGBVRTFGEAv/AIyJAv8AJDAcFFQU/wAu/wAzFV9VRDNEEQs8Af8AT/8AsS8ZFlECARj/ACv/ADIVW1pDMgECQhELQAH/AEv/AIkBKTASAQMVVAECF/8AKv8AMxVYW0MzAQNCEAr/AI3/ALMyDAUDEgECTAQGGP8AKv8ANRNYXEE4QhAJOwT/AE//ALQyBh8CATUJDRoFAwcKBQH/ABT/ADYTVl1AOkIRBT0GAgL/AEn/ALZWOAoOAgINFgj/ABv/ADgRVl0+PERRCv8ASf8AulI6CRoDFwf/AB3/ADgRVF49PUVPCv8ASv8Avk08BAMBGgP/ADv/ADgSTmQ7PkVPCv8ASv8Av0xfASUBEAH/AAX/ADkSTGU6QERPCv8ASv8AwEv/AJv/ADoTSmY5QUVOCv8ASv8Awkn/AJv/ADsTSWY2REZNC/8ASf8AxEeWAc8CMv8AOxNJZjVEDgE5TAz/AEj/AMdE/wBnATL/ADwUQm0zRQ4COUsM/wBI/wDJQv8AdAEl/wA9DwICP3A0RA4COkkM/wBJ/wDNPv8AbAIr/wA+EAEDO3MzRQ0EOkgM/wBJ/wDQOpkB//8APhQ4djJFDAY7Rwz/AEn/ANE4mAT+/wA+FDd3LUoKCTxCAQMK/wBK/wDUDwcemgHbAiP/AD4UNnksSgkKPUEM/wBM/wDYCQscBQIICIUB/v8APxM2eStOBQw9QQr/AE3/ANoEDzb/AID/AEECAg42eiZVAQ09QQr/AE3/AO42fwH+/wBBAwINNXwlYz5ACv8ATf8A7zV/Avz/AEUONH4kZD8/Cf8ATv8A8Df/AFQBJf8ARg8xgCRkQD8I/wBO/wDyNv8AUwIk/wBHDyuGI2RAPwkBAYYBw/8A8jV+AdABJ/8ASw0qhyNkQD8JAQH/AEv/APM0fgL4/wBMCyWNImVAPwICBP8ATf8A9DR+Afn/AE0JJI8hZUBAAQIE/wBN/wD2Mv8Aef8ATgkikCFmP0IGBAH/AEf/APcw/wB7/wBNCSGSIGY/QQcCBf8ARf8A+S5/Afr/AE4IHJcgZkBADgEBBAH/AD7/AP8ngAH7/wBPBxmZIWVAPQEEAwMDAQIBAwIC/wA9/wD/AAIl/wB+/wBPBhecIGY/SQICBAMC/wA9/wD/AAYh/wB+/wBQBRSfIEcCHgoEMD8EBAIBAgIEdwHI/wD/AAkFAhd+Afz/AFIFDaYgRwEfCQUwPwYCAgIBAwP/AEH/AP8AERaIAfL/AFQDDKcgRwEgCAUwQQQIAQEE/wBA/wD/AA8Y/wB8/wBUBAqpH0YCIAgFMUAECQECA/8AP/8A/wAQF/8AfP8AVgIGrR9GAiAIBTBBBA4B/wA//wD/ABEW/wB8/wBXOQd0HkcCHgEBCAsqQgMDAQYBAQEBAQEF/wA5/wD/ABIURAL/ADj/AFc5BHcdRwIcAQEBAQgMKUIDAwECAQMDAwb/ADj/AP8AFBJCBQwBAwElAf8AAf8AVrQcSAEhCA0oPAESBAMG/wA3/wD/ABURQQYFA/8AMf8AMQIitRtIASEHDgEBJjwCEQEBAgQF/wA3/wD/ABUEAwpABgYD/wAy/wAwAiArA4oZSAIgCBEkPQELAQoBBAT/ADf/AP8AFgQDCT4HCAL/ADb/AEwsBIsYSQEfAgEGEiNJAw4D/wA3/wD/ABgCBAg8BwoBAQT/AC8BAv8ATyYHixhJASIFEyM8AQwHBgICA/8AN/8A/wAZAgQGNwEECAkK/wAv/wBQIQuMF2sGEyJKBwYI/wA2/wD/ABoLNw4EDxkB/wAQAQT/AFAVAgISjBdrBRQgPQEOBgUBAgf/ADb/AP8AGgwxEwIRFwP/ABb/AFATF4wYagUVAQIbPgEOBQECAwECBP8AOf8A/wAaDS8oJwL/AAYBAf8ATgsDAxmNF0YCIgUYGT8CDgQBBAECBAH/ADr/AP8AGg0uKQcEDAwDA/8ACf8ATwYijRdGAiEFGBhCAg0CAQEBBAECBAL/ADn/AP8AGg4sFgEfCwgHA/8ACf8AeI0VagUcEkMDEAEBAwICBAL/ADn/AP8AGg4sFgIfCAsGA/8ACv8AdY8TAQFqBBsBAwxGAhQDAQIFAwEB/wA2/wD/ABoDAQsrFQMzBAT/AAz/AHOPEm0EGwEFCkUCFQIBAgICAgEDAf8ANv8A/wAbBAEKKhQFMgEB/wAT/wBykBFrAQIDIglEARQFAQIBBAgB/wAz/wD/AB0CAQsoFQY3/wAQ/wBwkRAFAmcEIQlEAhQFAQEBBf8APP8A/wAhCxEBFhUFOf8ADv8AcJEPBwJmBR8IAQFDAhYEAQECAQcD/wA1/wD/ACMLDggOGAM7/wAO/wBvkQ8HA2UFHwhEAxcEDAP/ADT/AP8AJQkMDAsZAzv/AA//AG6SEAUEQwEfCRwGRAQZAwEBBQEEBP8AM/8A/wAmCAIBBhAJWP8AD/8AbZMLCQVjChsERQMcAQ0E/wAz/wD/ACYMBAcEBwdY/wAR/wBrlQkKBmIKGwREAycJ/wAy/wD/ACYWBwcEWP8AEv8Aa5UJCgdhChsCRQMgAQcI/wAz/wD/ACYCARMHBwJZAQf/AAz/AGmXCAkIYQpiAiADAwz/ADL/AP8AKREHAQMHAWL/AAn/AGqYBgoJYAuCBQIM/wAy/wD/ACoBBQgNBwFj/wAI/wBpmwIMCWABAgl/BwEN/wAy/wD/ADEIC27/AAf/AGepC0MBGwEDCF4BHhf/ADL/AP8AMggKb/8AB/8AZqkMXgEDCHwZ/wAx/wD/ADMBAQYKb/8ABv8AZasLYwd7AwEEAw//ADH/AP8AMAEEBgtv/wAG/wBkqwxjB3oCBQEEDi0B/wAD/wD/ADYDDW//AAn/AGCsDGQGXgEbAgoO/wAx/wD/AEdv/wAK/wBdrQxDASEGeAILDv8AMf8A/wBIbf8ADP8AXK0MQwEhB1oBAQEbAQoJAwK1AXv/AP8ASW//AAr/AFquDGYKVQQmCQMB/wAz/wD/AEpv/wAL/wBYrwpoClQFGQMJCQMB/wAz/wD/AEpx/wAKUQH/AAWvCWcBAQtSCCQJAgH/ADP/AP8ASXP/AApHEP2wCGsMTwkkCf8ANv8A/wBKc/8ADEEU/LEEbwxNChICEgf/ADb/AP8ASngCCvs/Fvr/ACYMTQwQARUF/wA2/wD/AEqH+Tkc+f8AJg5KDyYC/wA3/wD/AEmK+DYf9/8ACgMaD0cT/wBd/wD/AEqM9jMh9v8ACwQYEUYV/wBb/wD/AEqN9hwDESP2/wALDRARRRUEAv8AVf8A/wBKjvcREQgo9P8ADA4QEEUT/wBd/wD/AEqP9w4XAirz/wAODg8QQBX/AGD/AP8ASpD4CUcPAuH/AA8ODhE+Fv8AYP8A/wBKkvkESgkI3/8AEQ4NETsbLgH/AC//AP8ASZMBAf8ARwQN3f8AEw0NETsZMAH/AC//AP8ASZb/AFfc/wAVDA4QGgEfGDIB/wAv/wD/AEqV/wBZAQHX/wAXDQwQGQMdFzMB/wAw/wD/AEuU/wBa1/8AGQ0LDxsCHBn/AGP/AP8AS5X/AFQCBNb/ABsNCw44F/8AZf8A/wBKlv8AUwIF1f8AHQ0KDjcYLgH/ADb/AP8ASZf/AFMCBtP/AB8OCQ02Gf8AZf8A/wBImP8AW9L/ACEOCA00HP8AZP8A/wBImP8AW9H/ABkBCA8HDQwBIyD/AGT/AP8AR5r/AFrP/wAbAggPBw0rJSsB/wA3/wD/AEWc/wBazv8AHgEHDwkMKiY8Af8AJf8A/wBDnv8AWs3/ACABBw8JCyonOgL/ACX/AP8AQ5//AFnM/wArDgECBwopJjoD/wAl/wD/AEOh/wBXyv8ALhQECR8BCSY4AQIB/wAmgAH/AMGg/wBXyf8AMhIFCR0DByc3Av8AKf8A/wBApv8AVMj/ADQQCAccCAMoJwEOAv8AKf8A/wBBpf8AU8f/AC0CBxUFBRs2JAINBAEC/wAl/wD/AEGl/wBTxv8ALgIHFQcBHTcNARQDDQMBA/8AJf8A/wBApv8AUsb/ADADBhQBAQgCGTgLBBEDDgMBA/8AJf8A/wA8qf8AVMP/ADIDBhgHARk5BwEBDAIBBQQPAQID/QEn/wD/ADqq/wBWwf8ANAIGFwIBHjQMGg8BAQT/ACf/AP8AOqkBAf8AU8L/ADYBBxYBAR8zDRoQBv8AJv8A/wA6qAEC/wBTwf8APxkfMQ0DCAIGBxIG/wAl/wD/ADqt/wBBAQ8BAYYCNv8AQRkeMQ0CEwEWAgQB/wAk/wD4Aj+mAgUBAf8APwEPhgYz/wBEFx8wDQErAv8AKf8A+QE/pQECBQL/AE+CCjL/AD0BBxYFAhkvDQIrAg0F/wAX/wD4AwECOaYCAQEM/wBKggsx/wA+AQcWBgEYLw0CKAECAg4F/wAW/wD4AQECO6YDDv8ASIIMMP8APgEJFAQCGjAMAgkBHgMBAg0CCAT/AA3/APoCAgI3pwINBgH/AEGCDS//AEoTIS8MAhADFwECARUI/wAL/wD5AwgBMqcCDQII/wA9gw0u/wBLEyAwCwQLBxcDDwICEAcE+v8A+QM5qQEOAQr/ADyDDS3/AEQBCBQgLA0FBggCASkUBAEEA/n/AP8ANrcBDv8AOoINLf8AQwIIFxwCASkNBwQILhMEAQUD+P8A/gE2tgIRAwH/ADOCCy7/AEQDCBYgJg8IAggCBCoT/wAF/wD/ADaiAxEBEwEB/wA1gQou/wBGAggWICUQEQMBAQIWAxQQEwJCAaz/AP8ANrIEF/8ANIEKLv8ARgMIFgQEFyQRDwgBBQMOBBUNCQMHBe3/AP8ANqwDAgEBAhr/ADOACS7/AFIWBAUWJRAOBwEGBgEEFAQJDAsEAgnr/wD/ADazARv/ADOACSz/AFUWAgYWJBANEQEHARYCCgwRCysFuf8A/wA10P8ANH4LKv8ATgIGFgYCFiUPDhgBIwgBAg4QKwG7/wD/ADbPBgH/AC59Cir/AFcWAQIDAxUlDw8XASwDCxfi/wD/ADgDAckBAQIG/wAsfQIw/wBZGgEFBgENJA4RPggBAQkaNAOo/wD/ADkCAdX/ACus/wBVAQYfBQQLIw4KAgc4AwELCB81AaX/AP8AOQIB4/8AHqv/AFYBBhoBBAQECyMOCQQHIQoMEAYiNQGj/wD/ADvm/wAdqv8AVgIFGgMBBQQUBwERDwgFBxcDBg4MDQUlNAKh/wD/ADrp/wAcqP8AXxkhBgQPDwkDCBUGBAIBDQwNAykzAp//AP8AOev/ABym/wBhGCECCQECDA4JAwgVBwcBAwICBQs9MAKe/wD/ADfv/wAbaAE8/wBjFTIKEgUDCBYGBAILBAoFATkwAZ3/AP8ANvL/ABpnATz/AGQUMgUDAhIFBAgXAhUBCwQDOy4BnP8A/wA19P8AGWcCOv8AZRUxAwUBEwUFCAIBNwMGOi0Bm/8A/wA09f8AG2UCOv8AZhMyARsFBwlBOiwDmf8A/wA09v8AGmUDOP8AaBJOBQYIRDolBQEDmf8A/wAz+P8AG2MDOP8AaRJNBQYFAwJEOyIFAQOZ/wD/ADP6/wAZYwM3WwH/ABAQTQUGBAMDSjYBASAEAgKZ/wD/ADT6/wAYYwI3/wBuD00FCAECBE00IgSd/wD/ADT9/wAWYgM2AwH/AGwNTAYLBFExHgae/wD/ADT/AAX/ABBhAzUEAf8AbQtNBggBAgVSLxcBBQYOAZD/AP8ANf8ABf8AD2EDNQMC/wBjAQoKTQYIAgEFOAEaLQcCDwEFBw0BkP8A/wA2/wAF/wAOYgM0/wB0CU4FDAJCARMuCgECBQINEAKO/wD/ADb/AAX/AA5iAzP/AHYBAgECApkBCAMTMAcCARISA43/AP8ANP8AB/8ADwMBXAQzAgH/AM4BRQEIAxQxCg8TBIz/AP8ANP8AB/8AD2AEMwIB/wB7CUoBTQQUNQgKFwOM/wD/ADb/AAb/AA5hAjQCAv8AegxHAU0EFDULBRoEiv8A/wA4/wAE/wAPYAM0AgH/AHoPDQGEAxY1KgSJ/wD/ADn/AAP/AA9hAzT/AHgBAhELA4MCGDQqBIn/AP8AO/8AAv8AD2AFM/8AeBQKCH4CGDACASwDAwKE/wD/ADv/AAL/ABBgBTP/AHwkAgcGAoQvNwOC/wD/ADz/AAH/ABBhBDP/AH4jAQYCAVABEgEmMDcCgv8A/wA9//8AEGIDMv8AfiVqASgwOAOA/wD/AD3//wARYgIy/wCCIWkCJTS6/wD/AD7+/wARYgIy/wCGHgUBRgIZAyQlARAzAQsBef8A/wA+/v8AEWIDMQIB/wCGAQcbQQQRAQgCJCMGDzMBCwJ3/wD/AD/9/wASYgIy/wCTGFcBBwElIwsMMwEBAQgDdf8A/wBA/P8AEmMCMP8AlhwLBAUBFQEIBA8CEAElCAUVDgwzAwkCdP8A/wBB+v8AFGEDMP8AnwUCBgEGAwMEAQEHBgUKBgEHCgE8BwcRAgEPCzUCCQIFAW3/AP8AQfr/ABRiAy//AKkDAwMDBAEEAwUCAQIIAgMCAwECDAlKExALDwEiAQICDwJs/wD/AEL5/wAUZAEv/wCrAgMBBAMBDgEBAg8PCk0REQw1Ag4CbOIB/wBe+P8AFJb/ALQDAQgPAwIBEglQEBILRQJs/wD/AEL4/wATl/8AuQMpCFQOFA4TAiMBBQEDAmv/AP8AQ/b/ABSY/wDiCFoCAwMXDQUBPQFr/wD/AEP1/wAWl/8AxAYWB3wNBQQyBAUBav8A/wBE8/8AF3YBIP8AxAcUB38OBAMxBgMCaekB/wBZ8v8AGHYCH/8AxgcRB4EOOAZt/wD/AEXx/wAZdQMe/wDJBRAGgwwGATYBbv8A/wBF8P8AGnYCH/8AyQQQBWQBIA0FAqP/AP8ARu7/ABx1AyD/AMgBEgOOCT0Baf8A/wBG7f8AHXYCIf8A0AGfBD4DZv8A/wBH6v8AIHUCIv8A1gKYAj8EZf8A/wBI6P8AIXUCIv8A1QJtAW8BFAFQ/wD/AEjn/wAjdAIi/wD/AEQD1P8A/wBI5/8AI3QCIv8A/wANATYE0/8A/wBJ5f8AI3UDIP8A/wABAgEEAgQ2BT8Bk/8A/wBK4/8AJHUEHxAB/wDuCAYDMwU7AiQBcf8A/wBK4/8AJHUEHxAB/wDuBwgDMgVjAW//AP8AS+H/ACV1AyEPAf8A8gIICC4F0/8A/wBL4f8AJXQEIf8A/wAODAQCAgIeCNH/AP8ATN//ACV1BCEVARoC/wDRAwQWAQQbCNL/AP8ATd7/ACV1BCEvBP8A0CIbCdH/AP8ATd3/ACR3BCEvBP8AziMcCtD/AP8ATtgBAv8AJHkDIRkBFQX/AMwjHgnQ/wD/AE/Z/wAkegMhGQEVBv8AyiQdCtD/AP8AT9f/ACZ6AyEvBv8AySUdC8//AP8AUNX/ACZ7AyErAQII/wDJISALz/8A/wBQ1f8AJXwDIS0J/wDIIh8MzyoD/wD/ACPU/wAmfQIhKgEBCv8AxiQfDM8qAv8A/wAk1P8AJn4DHykN/wC1Ag8lAQMaDIcBRy4D/wD/AB/U/wAlfwMfKgz/ALEBAwQNJAICGwzP/wD/AFDU/wAlfwEBAR8pDv8AsAkLJAMCGw3O/wD/AFHT/wAlggEfKA7/ALAKCSQhDQIDyf8A/wBS0v8AJaIoDv8ArQ4JIyESyf8A/wBS0v8AJaInD/8AqxEIIiIUx/8A/wBU0P8AJKMlEf8AqxEBBAMiIhV5Akv/AP8AVc//ACSjJRL/AKk9IRZ5AQEBSf8A/wBWzv8AJKIlE/8AqD8gFnkDBQFD/wD/AFbO/wAjoyMV/wCmQx4WeQMDAUX/AP8AWBwDrv8AIqIiEwED/wCmRB0WeQMFAUP/AP8AWhoFrP8AIaMhFAED/wCmRgEBGBeBAUP/AP8AXBkFq7wBY6IeGAIB/wCnSBgXfAFI/wD/AF0aA6v/ACGhHBv/AKpKFhh7Akf/AP8AXxkDqf8AIqAaHv8ApQEBAQJMFBh8AgECQAIB/wD/AGIXAqn/ACKgGSD/AKRSCAEKGHwDQAQB/wD/AGTA/wAinhwe/wChAQNSBwIJGb0HAAGhAf8Awr7/ACKdHB//AKADA1UOGoABOgMBAgL/AP8AZ7z/ACOcHR7/AKAEA1cLHML/AP8Aabr/ACOYIB//AJ4HAVkKHLIBD/8A/wBruP8AI5YhH/8AnwcBWQketgEKqwEBAf8Avbf/ACKUJB//AJ9jBh+zBQmtAv8AvLf/ACOSJSD/AJ6IfgIyBwj/AP8Abbb/ACOQJyD/AJ6IsgcI/wD/AG+y/wAljygf/wCgh7EICP8A/wBwsf8AJY8oH/8An4i0Awr/AP8Aca//ACeNKh7/AJ6Lv/8A/wByrv8AKIsrHf8AnovA/wD/AHKu/wApiSwd/wCdjYACPf8A/wByrv8AKoYuHf8AnY2BAT05Af8A/wA4rv8AKoUwG/8AnY+zAQr/AP8Acq7/ACuDMRv/AJySvP8A/wByrv8AK4IzGv8AnJV8ATz/AP8Ac63/ACx/NRn/AJuYewE8/wD/AHOs/wAtfjYZ/wCZm7f/AP8Ac6v/AC98Nhr/AJWhtf8A/wBzq/8AL3w2GTIC/wBdqLP/AP8Ac6r/ADF7NhkxA/8AWq1WA1j/AP8Acqv/ADF7NRoxAv8AWLBXAwoBTP8A/wByqv8AM3o0Gv8AhQMCsVkEVf8A/wBzqP8ANHszGv8AfQEFuVkECwFI/wD/AHOn/wA2ezEbJgP/AFi8WQQJAkgbAf8A/wBXpv8AN3sxGicE/wBWvlkEUv8A/wBzpv8AOHovHCkB/wBWv1oFCwFE/wD/AHOm/wA5eS8c/wB+wloFCgJD/wD/AHOm/wA5ei4c/wB8xFwFTf8A/wBzpv8AOnktHP8Ae8dcBUz/AP8Acqb/ADx4LRz/AHcBAsheBEv/AP8AcqT/AD55LBv/AHcCAsgCAV0DSv8A/wByov8AQXgsG/8Ad80BAgEBp/8A/wByof8AQngsG/8Ad9NeAUf/AP8AcqH/AEJ4LBr/AHjTpv8A/wBxmwEG/wBCeC0Z/wB406b/AP8AcJQCAf8ATnguGP8AeNOm/wD/AHCU/wBReC4Y/wB406b/AP8AcZH/AFN4Lhf/AHnTAQGk/wD/AHGP/wBVeC4X/wB416P/AP8AcYsDAv8AVHguF/8AeNej/wD/AHGJ/wBbeC4W/wB42aL/AP8AcYf/AF14Lhb/AHjboP8A/wBwh/8AX3YvFf8Aedyf/wD/AHCG/wBgdTEU/wB53J//AP8AcIT/AGNyNBP/AHrdnf8A/wBxgv8AZHA2Ev8Ae94DAZj/AP8AcYD/AGZtOhD/AH3dAwGY/wD/AHGA/wBmaj4L/wCB3gIBmP8A/wBxfv8AaGlCBv8AhOCY/wD/AHB//wBoZ0YC/wCAAQXfmf8A/wBwfv8AaWb/AMwCAt6Z/wD/AHB+/wBqZf8AygECAQPdmf8A/wBwfv8AamX/AM0CAt2Z/wD/AHB+/wBqZ/8AyQIBAQLdmf8A/wBwff8AbGb/AMoBAeCZ/wD/AG9+/wBsZf8AzOGZ/wD/AG9+/wBsZf8AzeCZ/wD/AG9//wBrZf8AzeGY/wD/AG9//wBsZP8Azt8BAZf/AP8AboD/AGxj/wDP4Jj/AP8AboH/AGxi/wDQ4Jf/AP8AboD/AG1i/wDQ4Jf/AP8AbYH/AG5h/wDQ4Jf/AP8AbYH/AG9f/wDR4Jf/AP8AbYD/AHFe/wDS4Jb/AP8AbYD/AHJd/wDT35b/AP8AbID/AHRb/wDU35b/AP8AbH//AHZZ/wDW3pb/AP8Aa37/AHlX/wDX3pb/AP8Aa33/AHpV/wDa3Jf/AP8AbHz/AHtT/wDb3Jf/AP8AbHv/AHxS/wDd25f/AP8AbHr/AH5Q/wDe2pj/AP8AbHr/AH5Q/wDe2pj/AP8AbHn/AH9P/wDf2pj/AP8AbHn/AIBO/wDf2pj/AP8AancBAv8AgU3/AODZmf8A/wBqdQID/wCCS/8A4dmZ/wD/AGp0AwL/AINL/wDi2Jn/AP8AanQDAv8AhEn/AOPYmf8A/wBqcwMC/wCGR/8A5deZ/wD/AGpyAwL/AIdG/wDm15n/AP8Aa3AEAf8AiUT/AOjVmv8A/wBrbwMC/wCLQv8A6VgCe5r/AP8Aa28CAf8AjUD/AOxMD3ib/wD/AGtw/wCQPv8A7UkUdpv/AP8Aa2//AJE9/wDuRhxwnP8A/wBrbv8Akjz/AO9DJGuc/wD/AGtt/wCTO/8A8DkvaZ3/AP8Aa23/AJM6/wDxNzJnnv8A/wBrbf8AkTv/API1NBUBUJ//AP8Aa2z/AJI5/wD0MjcUAk+g/wD/AGpt/wCSOP8A9TA6EgNOof8A/wBqbP8AlDX/APcwPQ8CTqL/AP8Aamv/AJYz/wD3MD4OA06i/wD/AEEBKGn/AJgw/wD3Mj8OA02j/wD/AGlp/wCaKf8A/TFBCgVOo/8A/wBpaf8AmSYCAv8A/RxXCAVOpP8A/wBoTgEa/wCaAQITDgH/AP8AAxpaBgZOpP8A/wBoTQMY/wCeEf8A/wAWGFoFBwMBSaX/AP8AaE4HEv8Aogb/AP8AIBJdBQgDAkh8ASj/AP8AaE8IDv8ApQT/AP8AIg9gAwkDA0Z+ASf/AP8AZ1IIAgUC/wD/AP8A0AxiAwYEBEZ/AiX/AP8AZ1T/AP8A/wDjBW0FBEZ/BSL/AP8AZlf/AP8A/wD/AFQBB0aABiH/AP8AZVj/AP8A/wD/AFwEAUCCBx//AP8AZVf/AP8A/wD/AFcBBAMCQIQGH/8A/wBlV/8A/wD/AP8AUwkFQIUFH/8A/wBkWP8A/wD/AP8AUwYKPYYFH/8A/wBkWP8A/wD/AP8AZDyHBQMBGv8A/wBjW/8A/wD/AP8AYjyIAQECHv8A/wBjXf8A/wD/AP8AYTuKAh7/AP8AYl7/AP8A/wD/AGE7igMDARn/AP8AYl7/AP8A/wD/AGE6iwIEAhj/AP8AYl3/AP8A/wD/AGI6jAQBAxf/AP8AYV3/AP8A/wD/AGM6jAgX/wD/AF9f/wD/AP8A/wBkOY0HF/8A/wBfXv8A/wD/AP8AZjiNCAsBCv8A/wBfXf8A/wD/AP8AaDWQCAgFCP8A/wBgW/8A/wD/AP8AaSyYDAQFCf8A/wBgW/8A/wD/AP8AaxcCD5oVCf8A/wBgWv8A/wD/AP8AcBMCDpsVCf8A/wBgWP8A/wD/AP8AdwwDDZwWCf8A/wBgVP8A/wD/AP8AfwYJCJ0VCv8A/wBgUP8A/wD/AP8AhQMMAqEUC/8A/wBhPwEI/wD/AP8A/wCdAZ8UDP8A/wBhPwEB/wD/AP8A/wCkAZwXDP8A/wBhQP8A/wD/AP8A/wBCExH/AP8AYUD/AP8A/wD/AP8AQxIR/wD/AGFA/wD/AP8A/wCYAasQEf8A/wBgQf8A/wD/AP8AlwIVAZcOEf8A/wBfQf8A/wD/AP8AmAIVA5gLEf8A/wBfQP8A/wD/AP8AsQKZCRL/AP8AXkH/AP8A/wD/ALECmQgT/wD/AF5C/wD/AP8A/wCxAYoBDQgU/wD/AF5C/wD/AP8A/wCdAZwDDQcV/wD/AF0zAwz/AP8A/wD/AJ4FDAOJBAUBBQgV/wD/AF0zBQj/AP8A/wD/AKAHBQmHBgMEAwcW/wD/AF0z/wD/AP8A/wCtFYcGAQYCBxf/AP8AXjL/AP8A/wD/AK4UhwwEBRj/AP8AXgUBLP8A/wD/AP8ArhSGDQYBGv8A/wBfAwIs/wD/AP8A/wCvE4QPIf8A/wBdAwQs/wD/AP8A/wCvE4MQIf8A/wBcBAYr/wD/AP8A/wCvEoMPIv8A/wBcBAQvAgP/AP8A/wD/AKgQhA8j/wD/AFwEBDT/AP8A/wD/AKgQhA4k/wD/AFwDBS4CBP8A/wD/AP8AqBGCDiX/AP8AXAQELQQD/wD/AP8A/wCpD4IOJv8A/wBbBQQw/wD/AP8A/wCuDoAPJ/8A/wBbBAQv/wD/AP8A/wCxCgECfhAo/wD/AFwDAy7/AP8A/wD/ALUHgRAp/wD/AGIt/wD/AP8A/wC2BQEBgBEp/wD/AGIt/wD/AP8A/wD/ADsWJxID/wD/AEcCBC3/AP8A/wD/AP8AOhMCAicTAv8A/wBMLv8A/wD/AP8A/wA2FC7/AP8AXQEDLv8A/wD/AP8A/wA1EjH/AP8AXAMCLv8A/wD/AP8A/wA0EzH/AP8AWgMBAQEu/wD/AP8A/wD/ADMUMv8A/wBaBQEt/wD/AP8A/wD/ADMVMv8A/wBbAwQr/wD/AP8A/wD/ADIWMv8A/wBbBAEo/wD/AP8A/wD/ADUXM/8A/wBaBAIl/wD/AP8A/wD/ADcXNP8A/wBaAQIBAiT/AP8A/wD/AP8AOBc0/wD/AFkq/wD/AP8A/wD/ADgXNf8A/wBZKv8A/wD/AP8A/wA3GTT/AP8AVyv/AP8A/wD/AP8AOBY3/wD/AFcr/wD/AP8A/wD/ADkUOP8A/wBWLP8A/wD/AP8A/wA/DTn/AP8AVC7/AP8A/wD/AP8AQgk6/wD/AFMCAi3/AP8A/wD/AP8Ag/8A/wBUAQQBAin/AP8AVQH/AP8A5QJE/wD/AFwr/wD/AP8A/wD/ADoDQ/8A/wBcMP8A/wD/AP8A/wA0AkX/AP8AWjL/AP8A/wD/AP8Ae/8A/wBbMf8A/wD/AP8A/wB7/wD/AFYCATL/AP8A/wD/AP8AfP8A/wBWAgMDAS3/AP8A/wD/AP8Ae/8A/wBUCgEs/wD/AP8A/wD/AHz/AP8AVDX/AP8A/wD/AP8Afv8A/wBUM/8A/wD/AP8A/wCA/wD/AFQCAgIBKv8A/wD/AP8A/wCC/wD/AFQBAQEBAgEp/wD/AP8ACQH/AP8Aef8A/wBULv8A/wD/AAoE/wD/AHf/AP8AVAEBK/8A/wD/AAsFAgP/AP8Acf8A/wBVLP8A/wD/AAsK/wD/AHH/AP8AVQcBJP8A/wD/AAwF/wD/AHX/AP8AVAYBJv8A/wD/AAsCBAP/AP8Acv8A/wBVAgECASX/AP8A/wD/AP8Ah/8A/wBZAQEk/wD/AP8A/wD/AIj/AP8AVQMCI/8A/wD/AP8A/wCK/wD/AFUBAyH/AP8A/wD/AP8Ajf8A/wBVAQMCAR3/AP8A/wD/AP8APwFO/wD/AFUBASL/AP8A/wD/AP8APgJO/wD/AFcGARv/AP8A/wD/AP8Ajv8A/wBZIP8A/wD/AP8A/wCO/wD/AFgCAxz/AP8A/wD/AP8Ajv8A/wBWAgUcMAgBBAEC/wD/AP8A/wD/AE7/AP8AXB0yBQIH/wD/AP8A/wD/AE7/AP8AVwIEHTAFAgf/AP8A/wD/AP8AT/8A/wBXAwUEAhYuBAIG/wD/AP8A/wD/AFL/AP8AVwIDAQIdLAMDBP8A/wD/AP8A/wBV/wD/AFgBAxsDA/8A/wD/AP8A/wCK/wD/AF0a/wD/AP8A/wD/AJD/AP8AXQMBAwQLAgf/AP8A/wD/AP8Ai/8A/wBZAQYLAgIDC/8A/wD/AP8A/wCK/wD/AFsCAwkDAwMM/wD/AP8AKAH/AP8AYP8A/wBeAgMEBAQCC/8A/wD/ACsC/wD/AF7/AP8AXwMBCwQN/wD/AP8A/wD/AIj/AP8AXgYDBwkI/wD/AP8A/wD/AIj/AP8AYAcBBgIBAwz/AP8A/wD/AP8Ah/8A/wBhBgMBAQECAgIP/wD/AP8A/wD/AIX/AP8AYwMBBQMCAhGnBP8A/wD/AP8A1/8A/wBoBgEDBBCoBP8A/wD/AP8A1P8A/wBrBQEGAg+oBP8A/wD/AP8A0v8A/wBpIakD/wD/AP8A/wDQ/wD/AG8gAwWdAv8A/wD/AP8A0P8A/wBtBQIIAgUBCf8A/wD/AP8A/wB6/wD/AG8DAgkBBv8A/wD/AP8A/wCD/wD/AHUDAgQFAf8A/wD/AP8A/wCD/wD/AHcBAgX/AP8A/wD/AP8AiP8A/wB+AQMB/wD/AP8A/wD/AIT/AP8AgAL/AP8A/wD/AP8Ahf8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wBtAf8A/wD/AP8Amf8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8A/QP/AP8A/wD/AP8AB/8A/wD/AP8A/wD/AP8A/wAI/wD/AP8A/wD/AP8A/wD/AAj/AP8AxwT/AP8A/wD/AP8APP8A/wDOAf8A/wD/AP8A/wA4/wD/AP8A/wD/AP8A/wD/AAj/AP8A/wD/AP8A/wD/AP8ACP8A/wD/AP8A/wD/AP8A/wAI/wD/ALUF/wD/AP8A/wD/AE3/AP8AswT/AP8A/wD/AP8AUP8A/wCyAf8A/wD/AP8A/wBU/wD/AKgB/wD/AP8A/wD/AF7/AP8ApgICA/8A/wD/AP8A/wBa/wD/AP8A/wD/AP8A/wD/AAj/AP8AngEKARYD/wD/AP8A/wD/AET/AP8AvAEEB/8A/wD/AP8A/wA//wD/ALgGAwQBAv8A/wD/AP8A/wA//wD/ALMIAgIEAf8A/wD/AP8A/wBD/wD/AKgBCAb/AP8A/wD/AP8AUP8A/wCoAQIKAgIBAv8A/wD/AP8A/wBL/wD/AJ4CAQEGDAIG/wD/AP8A/wD/AEv/AP8AngMGDAQF/wD/AP8A/wD/AEv/AP8AlwMDAwUKAgIIA/8A/wD/AP8A/wBJ/wD/AJUHBgn/AP8A/wD/AP8A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hAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACAD/AP8A/wD/AP8A/wD/AP8ACA==";
+function decodeLand() {
+  const bin = atob(LAND_RLE), out = new Uint8Array(LAND_W * LAND_H);
+  let p = 0;
+  for (let y = 0; y < LAND_H; y++) {
+    let x = 0, v = 0;
+    while (x < LAND_W) { const n = bin.charCodeAt(p++); if (v) out.fill(1, y * LAND_W + x, y * LAND_W + x + n); x += n; v ^= 1; }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- renderer / scenes
+const canvas = document.getElementById('c');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
+} catch (e) { document.getElementById('err').style.display = 'flex'; throw e; }
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.xr.enabled = true;
+
+const earthScene = new THREE.Scene(), planetScene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1e-7, 2e5);
+const rig = new THREE.Group(); rig.add(camera);
+const poser = new THREE.PerspectiveCamera(); // pose helper: rig follows it (in XR the headset moves inside the rig)
+earthScene.add(rig);
+const KM = 1 / 6371; // scene unit = 1 Earth radius
+
+const latLonVec = (latDeg, lonDeg, r = 1, v = new THREE.Vector3()) => {
+  const la = latDeg * D2R, lo = lonDeg * D2R;
+  return v.set(Math.cos(la) * Math.cos(lo) * r, Math.sin(la) * r, -Math.cos(la) * Math.sin(lo) * r);
+};
+
+// ---------------------------------------------------------------- Earth textures (procedural colours on real coastlines)
+function buildEarthTexture() {
+  const land = (LAND_MASK = decodeLand()), W = LAND_W, H = LAND_H;
+  // Distance-from-coast proxy: blurred land fraction (wrap in x), via running sums.
+  const blur = (src, r) => {
+    const tmp = new Float32Array(W * H), out = new Float32Array(W * H);
+    for (let y = 0; y < H; y++) {
+      let s = 0; const o = y * W;
+      for (let k = -r; k <= r; k++) s += src[o + ((k + W) % W)];
+      for (let x = 0; x < W; x++) { tmp[o + x] = s / (2 * r + 1); s += src[o + ((x + r + 1) % W)] - src[o + ((x - r + W) % W)]; }
+    }
+    for (let x = 0; x < W; x++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) s += tmp[Math.min(H - 1, Math.max(0, k)) * W + x];
+      for (let y = 0; y < H; y++) { out[y * W + x] = s / (2 * r + 1); s += tmp[Math.min(H - 1, y + r + 1) * W + x] - tmp[Math.max(0, y - r) * W + x]; }
+    }
+    return out;
+  };
+  const inland = blur(blur(land, 28), 28), shelf = blur(land, 6);
+  const data = new Uint8Array(W * H * 4);
+  const mix = (a, b, t) => a + (b - a) * t, cl = (x) => Math.max(0, Math.min(1, x));
+  for (let y = 0; y < H; y++) {
+    const lat = 90 - (y + 0.5) * 180 / H, alat = Math.abs(lat);
+    const row = (H - 1 - y) * W; // DataTexture row 0 = south
+    const belt = Math.exp(-(((alat - 25) / 7) ** 2));
+    const steppe = lat > 0 ? 0.75 * Math.exp(-(((lat - 44) / 7) ** 2)) : 0;
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x, o = (row + x) * 4, lon = -180 + (x + 0.5) * 360 / W;
+      if (land[i]) {
+        const inl = cl((inland[i] - 0.45) / 0.5);
+        let dry = cl(belt * (0.35 + 0.95 * inl) + steppe * inl * inl);
+        let r = mix(38, 92, cl(dry * 1.6)), g = mix(72, 104, cl(dry * 1.6)), b = mix(34, 52, cl(dry * 1.6));
+        const des = cl((dry - 0.55) / 0.3);
+        r = mix(r, 196, des); g = mix(g, 166, des); b = mix(b, 116, des);
+        const tund = cl((alat - 55) / 10);
+        r = mix(r, 104, tund); g = mix(g, 100, tund); b = mix(b, 82, tund);
+        const ice = lat < -60 || (lat > 59.5 && lon > -74 && lon < -11 && inland[i] > 0.2) || lat > 78 ? 1 : cl((alat - 72) / 6) * 0.7;
+        r = mix(r, 236, ice); g = mix(g, 241, ice); b = mix(b, 246, ice);
+        data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
+      } else {
+        const sh = cl(shelf[i] * 2.2), polar = cl((alat - 66) / 14);
+        data[o] = mix(mix(6, 22, sh), 30, polar); data[o + 1] = mix(mix(26, 74, sh), 52, polar); data[o + 2] = mix(mix(66, 118, sh), 84, polar); data[o + 3] = 0;
+      }
+    }
+  }
+  const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+  tex.wrapS = THREE.RepeatWrapping; tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true; tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); tex.needsUpdate = true;
+  return tex;
+}
+
+const NOISE_GLSL = /* glsl */`
+float hash3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float vnoise(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x), mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x), mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p, int oct) { float a = 0.5, s = 0.0; for (int k = 0; k < 7; k++) { if (k >= oct) break; s += a * vnoise(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
+`;
+const sunDirECEF = new THREE.Vector3(1, 0, 0);
+const earthMat = new THREE.ShaderMaterial({
+  uniforms: { map: { value: null }, sunDir: { value: sunDirECEF } },
+  vertexShader: /* glsl */`
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+    varying vec2 vUv; varying vec3 vPos; varying vec3 vWorld;
+    void main() { vUv = uv; vPos = position; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz;
+      gl_Position = projectionMatrix * viewMatrix * w;
+      #include <logdepthbuf_vertex>
+    }`,
+  fragmentShader: /* glsl */`
+    #include <common>
+    #include <logdepthbuf_pars_fragment>
+    uniform sampler2D map; uniform vec3 sunDir; varying vec2 vUv; varying vec3 vPos; varying vec3 vWorld;
+    ${NOISE_GLSL}
+    void main() {
+      #include <logdepthbuf_fragment>
+      vec4 t = texture2D(map, vUv);
+      vec3 n = normalize(vPos);
+      float isLand = t.a;
+      float camDist = length(cameraPosition - vWorld);
+      int oct = camDist < 0.3 ? 7 : (camDist < 1.5 ? 5 : 3);
+      float det = fbm(n * 48.0, oct);
+      vec3 col = t.rgb;
+      col *= mix(1.0, 0.72 + 0.56 * det, isLand);
+      col = mix(col, col * (0.9 + 0.2 * fbm(n * 9.0 + 3.0, 3)), 1.0 - isLand);
+      vec3 V = normalize(cameraPosition - vWorld);
+      float ndl = dot(n, sunDir);
+      float day = smoothstep(-0.08, 0.12, ndl);
+      float lambert = max(ndl, 0.0);
+      vec3 lit = col * (0.06 + 1.05 * pow(lambert, 0.75));
+      vec3 H = normalize(V + sunDir);
+      float spec = pow(max(dot(n, H), 0.0), 500.0) * (1.0 - isLand) * day;
+      lit += vec3(0.9, 0.88, 0.8) * spec * 0.4;
+      float twi = exp(-pow(ndl / 0.08, 2.0));
+      lit += vec3(0.30, 0.10, 0.03) * twi * 0.35;
+      vec3 night = col * 0.05 + vec3(0.002, 0.004, 0.012);
+      vec3 c = mix(night, lit, day);
+      float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0);
+      c += vec3(0.25, 0.48, 0.95) * rim * 0.55 * smoothstep(-0.25, 0.35, ndl);
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+});
+const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 384, 192), earthMat);
+earthScene.add(earth);
+
+const cloudMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false,
+  uniforms: { sunDir: { value: sunDirECEF }, time: { value: 0 } },
+  vertexShader: /* glsl */`
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+    varying vec3 vPos; varying vec3 vWorld;
+    void main() { vPos = position; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w;
+      #include <logdepthbuf_vertex>
+    }`,
+  fragmentShader: /* glsl */`
+    #include <common>
+    #include <logdepthbuf_pars_fragment>
+    uniform vec3 sunDir; uniform float time; varying vec3 vPos; varying vec3 vWorld;
+    ${NOISE_GLSL}
+    void main() {
+      #include <logdepthbuf_fragment>
+      vec3 n = normalize(vPos);
+      float lat = asin(clamp(n.y, -1.0, 1.0)) * 57.2958, alat = abs(lat);
+      // illustrative climatology: ITCZ near 5N, dry subtropics, mid-latitude storm tracks
+      float cover = 0.36 + 0.22 * exp(-pow((lat - 5.0) / 8.0, 2.0)) - 0.16 * exp(-pow((alat - 24.0) / 8.0, 2.0)) + 0.18 * exp(-pow((alat - 55.0) / 12.0, 2.0));
+      float a = sin(time), b = cos(time);
+      vec3 q = vec3(n.x * b - n.z * a, n.y, n.x * a + n.z * b);
+      vec3 warp = vec3(fbm(q * 3.0, 3), fbm(q * 3.0 + 5.2, 3), fbm(q * 3.0 + 9.1, 3));
+      float camDist = length(cameraPosition - vWorld);
+      float f = fbm(q * 5.5 + warp * 1.6, camDist < 0.3 ? 7 : 5);
+      float d = smoothstep(1.0 - cover - 0.08, 1.0 - cover + 0.22, f);
+      float ndl = dot(n, sunDir);
+      float light = smoothstep(-0.1, 0.2, ndl) * (0.25 + 0.85 * max(ndl, 0.0));
+      vec3 col = mix(vec3(0.02, 0.025, 0.04), vec3(1.0, 0.98, 0.96), light);
+      col = mix(col, col * vec3(1.0, 0.55, 0.35), exp(-pow(ndl / 0.1, 2.0)) * 0.6);
+      gl_FragColor = vec4(col, d * 0.9);
+    }`,
+});
+const clouds = new THREE.Mesh(new THREE.SphereGeometry(1 + 6 * KM, 256, 128), cloudMat);
+earthScene.add(clouds);
+
+const atmoMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending,
+  uniforms: { sunDir: { value: sunDirECEF } },
+  vertexShader: /* glsl */`
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+    varying vec3 vN; varying vec3 vWorld;
+    void main() { vN = normalize(position); vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w;
+      #include <logdepthbuf_vertex>
+    }`,
+  fragmentShader: /* glsl */`
+    #include <common>
+    #include <logdepthbuf_pars_fragment>
+    uniform vec3 sunDir; varying vec3 vN; varying vec3 vWorld;
+    void main() {
+      #include <logdepthbuf_fragment>
+      vec3 V = normalize(vWorld - cameraPosition);
+      // ray from camera: closest approach to Earth's centre relative to the shell (1.0 .. 1.025)
+      float tca = -dot(cameraPosition, V);
+      float d = length(cameraPosition + V * max(tca, 0.0));
+      float h = clamp((d - 1.0) / 0.025, 0.0, 1.0);
+      float glow = pow(1.0 - h, 2.2) * step(0.995, d);
+      vec3 P = normalize(cameraPosition + V * max(tca, 0.0));
+      float ndl = dot(P, sunDir);
+      float lit = smoothstep(-0.3, 0.25, ndl);
+      vec3 col = mix(vec3(0.95, 0.45, 0.2), vec3(0.32, 0.6, 1.0), smoothstep(-0.05, 0.3, ndl));
+      gl_FragColor = vec4(col * glow * lit * 1.1, 1.0);
+    }`,
+});
+const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.025, 128, 64), atmoMat);
+earthScene.add(atmo);
+
+// Background stars: decorative random field (not a star catalogue). Rotates with sidereal time.
+function makeStars(n, r) {
+  const g = new THREE.BufferGeometry(), p = new Float32Array(n * 3), c = new Float32Array(n * 3);
+  let s = 12345; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < n; k++) {
+    const z = rnd() * 2 - 1, t = rnd() * Math.PI * 2, q = Math.sqrt(1 - z * z), b = 0.25 + 0.75 * rnd() ** 3;
+    p.set([q * Math.cos(t) * r, z * r, q * Math.sin(t) * r], k * 3); c.set([b, b, b * (0.9 + 0.2 * rnd())], k * 3);
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(p, 3)); g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  const mat = new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false });
+  // The planet must hide every star behind it, including through the additive atmosphere glow, independent of the
+  // depth buffer (log depth + huge near/far range in headsets): a star whose line of sight from the eye passes within
+  // the top of the atmosphere (r = 1.03 Earth radii) is dropped in the vertex shader. Stars are never in any
+  // reflection: the Earth shader's only specular source is the Sun (sunglint).
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+      { vec3 sw = (modelMatrix * vec4(position, 1.0)).xyz; vec3 V = normalize(sw - cameraPosition);
+        float tca = -dot(cameraPosition, V); float dd = length(cameraPosition + V * max(tca, 0.0));
+        if (tca > 0.0 && dd < 1.03) gl_Position = vec4(2.0, 2.0, 2.0, 1.0); }`);
+  };
+  const pts = new THREE.Points(g, mat); pts.renderOrder = -1000; pts.frustumCulled = false;   // drawn first, as a backdrop
+  return pts;
+}
+const stars = makeStars(4000, 50000); earthScene.add(stars);
+
+function glowTexture(inner, outer) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const x = cv.getContext('2d');
+  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, inner); g.addColorStop(0.2, inner); g.addColorStop(1, outer);
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const sunGlowTex = glowTexture('rgba(255,250,235,1)', 'rgba(255,190,90,0)');
+const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunGlowTex, depthWrite: false, blending: THREE.AdditiveBlending }));
+earthScene.add(sunSprite);
+
+// ---------------------------------------------------------------- ISS model (approximate real dimensions, metres)
+const ISS_M = KM / 1000;
+function buildISS() {
+  const g = new THREE.Group();
+  const mat = (c, m = 0.4, r = 0.5) => new THREE.MeshStandardMaterial({ color: c, metalness: m, roughness: r });
+  const white = mat(0xd9dcdf, 0.2, 0.6), truss = mat(0x9a9ea3, 0.6, 0.45), panel = mat(0x6a5330, 0.35, 0.45), gold = mat(0xb38b3c, 0.7, 0.4), rad = mat(0xf2f2f2, 0.05, 0.8);
+  const box = (sx, sy, sz, m, x, y, z, parent = g) => { const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m); b.position.set(x, y, z); parent.add(b); return b; };
+  const alpha = [new THREE.Group(), new THREE.Group()]; // port / starboard rotary joints (turn about the truss axis)
+  for (const a of alpha) { a.position.y = 2.5; g.add(a); }
+  g.userData.alpha = alpha;
+  const cyl = (r, l, m, x, y, z, axis = 'x') => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, l, 20), m); if (axis === 'x') c.rotation.z = Math.PI / 2; if (axis === 'z') c.rotation.x = Math.PI / 2; c.position.set(x, y, z); g.add(c); return c; };
+  // x = flight direction, y = up (away from Earth), z = cross-track (truss)
+  box(3, 3, 109, truss, 0, 2.5, 0);                                  // integrated truss
+  cyl(2.1, 51, white, 0, 0, 0, 'x');                                 // pressurised module stack
+  cyl(2.2, 7, white, 22, 0, -4, 'z'); cyl(2.2, 7, white, 22, 0, 4, 'z'); // Columbus / Kibo-ish lab stubs
+  cyl(2.0, 8, white, 4, -5, 0, 'y');                                 // nadir module (Cupola side)
+  for (const zs of [-1, 1]) for (const xo of [-8, 8]) {             // 8 solar array wings, 35 m x 12 m
+    const z = zs * (43 + (xo > 0 ? 6 : 0));
+    const a = alpha[zs < 0 ? 0 : 1];
+    box(0.2, 35, 12, panel, xo * 0.5, 19, z, a); box(0.2, 35, 12, panel, xo * 0.5, -19, z, a);
+    box(0.5, 2.2, 1.2, gold, xo * 0.5, 0, z, a);
+  }
+  for (const zs of [-1, 1]) box(13, 0.15, 4, rad, 0, 2.5 + zs * 0, zs * 20).rotation.z = 0.3; // radiators
+  g.scale.setScalar(ISS_M);
+  return g;
+}
+const iss = buildISS(); earthScene.add(iss);
+const issMarker = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('rgba(124,196,255,1)', 'rgba(124,196,255,0)'), depthWrite: false, depthTest: true, sizeAttenuation: false }));
+issMarker.scale.setScalar(0.035); earthScene.add(issMarker);
+const sunLight = new THREE.DirectionalLight(0xffffff, 3.0); earthScene.add(sunLight, sunLight.target);
+earthScene.add(new THREE.AmbientLight(0x334466, 0.35));
+
+// Ground track (next ~1.5 orbits)
+const TRACK_N = 300;
+const trackGeo = new THREE.BufferGeometry(); trackGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRACK_N * 3), 3));
+const track = new THREE.Line(trackGeo, new THREE.LineBasicMaterial({ color: 0x7cc4ff, transparent: true, opacity: 0.55, depthWrite: false }));
+earthScene.add(track);
+
+// ---------------------------------------------------------------- ISS state: simulated by default, fitted to live data if reachable
+// Simulated phase is arbitrary, so start it somewhere worth seeing: in daylight, a little west of the subsolar point.
+let orbit = (() => {
+  const ss = subsolar(Date.now()), lat = Math.max(-40, Math.min(40, ss.lat + 10));
+  let lon = ss.lon - 25; if (lon < -180) lon += 360;
+  return fitOrbit(makeOrbit(), lat, lon, Date.now(), true);
+})();
+const issState = { mode: 'sim', lastFix: 0, fixes: [], fails: 0 };
+async function tryLive() {
+  const host = location.hostname;
+  const allowed = /github\.io$/.test(host) || host === 'localhost' || host === '127.0.0.1' || /[?&]live=1/.test(location.search);
+  if (!allowed || !window.fetch) return;
+  const once = async () => {
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 4000);
+    try {
+      const r = await fetch('https://api.wheretheiss.at/v1/satellites/25544', { signal: ac.signal, cache: 'no-store' });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!isFinite(j.latitude) || !isFinite(j.longitude) || !isFinite(j.timestamp)) return null;
+      return { lat: +j.latitude, lon: +j.longitude, alt: +j.altitude, t: j.timestamp * 1000 };
+    } catch { return null; } finally { clearTimeout(to); }
+  };
+  const poll = async () => {
+    const f = await once();
+    if (!f) { if (++issState.fails >= 2 && issState.mode === 'sim') return; } // unreachable: stay simulated, stop trying
+    else {
+      issState.fails = 0;
+      const prev = issState.fixes[issState.fixes.length - 1];
+      issState.fixes.push(f); if (issState.fixes.length > 4) issState.fixes.shift();
+      let asc = true;
+      if (prev && f.t > prev.t) asc = f.lat >= prev.lat; else asc = orbitLatLon(orbit, f.t + 1000).lat >= orbitLatLon(orbit, f.t).lat;
+      const base = makeOrbit({ altKm: isFinite(f.alt) && f.alt > 300 && f.alt < 500 ? f.alt : 420 });
+      orbit = fitOrbit(base, f.lat, f.lon, f.t, asc);
+      issState.mode = prev ? 'live' : 'live-pending'; issState.lastFix = f.t;
+    }
+    setTimeout(poll, issState.mode === 'live-pending' ? 5000 : 15000);
+  };
+  poll();
+}
+tryLive();
+
+// ---------------------------------------------------------------- Planets scene
+const PL = {
+  Mercury: { c: 0x9c948b, r: 0.16 }, Venus: { c: 0xe6c88f, r: 0.26 }, Earth: { c: 0x4f8fe0, r: 0.27 }, Mars: { c: 0xc8623b, r: 0.2 },
+  Jupiter: { c: 0xd8b48a, r: 0.6 }, Saturn: { c: 0xe2cf98, r: 0.5 }, Uranus: { c: 0x9fd7e3, r: 0.38 }, Neptune: { c: 0x5a7fe0, r: 0.37 },
+};
+const distScale = (au) => 6 * Math.sqrt(au); // compressed distances; directions are true
+const toScene = (v, out = new THREE.Vector3()) => { const r = Math.hypot(v[0], v[1], v[2]) || 1, s = distScale(r) / r; return out.set(v[0] * s, v[2] * s, -v[1] * s); };
+const planetRig = new THREE.Group(); planetScene.add(planetRig);
+const sunBall = new THREE.Mesh(new THREE.SphereGeometry(1.0, 48, 24), new THREE.MeshBasicMaterial({ color: 0xffd27a }));
+const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunGlowTex, depthWrite: false, blending: THREE.AdditiveBlending })); sunHalo.scale.setScalar(7);
+planetScene.add(sunBall, sunHalo, new THREE.PointLight(0xffffff, 3.2, 0, 0), new THREE.AmbientLight(0xffffff, 0.12));
+const pStars = makeStars(2500, 5000); planetScene.add(pStars);
+const planets = {};
+for (const [name, p] of Object.entries(PL)) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(p.r, 32, 16), new THREE.MeshStandardMaterial({ color: p.c, roughness: 0.85, metalness: 0 }));
+  if (name === 'Saturn') {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(p.r * 1.3, p.r * 2.3, 64), new THREE.MeshBasicMaterial({ color: 0xcdbb8a, side: THREE.DoubleSide, transparent: true, opacity: 0.6 }));
+    ring.rotation.x = -Math.PI / 2 + 26.7 * D2R; m.add(ring);
+  }
+  planetScene.add(m);
+  const orbitPts = [];
+  const line = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: name === 'Earth' ? 0x4f8fe0 : 0x5b6a85, transparent: true, opacity: name === 'Earth' ? 0.8 : 0.45 }));
+  planetScene.add(line);
+  planets[name] = { mesh: m, line, orbitPts, lastOrbitT: -1e18 };
+}
+function updateOrbitLine(name, T) {
+  const P = planets[name], el = elementsAt(name, T), pts = [];
+  for (let k = 0; k < 256; k++) pts.push(toScene(helioFromElements(el, (k / 256) * 360)));
+  P.line.geometry.setFromPoints(pts); P.lastOrbitT = T;
+}
+
+// ---------------------------------------------------------------- labels
+const labelBox = document.getElementById('labels'), labels = {};
+function label(key, text, cls = '') {
+  let el = labels[key];
+  if (!el) { el = labels[key] = document.createElement('div'); el.className = 'lbl ' + cls; labelBox.appendChild(el); }
+  if (el.textContent !== text) el.textContent = text;
+  return el;
+}
+const _v = new THREE.Vector3();
+let placed = [];
+function placeLabel(el, world, cam, visible = true) {
+  _v.copy(world).project(cam);
+  const on = visible && _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1;
+  el.style.display = on ? '' : 'none';
+  if (!on) return;
+  const x = (_v.x + 1) / 2 * innerWidth; let y = (1 - _v.y) / 2 * innerHeight;
+  for (let k = 0; k < 6 && placed.some((p) => Math.abs(p[0] - x) < 70 && Math.abs(p[1] - y) < 14); k++) y += 14;
+  placed.push([x, y]);
+  el.style.left = x.toFixed(1) + 'px'; el.style.top = y.toFixed(1) + 'px';
+}
+
+// ---------------------------------------------------------------- views & touch controls
+let view = 'earth';
+const ctl = {
+  earth: { yaw: 0, pitch: 0.35, dist: 3.4, min: 1.15, max: 12 },
+  chase: { yaw: -0.5, pitch: 0.25, dist: 170 * ISS_M, min: 40 * ISS_M, max: 3000 * KM },
+  ride: { yaw: 0, pitch: -0.42, dist: 1, min: 1, max: 1, fov: 70 },
+  planets: { yaw: 0.6, pitch: 0.75, dist: innerWidth < innerHeight ? Math.min(150, 52 * innerHeight / innerWidth) : 70, min: 4, max: 160 },
+};
+let earthYawSet = false;
+const pointers = new Map(); let pinch0 = 0, dist0 = 1;
+canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); dist0 = ctl[view].dist; } });
+canvas.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+  const c = ctl[view];
+  if (pointers.size === 1) {
+    const k = view === 'ride' ? 0.004 : 0.006 * (view === 'earth' ? Math.min(1, (c.dist - 1) / 2) + 0.15 : 1);
+    c.yaw -= dx * k; c.pitch += dy * k;
+    const lim = view === 'ride' ? [-1.5, 0.6] : [-1.45, 1.45];
+    c.pitch = Math.max(lim[0], Math.min(lim[1], c.pitch));
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch0 > 0) zoomTo(view === 'ride' ? null : dist0 * pinch0 / Math.max(d, 1), view === 'ride' ? pinch0 / Math.max(d, 1) : 1);
+    if (view === 'ride') pinch0 = d;
+  }
+});
+const endP = (e) => { pointers.delete(e.pointerId); pinch0 = 0; };
+canvas.addEventListener('pointerup', endP); canvas.addEventListener('pointercancel', endP);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); const f = Math.exp(e.deltaY * 0.0012); zoomTo(view === 'ride' ? null : ctl[view].dist * f, f); }, { passive: false });
+function zoomTo(d, fovF) {
+  const c = ctl[view];
+  if (view === 'ride') { c.fov = Math.max(25, Math.min(100, c.fov * fovF)); return; }
+  if (view === 'earth') { const h = Math.max(c.min - 1, Math.min(c.max - 1, d - 1)); c.dist = 1 + h; return; }
+  c.dist = Math.max(c.min, Math.min(c.max, d));
+}
+let poseSnap = true, frameDt = 0;
+function setView(v) {
+  view = v; poseSnap = true;
+  for (const b of document.querySelectorAll('#views button')) b.classList.toggle('on', b.dataset.v === v);
+  for (const k in labels) labels[k].style.display = 'none';
+}
+document.getElementById('views').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); });
+
+// ---------------------------------------------------------------- time
+let speed = 1, simMs = Date.now(), lastReal = performance.now(), offsetDays = 0, simDrift = 0;
+const slider = document.getElementById('slider'), whenEl = document.getElementById('when');
+const sliderDays = (v) => Math.sign(v) * 3650 * v * v; // +/-10 years, fine control near "now"
+slider.addEventListener('input', () => { offsetDays = sliderDays(+slider.value); simDrift = 0; });
+document.getElementById('speeds').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.id === 'nowBtn') { slider.value = 0; offsetDays = 0; simDrift = 0; setSpeed(1); return; }
+  setSpeed(+b.dataset.s);
+});
+function setSpeed(s) { speed = s; for (const b of document.querySelectorAll('#speeds button[data-s]')) b.classList.toggle('on', +b.dataset.s === s); }
+const MIN_MS = Date.UTC(1800, 0, 1), MAX_MS = Date.UTC(2050, 0, 1);
+const fmt = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+
+// ---------------------------------------------------------------- info panel
+const infoEl = document.getElementById('info'), infoBody = document.getElementById('infoBody');
+document.getElementById('infoHead').addEventListener('click', () => { infoEl.classList.toggle('collapsed'); document.getElementById('chev').textContent = infoEl.classList.contains('collapsed') ? 'show' : 'hide'; });
+{ infoEl.classList.add('collapsed'); document.getElementById('chev').textContent = 'show'; }   // starts folded: the I'M HERE label is the first thing shown
+let infoNext = 0;
+const fmtLat = (v) => `${Math.abs(v).toFixed(1)}°${v >= 0 ? 'N' : 'S'}`, fmtLon = (v) => `${Math.abs(v).toFixed(1)}°${v >= 0 ? 'E' : 'W'}`;
+function updateInfo(now, ss, sub) {
+  if (view === 'planets') {
+    const rows = Object.keys(PL).filter((n) => n !== 'Earth').map((n) => { const g = geocentric(n, now); return `<div class="row"><span>${n}</span><span>${g.dist.toFixed(2)} AU from Earth</span></div>`; }).join('');
+    infoBody.innerHTML = `<div class="row"><span>Sim time</span><span>${fmt(now)}</span></div>${rows}
+      <div class="row"><span>Earth–Sun</span><span>${ss.distAU.toFixed(4)} AU</span></div>${now <= MIN_MS || now >= MAX_MS ? '<div class="note"><b>Outside 1800–2050 validity.</b></div>' : ''}`;
+  } else {
+    infoBody.innerHTML = `<div class="row"><span>Sim time</span><span>${fmt(now)}</span></div>
+      <div class="row"><span>ISS over</span><span>${fmtLat(sub.lat)}, ${fmtLon(sub.lon)}</span></div>
+      <div class="row"><span>Altitude · speed</span><span>${Math.round(orbit.altKm)} km · ${(2 * Math.PI * orbit.a / (orbit.periodMin * 60)).toFixed(2)} km/s</span></div>
+      <div class="row"><span>Sun overhead at</span><span>${fmtLat(ss.lat)}, ${fmtLon(ss.lon)}</span></div>
+      <div class="row"><span>Earth–Sun</span><span>${ss.distAU.toFixed(4)} AU</span></div>`;
+  }
+}
+
+// ---------------------------------------------------------------- I'M HERE watermark + source card (shared/imhere-mark.js, inlined above)
+const MARK = window.ImHereMark;
+if (MARK) MARK.init({ subject: 'International Space Station' });
+let markNext = 0;
+const markXR = MARK ? MARK.xrPanel(THREE) : null;   // same card: small HUD tag low in the corner of view in VR
+if (markXR) { markXR.visible = false; camera.add(markXR);
+  renderer.xr.addEventListener('sessionstart', () => { markXR.visible = true; }); renderer.xr.addEventListener('sessionend', () => { markXR.visible = false; }); }
+const ago = (ms) => { const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 90 ? s + ' s ago' : Math.round(s / 60) + ' min ago'; };
+function refreshMark(now) {
+  if (!MARK) return;
+  const shifted = Math.abs(now - Date.now()) > 120000, fixAge = Date.now() - issState.lastFix;
+  const liveNow = view !== 'planets' && issState.mode === 'live' && !shifted && fixAge < 120000;
+  const when = shifted ? { kind: 'simulated', label: 'Time shown: ' + fmt(now), source: 'Time slider / speed buttons: not the current time' } : null;
+  if (view === 'planets') {
+    const au = (n) => geocentric(n, now).dist.toFixed(2) + ' AU';
+    MARK.update({ subject: 'Planets', id: fmt(now).slice(0, 10), location: 'Solar system',
+      position: 'Calculated', scene: '3D render', video: 'None', tag: { text: 'Calculated', kind: 'computed' },
+      stats: [['Earth–Sun', subsolar(now).distAU.toFixed(3) + ' AU'], ['Mars', au('Mars')], ['Jupiter', au('Jupiter')]],
+      items: [
+        { kind: 'computed', label: 'Planet positions', source: 'JPL approximate Keplerian elements (valid 1800–2050), calculated for the time shown',
+          note: now <= MIN_MS || now >= MAX_MS ? 'Outside 1800–2050: positions are not reliable.' : '' },
+        { kind: 'illustrative', label: 'Scale', source: 'Directions are true; distances are compressed and planet sizes enlarged so everything fits' },
+        when || { kind: 'computed', label: 'Time shown: now', source: 'Your device clock' }] });
+    MARK.setLive(false);
+    return;
+  }
+  const sub = issLatLonAt(now);
+  const iss = liveNow
+    ? { kind: 'live', label: 'ISS position', source: 'wheretheiss.at (polled every 15 s), smoothed along the orbit between fixes', time: issState.lastFix, timeLabel: 'Last fix' }
+    : issState.mode === 'live' || issState.mode === 'live-pending'
+      ? { kind: 'estimated', label: 'ISS position', source: 'Propagated from the last live fix (wheretheiss.at), approximate', time: issState.lastFix, timeLabel: 'Last fix',
+          note: shifted ? 'Time is shifted away from now, so this is not the live position.' : 'Waiting for fresh live fixes.' }
+      : { kind: 'simulated', label: 'ISS position', source: 'Simulated orbit, not the live position (no live data reached this page)',
+          note: 'Realistic 51.6°, ~420 km, 92.7 min circular orbit; where the ISS is along it is made up.' };
+  MARK.update({ subject: 'ISS', id: '', location: 'Over ' + coarseRegion(sub.lat, sub.lon, isLand),
+    position: iss.kind === 'estimated' ? { time: issState.lastFix } : 'Demo', scene: '3D render', video: 'None',
+    tag: liveNow ? { text: 'fix ' + ago(issState.lastFix) } : iss.kind === 'estimated' ? { text: 'Fix ' + ago(issState.lastFix) + ', estimated', kind: 'estimated' } : { text: 'Simulated orbit', kind: 'simulated' },
+    stats: [['Alt', Math.round(orbit.altKm) + ' km'], ['Speed', (2 * Math.PI * orbit.a / (orbit.periodMin * 60)).toFixed(2) + ' km/s'], ['Orbit', orbit.periodMin.toFixed(1) + ' min'], ['Over', fmtLat(sub.lat) + ' ' + fmtLon(sub.lon)], ['NORAD', '25544']],
+    items: [iss,
+      { kind: 'illustrative', label: 'ISS model', source: 'Simplified shape drawn by I\'M HERE (real size, solar arrays turned to the Sun)' },
+      { kind: 'computed', label: 'Sun and day/night line', source: 'Calculated from the real Sun position for the time shown' },
+      { kind: 'data', label: 'Coastlines', source: 'Natural Earth (public domain) land mask' },
+      { kind: 'illustrative', label: 'Land colours and clouds', source: 'Drawn by I\'M HERE: not satellite or live imagery' },
+      when || { kind: 'computed', label: 'Time shown: now', source: 'Your device clock' }] });
+  MARK.setLive(liveNow);
+}
+
+// ---------------------------------------------------------------- frame loop
+const issPos = new THREE.Vector3(), issPrev = new THREE.Vector3(), up = new THREE.Vector3(), fwd = new THREE.Vector3(), right = new THREE.Vector3();
+const _q = new THREE.Quaternion(), m4 = new THREE.Matrix4(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+let trackNext = 0, orbitNext = 0;
+function issLatLonAt(ms) { return orbitLatLon(orbit, ms); }
+function frame() {
+  const realNow = performance.now(), dt = Math.min(0.25, (realNow - lastReal) / 1000); lastReal = realNow; frameDt = dt;
+  simDrift += dt * 1000 * (speed - 1);
+  let now = Date.now() + offsetDays * 86400000 + simDrift;
+  now = Math.max(MIN_MS, Math.min(MAX_MS, now));
+  simMs = now;
+  const shiftDays = (now - Date.now()) / 86400000;
+  whenEl.textContent = Math.abs(shiftDays) < 1 / 1440 ? 'now' : (shiftDays > 0 ? '+' : '−') + (Math.abs(shiftDays) < 2 ? (Math.abs(shiftDays) * 24).toFixed(1) + ' h' : Math.abs(shiftDays).toFixed(0) + ' d');
+
+  const ss = subsolar(now);
+  latLonVec(ss.lat, ss.lon, 1, sunDirECEF);
+  const gst = gmstDeg(now) * D2R;
+  stars.rotation.y = -gst;
+
+  if (view === 'planets') renderPlanets(now, ss); else renderEarth(now, ss);
+  if (realNow > infoNext && !infoEl.classList.contains('collapsed')) { infoNext = realNow + 500; updateInfo(now, ss, issLatLonAt(now)); }
+  if (realNow > markNext) { markNext = realNow + 1000; refreshMark(now); }
+}
+function applyPose(xrScale) {
+  rig.position.copy(poser.position);
+  // VR comfort: in a headset (or at fast time speeds) the ride/chase view turns at most 30 deg/s, so a fast orbit never
+  // spins the camera; the "up" of the ride/chase frames is the local zenith, so the horizon stays level (no roll).
+  const capped = !poseSnap && (view === 'ride' || view === 'chase') && (renderer.xr.isPresenting || speed > 1);
+  if (capped) rig.quaternion.rotateTowards(poser.quaternion, (30 * Math.PI / 180) * frameDt); else rig.quaternion.copy(poser.quaternion);
+  poseSnap = false;
+  rig.scale.setScalar(renderer.xr.isPresenting ? xrScale : 1); // in VR: 1 headset metre = 1 real metre near the ISS
+  camera.updateProjectionMatrix(); rig.updateMatrixWorld(true);
+}
+function hiddenByEarth(eye, p) { // does the segment eye->p pass through the Earth (radius 1)?
+  const d = tmp2.copy(p).sub(eye), L = d.length(); d.divideScalar(L);
+  const t = Math.max(0, Math.min(L, -eye.dot(d)));
+  return eye.lengthSq() + 2 * t * eye.dot(d) + t * t < 0.999;
+}
+function renderEarth(now, ss) {
+  for (const k in labels) if (!k.startsWith('e:')) labels[k].style.display = 'none';
+  const sub = issLatLonAt(now), sub2 = issLatLonAt(now + 1000);
+  latLonVec(sub.lat, sub.lon, 1 + sub.altKm * KM, issPos);
+  latLonVec(sub2.lat, sub2.lon, 1 + sub2.altKm * KM, tmp);
+  up.copy(issPos).normalize(); fwd.copy(tmp).sub(issPos); fwd.addScaledVector(up, -fwd.dot(up)).normalize(); right.crossVectors(fwd, up).normalize();
+  // ISS attitude: x = velocity, y = zenith, z = right (LVLH-like)
+  m4.makeBasis(fwd, up, right); iss.quaternion.setFromRotationMatrix(m4); iss.position.copy(issPos);
+  issMarker.position.copy(issPos);
+  { // point the arrays at the Sun: sun direction in the ISS body frame, angle about the truss (z) axis
+    const sb = tmp.copy(sunDirECEF).applyQuaternion(_q.copy(iss.quaternion).invert());
+    for (const a of iss.userData.alpha) a.rotation.z = Math.atan2(sb.y, sb.x);
+  }
+  sunSprite.position.copy(sunDirECEF).multiplyScalar(20000); sunSprite.scale.setScalar(20000 * 0.0093 * 7);
+  sunLight.position.copy(issPos).addScaledVector(sunDirECEF, 10); sunLight.target.position.copy(issPos);
+  cloudMat.uniforms.time.value = ((now / 8.64e8) % 1) * 2 * Math.PI;
+
+  if (performance.now() > trackNext) {
+    trackNext = performance.now() + 1000;
+    const arr = trackGeo.attributes.position.array, span = orbit.periodMin * 60000 * 1.5;
+    for (let k = 0; k < TRACK_N; k++) { const q = issLatLonAt(now + (k / (TRACK_N - 1)) * span); latLonVec(q.lat, q.lon, 1.0015, tmp2).toArray(arr, k * 3); }
+    trackGeo.attributes.position.needsUpdate = true; trackGeo.computeBoundingSphere();
+  }
+
+  const c = ctl[view];
+  iss.visible = view !== 'ride';
+  issMarker.visible = view === 'earth';
+  track.visible = view !== 'ride';
+  camera.near = view === 'earth' ? 0.01 : 1e-7;
+  camera.fov = view === 'ride' ? c.fov : 50;
+  if (view === 'earth') {
+    if (!earthYawSet) { // frame the ISS and the sunlit side together
+      tmp.copy(issPos).normalize().add(sunDirECEF).normalize();
+      c.yaw = Math.atan2(-tmp.z, tmp.x); c.pitch = Math.max(-0.9, Math.min(0.9, Math.asin(tmp.y))); earthYawSet = true;
+    }
+    latLonVec(c.pitch * R2D, c.yaw * R2D, c.dist, poser.position);
+    poser.up.set(0, 1, 0); poser.lookAt(0, 0, 0);
+  } else if (view === 'chase') {
+    tmp.copy(fwd).multiplyScalar(-Math.cos(c.pitch) * Math.cos(c.yaw)).addScaledVector(right, Math.cos(c.pitch) * Math.sin(c.yaw)).addScaledVector(up, Math.sin(c.pitch));
+    poser.position.copy(issPos).addScaledVector(tmp, c.dist);
+    poser.up.copy(up); poser.lookAt(issPos);
+  } else { // ride: Cupola-style view, looking ahead and down; drag to look around
+    poser.position.copy(issPos).addScaledVector(up, -4 * ISS_M);
+    tmp.copy(fwd).multiplyScalar(Math.cos(c.yaw)).addScaledVector(right, Math.sin(c.yaw));
+    tmp.multiplyScalar(Math.cos(c.pitch)).addScaledVector(up, Math.sin(c.pitch));
+    poser.up.copy(up); poser.lookAt(tmp2.copy(poser.position).add(tmp));
+  }
+  applyPose(view === 'earth' ? 1 : ISS_M);
+  issMarker.scale.setScalar(view === 'earth' ? 0.035 : 0.0);
+  placed = [];
+  if (view === 'earth') placeLabel(label('e:iss', 'ISS'), issPos, camera, !hiddenByEarth(rig.position, issPos));
+  else if (labels['e:iss']) labels['e:iss'].style.display = 'none';
+  renderer.render(earthScene, camera);
+}
+function renderPlanets(now, ss) {
+  if (labels['e:iss']) labels['e:iss'].style.display = 'none';
+  const T = centuries(now);
+  for (const name of Object.keys(PL)) {
+    const P = planets[name];
+    toScene(helio(name, now), P.mesh.position);
+    if (Math.abs(T - P.lastOrbitT) > 0.02) updateOrbitLine(name, T);
+  }
+  const c = ctl.planets;
+  camera.near = 0.05; camera.fov = 50;
+  poser.position.set(Math.cos(c.pitch) * Math.sin(c.yaw), Math.sin(c.pitch), Math.cos(c.pitch) * Math.cos(c.yaw)).multiplyScalar(c.dist);
+  poser.up.set(0, 1, 0); poser.lookAt(0, 0, 0);
+  applyPose(1);
+  planetScene.add(rig);
+  renderer.render(planetScene, camera);
+  earthScene.add(rig);
+  placed = [];
+  placeLabel(label('p:Sun', 'Sun', 'sun'), sunBall.position, camera);
+  for (const name of Object.keys(PL)) placeLabel(label('p:' + name, name === 'Earth' ? 'Earth (you are here)' : name), planets[name].mesh.position, camera);
+}
+
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+
+earthMat.uniforms.map.value = buildEarthTexture();
+setView('earth');
+renderer.setAnimationLoop(frame);
+
+// Optional VR button: only when the device supports immersive VR; failures are silent.
+(async () => {
+  try {
+    if (!navigator.xr || !(await navigator.xr.isSessionSupported('immersive-vr'))) return;
+    const { VRButton } = await import('three/addons/webxr/VRButton.js');
+    const b = VRButton.createButton(renderer); document.getElementById('vrslot').appendChild(b);
+    renderer.xr.addEventListener('sessionstart', () => { if (view === 'earth') setView('chase'); });
+    setupVRMenu();
+  } catch { /* VR is optional */ }
+})();
+
+// In-headset controls: a small console at waist height in front of you (it travels with you, not with your head).
+// Point a controller (or pinch with hand tracking) at a button: views (Ride the ISS, Chase, Earth, Planets) and time speeds.
+function setupVRMenu() {
+  const W = 1024, H = 300, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const rows = [
+    [['Ride the ISS', () => setView('ride'), () => view === 'ride'], ['Chase', () => setView('chase'), () => view === 'chase'],
+     ['Earth', () => setView('earth'), () => view === 'earth'], ['Planets', () => setView('planets'), () => view === 'planets']],
+    [['Real time', () => setSpeed(1), () => speed === 1], ['60×', () => setSpeed(60), () => speed === 60], ['600×', () => setSpeed(600), () => speed === 600],
+     ['1 day/s', () => setSpeed(86400), () => speed === 86400], ['Now', () => document.getElementById('nowBtn').click(), () => false]],
+  ];
+  let hover = null, sig = '';
+  function draw() {
+    const nsig = JSON.stringify([rows.map((r) => r.map((b) => b[2]())), hover]); if (nsig === sig) return; sig = nsig;
+    const g = c.getContext('2d'); g.clearRect(0, 0, W, H);
+    g.fillStyle = 'rgba(8,12,22,0.82)'; g.beginPath(); g.roundRect ? g.roundRect(0, 0, W, H, 28) : g.rect(0, 0, W, H); g.fill();
+    rows.forEach((r, ri) => r.forEach((b, bi) => {
+      const bw = (W - 40) / r.length, x = 20 + bi * bw, y = 20 + ri * 135, on = b[2](), hv = hover && hover[0] === ri && hover[1] === bi;
+      g.fillStyle = on ? 'rgba(124,196,255,0.35)' : hv ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)';
+      g.beginPath(); g.roundRect ? g.roundRect(x + 6, y, bw - 12, 120, 18) : g.rect(x + 6, y, bw - 12, 120); g.fill();
+      g.fillStyle = '#fff'; g.font = '600 ' + (ri ? 34 : 38) + 'px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(b[0], x + bw / 2, y + 60);
+    }));
+    tex.needsUpdate = true;
+  }
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62 * H / W), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+  panel.renderOrder = 9000; panel.frustumCulled = false; panel.visible = false;
+  panel.position.set(0, -0.42, -0.62); panel.rotation.x = -0.75;   // like a console you look down at
+  rig.add(panel); draw();
+  const ray = new THREE.Raycaster(), m4 = new THREE.Matrix4();
+  const hit = (ctrl) => {
+    m4.identity().extractRotation(ctrl.matrixWorld);
+    ray.ray.origin.setFromMatrixPosition(ctrl.matrixWorld); ray.ray.direction.set(0, 0, -1).applyMatrix4(m4);
+    const h = ray.intersectObject(panel)[0]; if (!h || !h.uv) return null;
+    const px = h.uv.x * W, py = (1 - h.uv.y) * H, ri = py < 155 ? 0 : 1, r = rows[ri], bi = Math.floor((px - 20) / ((W - 40) / r.length));
+    return bi >= 0 && bi < r.length ? [ri, bi] : null;
+  };
+  const ctrls = [0, 1].map((i) => {
+    const ctrl = renderer.xr.getController(i); rig.add(ctrl);
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1.2)]),
+      new THREE.LineBasicMaterial({ color: 0x7cc4ff, transparent: true, opacity: 0.6, depthTest: false }));
+    line.renderOrder = 9001; line.frustumCulled = false; ctrl.add(line);
+    ctrl.addEventListener('select', () => { const b = hit(ctrl); if (b) rows[b[0]][b[1]][1](); draw(); });
+    return ctrl;
+  });
+  renderer.xr.addEventListener('sessionstart', () => { panel.visible = true; });
+  renderer.xr.addEventListener('sessionend', () => { panel.visible = false; });
+  setInterval(() => { if (!renderer.xr.isPresenting) return; let h = null; for (const ct of ctrls) h = h || hit(ct); hover = h; draw(); }, 100);
+}
+</script>
+</body>
+</html>

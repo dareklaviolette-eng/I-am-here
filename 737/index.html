@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>I'M HERE · 737-800 Flight Deck</title>
+<style>
+  :root { color-scheme: dark; --g: #7cf4bd; --line: #8ea8bc44; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b141c; color: #edf5fb;
+    font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #view, canvas { display: block; position: absolute; inset: 0; }
+  header { position: absolute; top: 0; left: 0; right: 0; padding: 14px 18px; display: flex; justify-content: space-between;
+    align-items: center; pointer-events: none; background: linear-gradient(#050c12d0, transparent); }
+  #brand { font-weight: 750; letter-spacing: .16em; font-size: 16px; }
+  #brand span { color: var(--g); font-weight: 400; }
+  #brand small { color: #9fb6c6; font-size: 10px; letter-spacing: .1em; margin-left: 6px; }
+  #panel { position: absolute; left: 14px; top: calc(60px + var(--imh-h, 0px)); width: 230px; padding: 14px; border-radius: 12px;
+    background: #07131ee0; backdrop-filter: blur(14px); border: 1px solid var(--line); transition: transform .25s;
+    max-height: calc(100% - 120px - var(--imh-h, 0px)); overflow-y: auto; }
+  #panel.hidden { transform: translateX(-260px); }
+  #toggle { position: absolute; left: 14px; bottom: 14px; }
+  .lbl { color: #93a8b8; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; margin: 12px 0 6px; }
+  .lbl:first-child { margin-top: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 5px; }
+  button { cursor: pointer; font: inherit; font-size: 12px; background: #183140; border: 1px solid #4d6a7c; color: #e8f3fa;
+    border-radius: 7px; padding: 7px 9px; }
+  button:hover { background: #24485b; }
+  button.on { background: #1f5b4b; border-color: #6cdbb4; }
+  #readout { font: 12px ui-monospace, monospace; line-height: 1.6; color: #cfe3ee; }
+  #readout b { color: #fff; }
+  .src { color: #7d93a3; font-size: 10px; margin-top: 8px; line-height: 1.4; }
+  #loader { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; padding: 18px 22px;
+    border-radius: 12px; background: #07131ee8; border: 1px solid var(--line); min-width: 240px; }
+  #bar { height: 4px; background: #1a2c38; border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  #bar div { height: 100%; width: 0; background: var(--g); transition: width .2s; }
+  #credit { position: absolute; right: 10px; bottom: 8px; font-size: 10px; color: #8ea2b1; }
+  #credit a { color: inherit; }
+  #VRButton { font-family: inherit !important; }
+  input, select { font: inherit; font-size: 12px; background: #0e2230; border: 1px solid #4d6a7c; color: #e8f3fa; border-radius: 7px; padding: 7px 8px; }
+  #apt { width: 120px; text-transform: uppercase; letter-spacing: .08em; }
+  #rwy { width: 100%; }
+  button:disabled { opacity: .5; cursor: wait; }
+  #gcredit { position: absolute; right: 10px; bottom: 24px; display: flex; align-items: center; gap: 6px; max-width: 60vw;
+    font-size: 10px; color: #dfe8ee; text-shadow: 0 0 3px #000; pointer-events: none; }
+  #gcredit img { height: 14px; }
+  #gcredit[hidden] { display: none; }
+  @media (max-width: 700px) { #panel { top: calc(54px + var(--imh-h, 0px)); width: 210px; max-height: calc(100% - 110px - var(--imh-h, 0px)); overflow: auto; } #credit { display: none; } #gcredit { bottom: 8px; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
+  "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="view"></div>
+<header><div id="brand">737-800 <small>flight deck</small></div></header>
+
+<aside id="panel">
+  <div class="lbl">Seat</div>
+  <div class="row" id="seats">
+    <button data-seat="captain" class="on">Captain</button>
+    <button data-seat="fo">First Officer</button>
+    <button data-seat="jump">Jumpseat</button>
+    <button data-seat="overhead">Overhead</button>
+    <button data-seat="outside">Outside</button>
+  </div>
+  <div class="lbl">Time of day</div>
+  <div class="row" id="tod">
+    <button data-tod="day" class="on">Day</button><button data-tod="dusk">Dusk</button><button data-tod="night">Night</button>
+  </div>
+  <div class="lbl">Airport</div>
+  <div class="row"><input id="apt" value="KBNA" maxlength="8" spellcheck="false" autocomplete="off" aria-label="Airport code (ICAO, e.g. KJFK, EGLL)"><button id="aptGo">Go</button></div>
+  <div class="row" style="margin-top:5px"><select id="rwy" aria-label="Runway"></select></div>
+  <div class="src" id="aptStatus">Loading airport…</div>
+  <div class="lbl">Flight</div>
+  <div class="row" id="modes"><button data-mode="approach" class="on" id="landBtn">Land BNA 2L</button><button data-mode="cruise">Cruise</button></div>
+  <div class="row" style="margin-top:5px"><button id="play" class="on">Pause</button><button id="restart">Restart</button></div>
+  <div class="lbl">Scenery</div>
+  <div class="row"><button id="scenery">Real scenery (Google 3D)</button></div>
+  <div class="src" id="sceneryNote"></div>
+  <div class="lbl">Now</div>
+  <div id="readout">—</div>
+</aside>
+<button id="toggle">☰</button>
+
+<div id="loader">Loading 737-800 flight deck<div id="bar"><div></div></div></div>
+<div id="credit">Cockpit model: <a href="https://sketchfab.com/3d-models/boeing-737-800-cockpit-d463256f98654b36af019d2d88bd5bbe" target="_blank" rel="noopener">"Boeing 737-800 Cockpit"</a> by hakai315 · CC BY 4.0 · optimized</div>
+<div id="gcredit" hidden><img id="glogo" alt="Google" src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_light_color_272x92dp.png"><span id="gattr"></span></div>
+
+<!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
+<script id="imhere-mark">
+/* I'M HERE experience watermark (info card), v3. SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
+   Pasted inline into every prototype page between the IMHERE-MARK markers by
+   node /home/claude/shared/sync-mark.mjs <files...>  (artifact pages cannot share files).
+   Edit here, then re-run the sync. Self-contained: no network, no dependencies.
+
+   Founder's layout (final): one small top-left label (translucent navy, soft blur, 1px border, 8px radius/padding):
+   white title and subject, grey row labels, brighter values; the brand appears only here, not in page top bars.
+       I'M HERE                         (i)  ×
+       subject · ID
+       • Location – Nashville International (BNA)
+       • Position – Live | 3 hrs ago | Demo | Fixed | None
+       • Scene – Real | AI render | 3D render | ...
+       • Video – Live | Nov 9, 2026 | None
+   All four rows always shown (value "None" when missing). Only the word "Live" is green.
+   "Live" (Position/Video) comes only from setLive()/video.live, which pages drive from real data freshness;
+   demo/simulated data never sets it. After ~6 s the card collapses to a small "I'M HERE" corner mark;
+   tapping the mark re-expands it. (i) opens the detail: live stats + provenance (source, last update,
+   live vs recorded/simulated, rendered vs actual imagery). In VR, xrPanel(THREE) is a small HUD panel low
+   in the corner of view, drawn the same way.
+
+   API
+     ImHereMark.init({ subject, id, location, position, scene, video, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.update({ ...same keys })
+        location  place name                                   e.g. 'Nashville International (BNA)'
+        position  'Demo' | 'Fixed' | 'None' | { time: msEpoch } (shown as "3 hrs ago"); shows "Live" while setLive(true)
+        scene     short value                                  e.g. 'Real', '3D render', 'AI render'
+        video     'None' | 'Live' (only for a truly live feed) | { date: msEpoch } (shown "Nov 9, 2026")
+        stats     [[label, value], ...]  shown in the (i) detail
+        tag       { text } status line for the detail ("Now: ...")
+        sceneNote plain sentence in the detail: AI-created/rendered vs actual imagery
+        items     provenance list: { kind, label, source, age, time, timeLabel, note, href, list: [{ text, time | age }] }
+                  kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
+        below     CSS selector(s): the card sits just under the lowest visible one (e.g. the page header)
+     ImHereMark.setLive(true|false)   Position shows "Live" (green). Only while the data is really fresh.
+     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh HUD panel, kept up to date
+     ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
+   CSS variable --imh-h on <html>: height taken by the card (or the corner mark) + gap, so a page can push its
+   own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
+*/
+(function () {
+  'use strict';
+  if (window.ImHereMark) return;
+  var KINDS = {
+    live: ['LIVE', '#1f9d55'], recorded: ['RECORDED', '#3d82c9'], data: ['REAL DATA', '#2e8f5e'],
+    computed: ['CALCULATED', '#2b7f8c'], estimated: ['ESTIMATED', '#6f7f8f'], assumed: ['ASSUMED', '#6f7f8f'],
+    simulated: ['SIMULATED', '#c47a12'], sample: ['SAMPLE', '#c47a12'], illustrative: ['ILLUSTRATIVE', '#7d5cc4'], ai: ['AI-GENERATED', '#b44a8a']
+  };
+  var NAVY = 'rgba(20,30,50,0.6)', GREY = '#9fb0c0', VALUE = '#e8eef4', GREEN = '#3ddc84';
+  var FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  var COLLAPSE_MS = 6000;
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var CSS =
+    '.imh-box,.imh-mini{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imh-z,1500);' +
+    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.14);' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);font:11px/1.25 ' + FONT + ';' +
+    'letter-spacing:normal;text-align:left;text-shadow:none;pointer-events:auto;-webkit-tap-highlight-color:transparent}' +
+    '.imh-box[hidden],.imh-mini[hidden],.imh-src[hidden],.imh-box [hidden]{display:none}' +
+    '.imh-box{width:min(190px,45vw);padding:8px}' +
+    '.imh-box.imh-wide{width:min(300px,calc(100vw - 20px))}' +
+    '.imh-r1{display:flex;align-items:center;gap:5px;min-height:18px}' +
+    '.imh-brand{font-weight:800;font-size:12.5px;letter-spacing:.1em;flex:none;color:#fff}' +
+    '.imh-i,.imh-x{flex:none;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;' +
+    'color:#dfe7ee;user-select:none;-webkit-user-select:none;position:relative}' +
+    '.imh-i::after,.imh-x::after{content:"";position:absolute;inset:-7px}' +   /* bigger touch target */
+    '.imh-i{margin-left:auto;font:italic 700 10.5px/1 Georgia,serif;border:1.3px solid rgba(255,255,255,.55)}' +
+    '.imh-x{font-size:14px;line-height:1;background:rgba(255,255,255,.1)}' +
+    '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
+    '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
+    '.imh-r2{margin-top:2px;font-weight:600;font-size:11px;color:#fff;overflow-wrap:anywhere}' +
+    '.imh-rows{list-style:none;margin:3px 0 0;padding:0;color:' + GREY + ';font-size:11px;line-height:1.3}' +
+    '.imh-rows li{margin:0;padding:0 0 0 9px;position:relative;overflow-wrap:anywhere}' +
+    '.imh-rows li::before{content:"•";position:absolute;left:0;color:' + GREY + '}' +
+    '.imh-rows .imh-l{font-size:10px;color:' + GREY + '}' +
+    '.imh-rows .imh-v{color:' + VALUE + '}.imh-rows .imh-v.imh-g{color:' + GREEN + ';font-weight:700}' +
+    '.imh-src{margin-top:5px;max-height:min(46vh,360px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;' +
+    'border-top:1px solid rgba(255,255,255,.14);font-size:11px;line-height:1.3}' +
+    '.imh-ph{font-weight:700;font-size:11px;margin-top:5px;color:#fff}' +
+    '.imh-r3{display:flex;flex-wrap:wrap;gap:3px 12px;margin:4px 0 2px}' +
+    '.imh-st{display:flex;flex-direction:column;min-width:0}' +
+    '.imh-st i{font-style:normal;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:' + GREY + '}' +
+    '.imh-st b{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}' +
+    '.imh-it{border-bottom:1px solid rgba(255,255,255,.08);padding:5px 0 4px}' +
+    '.imh-k{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;padding:0 4px;border-radius:3px;color:#fff;margin-right:5px;vertical-align:1px}' +
+    '.imh-lb{font-weight:600}' +
+    '.imh-d{color:' + GREY + ';font-size:10.5px;margin-top:2px;white-space:pre-line}' +
+    '.imh-ls{margin:2px 0 0;padding:0;list-style:none;color:' + GREY + ';font-size:10.5px}' +
+    '.imh-ls li{display:flex;justify-content:space-between;gap:8px;margin:0;padding:0}.imh-ls li span:last-child{flex:none;font-variant-numeric:tabular-nums}' +
+    '.imh-ft{padding-top:5px;color:' + GREY + ';font-size:10px}' +
+    '.imh-box a{color:#a9d3ff}' +
+    '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
+    '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
+
+  var S = { subject: '', id: '', location: '', position: 'None', scene: '3D render', video: 'None', stats: [], tag: null,
+    sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
+  var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
+  var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function fmtAge(ms) {   // "3 s ago", "14 min ago", "3 hrs ago", "5 days ago", "7 yrs ago"
+    if (!(ms >= 0)) return ms < 0 ? 'just now' : '';
+    var s = Math.round(ms / 1000), n;
+    if (s < 2) return 'just now';
+    if (s < 90) return s + ' s ago';
+    if (s < 5400) return Math.round(s / 60) + ' min ago';
+    if (s < 172800) { n = Math.round(s / 3600); return n + (n === 1 ? ' hr' : ' hrs') + ' ago'; }
+    if (s < 63072000) { n = Math.round(s / 86400); return n.toLocaleString('en-US') + ' days ago'; }
+    return Math.round(s / 31557600) + ' yrs ago';
+  }
+  function fmtDate(ms) { var d = new Date(ms); return MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear(); }
+  function credText(c) { return typeof c === 'string' ? c : (c && c.text) || ''; }
+  function link(text, href) {
+    if (!href) return document.createTextNode(text);
+    var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
+  }
+  function line2() { return [S.subject, S.id].filter(function (x) { return x; }).join(' · '); }
+  function posText() {
+    if (S.live) return 'Live';
+    var p = S.position;
+    if (p && typeof p === 'object') return p.time ? fmtAge(Date.now() - p.time) : (p.text || 'None');
+    return p ? (String(p) === 'Live' ? 'None' : String(p)) : 'None';   // a plain "Live" string is never trusted
+  }
+  function videoText() {
+    var v = S.video;
+    if (v && typeof v === 'object') return v.live ? 'Live' : v.date ? fmtDate(v.date) : (v.text || 'None');
+    return v ? (String(v) === 'Live' ? 'None' : String(v)) : 'None';
+  }
+  function rows() { return [['Location', S.location || 'None'], ['Position', posText()], ['Scene', S.scene || 'None'], ['Video', videoText()]]; }
+  function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
+  function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
+
+  function render() {
+    if (!S.mounted) return;
+    var R = rows();
+    var sig = JSON.stringify([line2(), R, S.dismissed, S.srcOpen, S.live]);
+    if (sig !== lastSig) {
+      lastSig = sig;
+      box.hidden = S.dismissed; mini.hidden = !S.dismissed; miniLive.hidden = !S.live;
+      box.classList.toggle('imh-wide', S.srcOpen);
+      r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
+      rowsEl.textContent = '';
+      R.forEach(function (r) {
+        var li = el('li'); li.appendChild(el('span', 'imh-l', r[0])); li.appendChild(document.createTextNode(' – '));
+        li.appendChild(el('span', 'imh-v' + (r[1] === 'Live' ? ' imh-g' : ''), r[1])); li.title = r[0] + ' – ' + r[1]; rowsEl.appendChild(li);
+      });
+      more.classList.toggle('imh-on', S.srcOpen);
+      more.setAttribute('aria-expanded', String(S.srcOpen));
+      box.setAttribute('aria-label', label());
+      src.hidden = !S.srcOpen;
+      drawXR();
+    }
+    renderSources(); place();
+  }
+  function renderSources() {
+    if (!S.mounted || !S.srcOpen) return;
+    var now = Date.now(), frag = document.createDocumentFragment();
+    var st = (S.stats || []).filter(Boolean);
+    if (st.length) {
+      var r3 = el('div', 'imh-r3');
+      st.forEach(function (s) { var d = el('div', 'imh-st'); d.appendChild(el('i', null, s[0])); d.appendChild(el('b', null, s[1] == null || s[1] === '' ? '–' : String(s[1]))); r3.appendChild(d); });
+      frag.appendChild(r3);
+    }
+    frag.appendChild(el('div', 'imh-ph', 'Where this comes from'));
+    var sc = el('div', 'imh-d'); sc.appendChild(el('b', null, 'Scene: ')); sc.appendChild(document.createTextNode(S.sceneNote || SCENE_NOTE_DEFAULT)); frag.appendChild(sc);
+    if (statusText()) frag.appendChild(el('div', 'imh-d', 'Now: ' + statusText()));
+    S.items.forEach(function (it) {
+      if (!it) return;
+      var k = KINDS[it.kind] || [String(it.kind || 'INFO').toUpperCase(), '#6f7f8f'];
+      var d = el('div', 'imh-it'), h = el('div'), kb = el('span', 'imh-k', k[0]);
+      kb.style.background = k[1]; h.appendChild(kb); h.appendChild(el('span', 'imh-lb', it.label || '')); d.appendChild(h);
+      var lines = [];
+      if (it.source) lines.push('Source: ' + it.source);
+      var age = it.time ? fmtAge(now - it.time) : it.age;
+      if (age) lines.push((it.time ? (it.timeLabel || 'Updated') + ' ' : '') + age);
+      if (it.note) lines.push(it.note);
+      if (lines.length) d.appendChild(el('div', 'imh-d', lines.join('\n')));
+      if (it.href) { var lk = el('div', 'imh-d'); lk.appendChild(link('More about this source', it.href)); d.appendChild(lk); }
+      if (it.list && it.list.length) {
+        var ul = el('ul', 'imh-ls'), max = 30;
+        it.list.slice(0, max).forEach(function (r) {
+          var li = el('li'); li.appendChild(el('span', null, r.text || ''));
+          li.appendChild(el('span', null, r.time ? fmtAge(now - r.time) : (r.age || ''))); ul.appendChild(li);
+        });
+        if (it.list.length > max) { var m = el('li'); m.appendChild(el('span', null, '+ ' + (it.list.length - max) + ' more')); ul.appendChild(m); }
+        d.appendChild(ul);
+      }
+      frag.appendChild(d);
+    });
+    var cr = S.credits.filter(credText);
+    if (cr.length) {
+      var ft = el('div', 'imh-ft'); ft.appendChild(document.createTextNode('Credits: '));
+      cr.forEach(function (c, i) { if (i) ft.appendChild(document.createTextNode(' · ')); ft.appendChild(link(credText(c), c.href)); });
+      frag.appendChild(ft);
+    }
+    var tmp = el('div'); tmp.appendChild(frag.cloneNode(true));
+    if (tmp.innerHTML === lastSrcSig) return;
+    lastSrcSig = tmp.innerHTML; src.textContent = ''; src.appendChild(frag);
+  }
+  function visible(e) {
+    if (!e || !e.getClientRects().length) return false;
+    var cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none';
+  }
+  var lastTop = null, lastH = null;
+  function place() {
+    if (!S.mounted) return;
+    var top = null;
+    S.below.forEach(function (sel) {
+      var list; try { list = document.querySelectorAll(sel); } catch (e) { return; }
+      for (var i = 0; i < list.length; i++) {
+        if (!visible(list[i])) continue;
+        var b = list[i].getBoundingClientRect();
+        if (b.bottom > 0 && b.bottom < innerHeight * 0.5) top = Math.max(top || 0, b.bottom + 6);
+      }
+    });
+    var t = top == null ? '' : Math.round(top) + 'px';
+    if (t !== lastTop) { lastTop = t; box.style.top = t; mini.style.top = t; }
+    // pages push their own top-left panels down by the compact card height (not the opened detail, which overlays)
+    var r = (S.dismissed ? mini : box).getBoundingClientRect(), h = S.srcOpen ? lastH : Math.round(r.height + 12) + 'px';   // +12: clear gap to any panel below
+    if (h && h !== lastH) { lastH = h; document.documentElement.style.setProperty('--imh-h', h); }
+  }
+  function expand() { collapseAt = Date.now() + COLLAPSE_MS; if (S.dismissed) { S.dismissed = false; render(); } }
+  function setDismissed(d, focus) {
+    S.dismissed = !!d; if (d) S.srcOpen = false; else collapseAt = Date.now() + COLLAPSE_MS;
+    render();
+    if (focus) try { (d ? mini : box).focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  }
+  function tick() {   // auto-collapse ~6 s after showing, unless the detail is open or the pointer/focus is on the card
+    if (!S.mounted || S.dismissed || S.srcOpen || hovering || box.contains(document.activeElement)) { collapseAt = Math.max(collapseAt, Date.now() + 1500); return; }
+    if (Date.now() >= collapseAt) setDismissed(true, false);
+  }
+  function stop(e) { e.stopPropagation(); }
+  function button(e, fn) {
+    e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0');
+    e.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); });
+    e.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fn(); } });
+  }
+  function mount() {
+    if (S.mounted) return;
+    if (!document.body) { document.addEventListener('DOMContentLoaded', mount); return; }
+    if (!document.getElementById('imh-style')) { var st = el('style', null, CSS); st.id = 'imh-style'; document.head.appendChild(st); }
+    box = el('div', 'imh-box'); box.id = 'imh-card'; box.setAttribute('role', 'region'); box.setAttribute('tabindex', '-1');
+    var r1 = el('div', 'imh-r1');
+    r1.appendChild(el('span', 'imh-brand', "I'M HERE"));
+    more = el('span', 'imh-i', 'i'); more.setAttribute('aria-label', 'Details: live stats, sources, last update, live or recorded'); more.title = 'Details and sources';
+    button(more, function () { S.srcOpen = !S.srcOpen; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); });
+    r1.appendChild(more);
+    var x = el('span', 'imh-x', '×'); x.setAttribute('aria-label', 'Hide the I\'M HERE card'); x.title = 'Hide';
+    button(x, function () { setDismissed(true, true); });
+    r1.appendChild(x); box.appendChild(r1);
+    r2 = el('div', 'imh-r2'); box.appendChild(r2);
+    rowsEl = el('ul', 'imh-rows'); box.appendChild(rowsEl);
+    var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
+    more.addEventListener('mouseenter', function () {
+      if (!S.srcOpen && window.matchMedia && matchMedia('(hover: hover)').matches) { hoverOpen = true; S.srcOpen = true; lastSrcSig = ''; render(); }
+    });
+    more.addEventListener('click', function (e) { if (hoverOpen) { hoverOpen = false; e.stopImmediatePropagation(); e.stopPropagation(); } }, true);   // pin, don't close
+    box.addEventListener('mouseenter', function () { hovering = true; });
+    box.addEventListener('mouseleave', function () { hovering = false; collapseAt = Math.max(collapseAt, Date.now() + 3000); if (hoverOpen) { hoverOpen = false; S.srcOpen = false; render(); } });
+    src = el('div', 'imh-src'); src.hidden = true; box.appendChild(src);
+    mini = el('div', 'imh-mini', "I'M HERE"); mini.id = 'imh-mark'; mini.hidden = true;
+    miniLive = el('span', 'imh-g', 'Live'); miniLive.hidden = true; mini.appendChild(miniLive);
+    mini.setAttribute('aria-label', "I'M HERE: show the info card"); mini.title = 'Show info';
+    button(mini, function () { setDismissed(false, true); });
+    ['pointerdown', 'pointermove', 'touchstart', 'touchmove', 'wheel', 'mousedown'].forEach(function (ev) {   // keep taps/scrolls off the 3D view underneath
+      box.addEventListener(ev, stop, { passive: true }); mini.addEventListener(ev, stop, { passive: true });
+    });
+    box.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.srcOpen) { S.srcOpen = false; render(); } });
+    document.body.appendChild(box); document.body.appendChild(mini);
+    S.mounted = true; collapseAt = Date.now() + COLLAPSE_MS;
+    document.documentElement.style.setProperty('--imh-z', String(S.z));
+    render();
+    addEventListener('resize', place);
+    setInterval(function () { render(); tick(); }, 1000);   // keeps "x ago" values current
+  }
+  function apply(o) {
+    if (!o) return;
+    ['subject', 'id', 'location', 'scene', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.position !== undefined) S.position = o.position;
+    if (o.video !== undefined) S.video = o.video;
+    if (o.stats) S.stats = [].concat(o.stats);
+    if (o.tag !== undefined) S.tag = o.tag;
+    if (o.items) S.items = [].concat(o.items);
+    if (o.credits) S.credits = [].concat(o.credits);
+    if (o.below) S.below = [].concat(o.below);
+    if (o.zIndex != null) S.z = +o.zIndex || 1500;
+  }
+
+  // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
+  function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  function drawXR() {
+    if (!xr) return;
+    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = 'rgba(20,30,50,0.78)'; rr(g, 3, 3, W - 6, H - 6, 22); g.fill();   // a bit denser in VR for legibility
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
+    g.textBaseline = 'alphabetic'; g.fillStyle = '#fff';
+    g.font = '800 40px ' + FONT; g.fillText("I'M HERE", 28, 54);
+    g.font = '600 30px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 98);
+    var y = 140;
+    rows().forEach(function (r) {
+      g.fillStyle = GREY; g.font = '400 26px ' + FONT; var lt = '•  ' + r[0] + ' – ';
+      g.fillText(lt, 28, y); var lw = g.measureText(lt).width;
+      g.font = (r[1] === 'Live' ? '700 ' : '400 ') + '28px ' + FONT; g.fillStyle = r[1] === 'Live' ? GREEN : VALUE;
+      g.fillText(fit(g, r[1], W - 56 - lw), 28 + lw, y); y += 38;
+    });
+    xr.tex.needsUpdate = true;
+  }
+  function xrPanel(THREE, o) {
+    o = o || {};
+    if (!xr) {
+      var c = document.createElement('canvas'); c.width = 512; c.height = 300;
+      var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+      xr = { canvas: c, tex: tex };
+    }
+    var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 300 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
+    m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
+    m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
+    drawXR(); return m;
+  }
+
+  window.ImHereMark = {
+    init: function (o) { apply(o); mount(); lastSig = ''; render(); return this; },
+    update: function (o) { apply(o); render(); return this; },
+    setLive: function (on) { on = !!on; if (on !== S.live) { S.live = on; render(); } return this; },
+    isLive: function () { return S.live; },
+    open: function () { if (!S.mounted) return; S.dismissed = false; S.srcOpen = true; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); },
+    close: function () { if (!S.mounted) return; S.srcOpen = false; render(); },
+    dismiss: function () { if (S.mounted) setDismissed(true, false); },
+    expand: function () { if (S.mounted) expand(); },
+    label: label, xrPanel: xrPanel,
+    items: function () { return S.items.slice(); }
+  };
+})();
+</script>
+<!-- IMHERE-MARK:END -->
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { buildAirport } from './airport-kit.js';
+import { loadOurAirport, defaultEnd } from './ourairports.js';
+import { createGoogleScenery } from './google-scenery.js';
+
+// Google Map Tiles API key. Safe to publish: Google only accepts it from https://dareklaviolette-eng.github.io/
+const GOOGLE_KEY = 'AIzaSyD5_qsBFe74zBURZ8UTYFzz_7es3dPSM9A';
+
+const $ = (id) => document.getElementById(id);
+const D2R = Math.PI / 180;
+
+// ---------------------------------------------------------------------------
+// Shell constants (measured from the model). Model units × S = real metres.
+// ---------------------------------------------------------------------------
+const S = 1.92;                       // 737 fuselage ≈ 3.76 m wide; model is 1.96 units
+const SEATS = {                       // eye point, look-at point (model units)
+  captain:  { eye: [ 0.40, 2.18, 1.08], at: [ 0.40, 2.08, 2.30] },
+  fo:       { eye: [-0.40, 2.18, 1.08], at: [-0.40, 2.08, 2.30] },
+  jump:     { eye: [ 0.05, 2.22, 0.50], at: [ 0.00, 1.85, 1.80] },
+  overhead: { eye: [ 0.40, 2.12, 1.05], at: [ 0.10, 2.60, 1.60] },
+  outside:  { eye: [ 1.40, 2.40, 3.80], at: [ 0.00, 1.90, 1.40], orbit: true },
+};
+// Display units: centre, size (model units), facing normal (toward the pilots)
+const UP = [0, 0, -1], LO = [0, 0.900, -0.435];
+const SCREENS = [
+  { id: 'cptPFD', c: [ 0.3223, 1.8783, 1.4584], w: 0.1038, h: 0.1029, n: UP, draw: 'pfd' },
+  { id: 'cptND',  c: [ 0.1983, 1.8783, 1.4584], w: 0.1019, h: 0.1029, n: UP, draw: 'nd'  },
+  { id: 'upper',  c: [ 0.0063, 1.8783, 1.4584], w: 0.1038, h: 0.1029, n: UP, draw: 'eng' },
+  { id: 'foND',   c: [-0.1554, 1.8783, 1.4584], w: 0.1025, h: 0.1029, n: UP, draw: 'nd'  },
+  { id: 'foPFD',  c: [-0.2800, 1.8783, 1.4584], w: 0.1030, h: 0.1029, n: UP, draw: 'pfd' },
+  { id: 'lower',  c: [ 0.0092, 1.7895, 1.4030], w: 0.1064, h: 0.1064, n: LO, draw: 'sys' },
+];
+
+// ---------------------------------------------------------------------------
+// Renderer, scene, camera
+// ---------------------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local');      // headset starts exactly at the seat eye point
+$('view').appendChild(renderer.domElement);
+// Enter-VR button only when a headset is available (no "VR NOT SUPPORTED" box over the displays)
+if (navigator.xr) navigator.xr.isSessionSupported('immersive-vr').then((ok) => { if (ok) document.body.appendChild(VRButton.createButton(renderer)); }).catch(() => {});
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xb9cfe0, 0.000022);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.02, 2e6);
+scene.add(camera);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.08; controls.enablePan = false;
+controls.rotateSpeed = -0.35;
+
+// Lights (static)
+const hemi = new THREE.HemisphereLight(0xeaf4ff, 0x3a4048, 1.6); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff4e0, 1.6); sun.position.set(3, 8, 6); scene.add(sun);
+const dome = new THREE.PointLight(0xffe2b0, 0, 8, 1); scene.add(dome);   // flight-deck dome light (night)
+
+// ---------------------------------------------------------------------------
+// Outside world (moves): sky dome + ground. Drawn first, behind the cockpit.
+// ---------------------------------------------------------------------------
+const world = new THREE.Group(); scene.add(world);
+const skyU = { top: { value: new THREE.Color() }, hor: { value: new THREE.Color() }, bot: { value: new THREE.Color() },
+               sunDir: { value: new THREE.Vector3(0.3, 0.35, 0.9).normalize() }, sunCol: { value: new THREE.Color() } };
+const sky = new THREE.Mesh(new THREE.SphereGeometry(1e6, 48, 24), new THREE.ShaderMaterial({
+  uniforms: skyU, side: THREE.BackSide, depthWrite: false, depthTest: false,
+  vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `uniform vec3 top, hor, bot, sunDir, sunCol; varying vec3 vDir;
+    void main(){ float h = vDir.y; vec3 c = h > 0.0 ? mix(hor, top, pow(clamp(h,0.0,1.0), 0.45)) : mix(hor, bot, clamp(-h*6.0,0.0,1.0));
+      float s = max(dot(normalize(vDir), sunDir), 0.0); c += sunCol * (pow(s, 600.0) * 4.0 + pow(s, 12.0) * 0.25);
+      gl_FragColor = vec4(c, 1.0);
+      #include <colorspace_fragment>
+    }`,
+}));
+sky.renderOrder = -20; sky.frustumCulled = false; world.add(sky);
+
+function groundTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 1024; const x = c.getContext('2d');
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  x.fillStyle = '#5d6b45'; x.fillRect(0, 0, 1024, 1024);
+  const tones = ['#6b7a4b', '#7d8550', '#56693f', '#8b8158', '#9a8f63', '#4f6040', '#76804e', '#a39a70'];
+  for (let i = 0; i < 260; i++) {
+    x.fillStyle = tones[(rnd() * tones.length) | 0];
+    x.save(); x.translate(rnd() * 1024, rnd() * 1024); x.rotate((rnd() - 0.5) * 0.3);
+    x.fillRect(0, 0, 40 + rnd() * 160, 30 + rnd() * 140); x.restore();
+  }
+  x.strokeStyle = '#b8b0a0'; x.lineWidth = 2;
+  for (let i = 0; i < 6; i++) { x.beginPath(); x.moveTo(rnd() * 1024, 0); x.lineTo(rnd() * 1024, 1024); x.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(300, 300);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
+}
+const TILE = 6e5 / 300;  // metres per texture tile
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(6e5, 6e5).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ map: groundTexture(), depthWrite: false, depthTest: false, fog: true }));
+ground.renderOrder = -19; ground.frustumCulled = false; world.add(ground);
+
+// ---------------------------------------------------------------------------
+// Aircraft (nailed down): shell + live display units
+// ---------------------------------------------------------------------------
+const aircraft = new THREE.Group(); aircraft.scale.setScalar(S); scene.add(aircraft);
+const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+
+const displays = SCREENS.map((d) => {
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
+  const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(d.w * 0.97, d.h * 0.97), mat);
+  const n = v3(d.n).normalize();
+  mesh.position.copy(v3(d.c).addScaledVector(n, 0.0006));
+  mesh.rotation.set(Math.atan2(n.y, -n.z), Math.PI, 0, 'XYZ');   // face the pilots, upright
+  aircraft.add(mesh);
+  return { ...d, canvas, ctx: canvas.getContext('2d'), tex, mesh };
+});
+
+new GLTFLoader().load('./shell.gltf', (gltf) => {
+  const shell = gltf.scene;
+  shell.traverse((o) => {
+    if (!o.isMesh) return;
+    const m = o.material;   // Lambert: cheaper than PBR, looks the same on these matte surfaces
+    o.material = new THREE.MeshLambertMaterial({ color: m.color, side: THREE.DoubleSide, name: m.name });
+  });
+  aircraft.add(shell);
+  aircraft.updateMatrixWorld(true);
+  shell.traverse((o) => { o.matrixAutoUpdate = false; });   // static: never recomputed
+  $('loader').style.display = 'none';
+}, (e) => { if (e.total) $('bar').firstChild.style.width = (100 * e.loaded / e.total).toFixed(0) + '%'; },
+   (err) => { $('loader').innerHTML = 'Could not load the cockpit.<br><small>Open this through a web server, not as a file.</small>'; console.error(err); });
+
+// ---------------------------------------------------------------------------
+// Flight state (moves). External feeds call ImHere737.updateFlightData({...}).
+// ---------------------------------------------------------------------------
+const F = { flight: 'DEMO', altitude: 18000, airspeed: 275, mach: 0.58, groundSpeed: 400, heading: 268, track: 268,
+  verticalSpeed: 1800, pitch: 3.5, bank: 0, windDirection: 290, windSpeed: 24, tat: -18, selAlt: 31000,
+  n1L: 88, n1R: 88, n2L: 92, n2R: 92, egtL: 720, egtR: 718, ffL: 2.6, ffR: 2.6, oilPL: 65, oilPR: 66,
+  fuelL: 9800, fuelR: 9750, fuelC: 3200, hydA: 3000, hydB: 3000, flaps: 0, gear: 0, radioAlt: 9999, phase: 'CLIMB' };
+let live = false, feedAt = 0;   // feedAt: time of the last external feed update (ms)
+function updateFlightData(patch = {}) {
+  for (const [k, v] of Object.entries(patch)) {
+    if (!(k in F)) continue;
+    if (typeof F[k] === 'number' && Number.isFinite(v)) F[k] = v;
+    else if (typeof F[k] === 'string' && typeof v === 'string') F[k] = v.slice(0, 24);
+  }
+}
+window.ImHere737 = {
+  updateFlightData(p) { live = true; demo = false; feedAt = Date.now(); updateFlightData(p); refreshMark(); },
+  getFlightData: () => ({ ...F }), scene, camera,
+  getSceneryStats: () => (scenery ? scenery.stats() : null),   // for testing the Google layer
+};
+
+let demo = true, paused = false, t = 0;
+function demoStep(dt) {
+  t += dt; const p = t % 150; let alt, vs, ias, stage, n1, flaps = 0, gear = 0;
+  if (p < 45) { alt = 18000 + p * 290; vs = 1750; ias = 280; stage = 'CLIMB'; n1 = 89; }
+  else if (p < 85) { alt = 31000; vs = 0; ias = 270; stage = 'CRUISE'; n1 = 81; }
+  else { const f = (p - 85) / 65; alt = 31000 - f * 28500; vs = -1500 - 300 * Math.sin(f * 3); ias = 280 - f * 130; stage = 'DESCENT'; n1 = 38 + f * 20;
+    flaps = f > .9 ? 15 : f > .8 ? 5 : f > .7 ? 1 : 0; gear = f > .92 ? 1 : 0; }
+  const turn = Math.sin(t * 0.04);
+  const hdg = (268 + 35 * Math.sin(t * 0.02) + 360) % 360;
+  const tas = ias * (1 + 0.02 * alt / 1000), mach = tas / (661 - 2 * alt / 1000);
+  updateFlightData({ altitude: alt, verticalSpeed: vs, airspeed: ias, mach, groundSpeed: tas - 18,
+    heading: hdg, track: (hdg + 3) % 360, bank: 22 * turn * Math.cos(t * 0.02) * 0.5, pitch: stage === 'CLIMB' ? 4 : stage === 'DESCENT' ? -1.5 : 2.2,
+    tat: 15 - 1.98 * alt / 1000 + 43 * mach * mach, n1L: n1 + .3, n1R: n1 - .2, n2L: n1 + 6, n2R: n1 + 6, egtL: 380 + n1 * 4.4, egtR: 377 + n1 * 4.4,
+    ffL: 0.6 + n1 / 40, ffR: 0.6 + n1 / 40, fuelL: Math.max(2000, 9800 - t * 4), fuelR: Math.max(2000, 9750 - t * 4), fuelC: Math.max(0, 3200 - t * 8),
+    flaps, gear, phase: stage });
+}
+
+// ---------------------------------------------------------------------------
+// Airport (nailed down) + approach demo
+// ---------------------------------------------------------------------------
+const FT = 0.3048;
+const EYE_Y = SEATS.captain.eye[1] * S;   // pilot eye height above the aircraft origin (world frame)
+const EYE_AGL_GROUND = 3.8;               // 737-800 pilot eye height on the runway, metres (approx.)
+let airport = null, mode = 'approach', aptReq = 0, surfaces = [], aptSrc = null;
+const END_DEFAULT = { KBNA: '2L' };   // keeps today's "Land BNA 2L" demo as the default
+const setAptStatus = (t) => { $('aptStatus').textContent = t; };
+const shortName = (d) => d.iata || (/^K[A-Z0-9]{3}$/.test(d.icao || '') ? d.icao.slice(1) : d.icao);
+const rwyKey = (id) => { const m = /^(\d+)([LCR]?)$/.exec(id) || [0, 99, '']; return +m[1] * 4 + ('LCR'.indexOf(m[2]) + 1); };
+
+async function curatedFile(code) {   // a hand-checked ./airports/CODE.json wins over OurAirports
+  if (!/^[A-Z0-9-]{2,8}$/.test(code)) return null;
+  try { const r = await fetch(`./airports/${code}.json`); if (r.ok) return await r.json(); } catch (e) { /* none */ }
+  return null;
+}
+async function fetchAirportData(code) {
+  const own = await curatedFile(code); if (own) return { data: own, curated: true };
+  const data = await loadOurAirport(code, { onStatus: setAptStatus });
+  const own2 = data.icao !== code ? await curatedFile(data.icao) : null;   // e.g. typed "BNA" -> KBNA.json
+  return own2 ? { data: own2, curated: true } : { data, curated: false };
+}
+function disposeGroup(g) {
+  g.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    for (const m of [].concat(o.material || [])) { for (const k in m) if (m[k] && m[k].isTexture) m[k].dispose(); m.dispose(); }
+  });
+}
+function endInfo(data, id) {
+  for (const rw of data.runways) for (const e of rw.ends) if (e.id === id) return { rw, e };
+  return null;
+}
+async function loadAirport(code, preferEnd) {
+  code = String(code || '').trim().toUpperCase(); if (!code) return;
+  const req = ++aptReq; $('aptGo').disabled = true; setAptStatus(`Looking up ${code}…`);
+  try {
+    const { data, curated } = await fetchAirportData(code);
+    if (req !== aptReq) return;
+    const built = buildAirport(THREE, data);
+    // draw order: lights before the cockpit (so the cockpit hides them), tyre marks hidden by the cockpit too
+    surfaces = [];
+    built.group.traverse((o) => {
+      if (o.isPoints) o.material.transparent = false;          // additive blending still applies
+      else if (o.isMesh) { if (o.material.transparent) o.material.depthTest = true; surfaces.push(o); }
+    });
+    if (airport) { world.remove(airport.group); disposeGroup(airport.group); }
+    airport = built; world.add(airport.group);
+    const ids = Object.keys(airport.ends).sort((a, b) => rwyKey(a) - rwyKey(b));
+    $('rwy').innerHTML = ids.map((id) => {
+      const i = endInfo(data, id), L = Math.round(airport.ends[id].L_ft).toLocaleString();
+      return `<option value="${id}">Runway ${id} · ${L} ft${i && i.e.approach ? ' · ' + i.e.approach : ''}</option>`;
+    }).join('');
+    AP.rwy = defaultEnd(data, preferEnd || END_DEFAULT[(data.icao || '').toUpperCase()]);
+    $('rwy').value = AP.rwy; $('apt').value = data.icao;
+    setAptStatus(`${data.name || data.icao} · field ${Math.round(data.elev_ft)} ft · ` +
+      (curated ? 'hand-checked data' : 'OurAirports data; lighting assumed'));
+    const notes = [].concat(data.verify || []);
+    for (const rw of data.runways) if (rw.verify) notes.push(`${rw.id}: ${rw.verify}`);
+    aptSrc = { curated, notes };
+    pos.x = pos.z = 0;
+    if (scenery) placeScenery();
+    try { const u = new URL(location.href); u.searchParams.set('apt', data.icao); u.searchParams.delete('rwy'); history.replaceState(null, '', u); } catch (e) { /* ignore */ }
+    setMode('approach');
+  } catch (e) {
+    console.error('airport', e);
+    if (req === aptReq) setAptStatus(`Could not load ${code}: ${e.message}${airport ? ` (still showing ${airport.data.icao})` : ''}`);
+  } finally { if (req === aptReq) $('aptGo').disabled = false; }
+}
+const params = new URLSearchParams(location.search);
+const AP = { rwy: '2L', s: 0, v: 0, t: 0, tdT: 0, hold: 0, lastH: null, stage: 'APPROACH' };
+function startApproach() {
+  if (!airport) return;
+  if (!airport.ends[AP.rwy]) AP.rwy = defaultEnd(airport.data);
+  const e = airport.ends[AP.rwy];
+  $('landBtn').textContent = `Land ${shortName(airport.data)} ${AP.rwy}`;
+  if (scenery) scenery.setProbes(probePoints());
+  AP.s = (e.displaced_ft + 1000) * FT - 9260;   // 5 nm before the touchdown point
+  Object.assign(AP, { v: 140 * 0.5144, t: 0, tdT: 0, hold: 0, lastH: null, stage: 'APPROACH' });
+}
+function approachStep(dt) {
+  const e = airport.ends[AP.rwy]; AP.t += dt;
+  const sTD = (e.displaced_ft + 1000) * FT, dist = sTD - AP.s;
+  let h = 0, pitch, n1;
+  if (dist > 0) {   // 3° glide path to the aiming point, flare from 40 ft
+    AP.s += AP.v * dt;
+    const hg = dist * Math.tan(3 * D2R) / FT; h = hg < 40 ? 40 * Math.pow(hg / 40, 1.6) : hg;
+    AP.stage = hg < 40 ? 'FLARE' : 'APPROACH'; AP.tdT = AP.t;
+    pitch = hg < 40 ? 2.5 + (1 - hg / 40) * 3 : 2.5;
+    n1 = hg < 40 ? 30 : 57 + 2 * Math.sin(AP.t * 0.5);
+    if (hg < 40) AP.v = Math.max(AP.v - 0.8 * dt, 60);
+  } else {          // touchdown, reverse thrust, brake to taxi speed
+    AP.stage = 'ROLLOUT'; const since = AP.t - AP.tdT;
+    if (AP.v > 6) AP.v = Math.max(6, AP.v - 2.3 * dt); else AP.hold += dt;
+    AP.s += AP.v * dt;
+    pitch = Math.max(0, 5.5 - since * 1.2); n1 = since > 1.5 && since < 14 ? 72 : 22;
+    if (AP.hold > 8) { startApproach(); return; }
+  }
+  const vs = AP.lastH === null ? -750 : (h - AP.lastH) / dt * 60; AP.lastH = h;
+  const air = h > 40 ? 1 : 0, lat = air * 4 * Math.sin(AP.t * 0.11);   // gentle drift off the centreline
+  pos.x = e.O[0] + e.u[0] * AP.s + e.r[0] * lat; pos.z = e.O[1] + e.u[1] * AP.s + e.r[1] * lat;
+  const hdg = (Math.atan2(-e.u[0], e.u[1]) / D2R + 360 + air * 1.2 * Math.cos(AP.t * 0.11)) % 360;
+  const kt = AP.v / 0.5144;
+  updateFlightData({ altitude: airport.data.elev_ft + h, radioAlt: h, verticalSpeed: vs, airspeed: kt + 6, groundSpeed: kt, mach: (kt + 6) / 661,
+    heading: hdg, track: hdg, pitch, bank: air * (1.3 * Math.sin(AP.t * 0.7) + 0.6 * Math.sin(AP.t * 1.9)),
+    n1L: n1, n1R: n1 - 0.4, n2L: n1 + 9, n2R: n1 + 9, egtL: 300 + n1 * 4, egtR: 297 + n1 * 4, ffL: 0.4 + n1 / 60, ffR: 0.4 + n1 / 60,
+    flaps: 30, gear: 1, phase: AP.stage, tat: 12, selAlt: 3000 });
+}
+// landing lights (fixed to the aircraft, pointing ahead and down)
+const landing = new THREE.SpotLight(0xfff3e0, 0, 2500, 10 * D2R, 0.5, 1);
+landing.position.set(0, 0.5, 9); landing.target.position.set(0, -26, 300); scene.add(landing, landing.target);
+// ---------------------------------------------------------------------------
+// Optional real-world scenery (Google Photorealistic 3D Tiles). Off by default; any failure -> flat ground.
+// ---------------------------------------------------------------------------
+let scenery = null, sceneryOn = false, sceneryT = 0, todTint = 0xffffff, creditClock = 0;
+function probePoints() {   // centreline points in the touchdown zone of the selected runway end
+  const e = airport && airport.ends[AP.rwy]; if (!e) return [];
+  return [0, 300, 600].map((d) => { const s = e.aim_ft * FT + d; return [e.O[0] + e.u[0] * s, e.O[1] + e.u[1] * s]; });
+}
+function placeScenery() {
+  if (!scenery || !airport) return;
+  scenery.setOrigin(airport.data.arp[0], airport.data.arp[1], airport.data.elev_ft);
+  scenery.setProbes(probePoints());
+}
+function sceneryFail(why) {
+  console.warn('Real scenery unavailable:', why);
+  if (scenery) { scenery.dispose(); scenery = null; }
+  sceneryOn = false; $('scenery').classList.remove('on'); $('gcredit').hidden = true;
+  $('sceneryNote').textContent = 'Real scenery not available here, flat ground shown.';
+  refreshMark();
+}
+async function setScenery(on) {
+  if (!on) { sceneryOn = false; if (scenery) { scenery.dispose(); scenery = null; }
+    $('scenery').classList.remove('on'); $('gcredit').hidden = true; $('sceneryNote').textContent = ''; refreshMark(); return; }
+  if (sceneryOn) return;
+  sceneryOn = true; sceneryT = 0; $('scenery').classList.add('on'); $('sceneryNote').textContent = 'Loading real scenery…';
+  try {
+    const sc = await createGoogleScenery({ THREE, GLTFLoader, DRACOLoader, renderer, camera, key: GOOGLE_KEY,
+      onStatus: (t) => { if (sceneryOn) $('sceneryNote').textContent = t; } });
+    if (!sceneryOn) { sc.dispose(); return; }   // switched off while loading
+    scenery = sc; world.add(scenery.holder); scenery.setTint(todTint); placeScenery();
+    $('sceneryNote').textContent = 'Streaming Google 3D tiles…'; $('gcredit').hidden = false;
+  } catch (e) { if (sceneryOn) sceneryFail(e); }
+}
+function sceneryStep(dt, gy) {
+  if (!scenery) return false;
+  scenery.holder.position.set(-pos.x, gy, -pos.z);
+  try { scenery.update(dt); } catch (e) { sceneryFail(e); return false; }
+  const st = scenery.stats(); sceneryT += dt;
+  if (!st.loaded && sceneryT > 25) { sceneryFail('no tiles after 25 s'); return false; }
+  if ((creditClock += dt) > 1) { creditClock = 0; $('gattr').textContent = scenery.credits();
+    if (st.loaded) $('sceneryNote').textContent = st.aligned ? 'Google 3D tiles on (ground matched to runway)' : 'Google 3D tiles on'; }
+  return st.loaded > 0;
+}
+let nearNow = 0.02;
+function setNear(n) { if (n !== nearNow) { nearNow = n; camera.near = n; camera.updateProjectionMatrix(); } }
+
+function setMode(m) {
+  mode = m; demo = true; live = false;
+  document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
+  if (m === 'approach') startApproach(); else { t = 0; F.radioAlt = 9999; }
+  refreshMark();
+}
+
+// ---------------------------------------------------------------------------
+// I'M HERE watermark + source card (shared snippet: shared/imhere-mark.js, inlined above)
+// ---------------------------------------------------------------------------
+const MARK = window.ImHereMark;
+const COCKPIT_URL = 'https://sketchfab.com/3d-models/boeing-737-800-cockpit-d463256f98654b36af019d2d88bd5bbe';
+let todName = 'day';
+function refreshMark() {
+  if (!MARK) return;
+  const liveNow = live && Date.now() - feedAt < 10000;   // LIVE only while an external feed is actually sending
+  const d = airport && airport.data;
+  const fix = live ? (liveNow ? fmtSince(feedAt) : 'feed quiet ' + fmtSince(feedAt)) : '';
+  const items = [];
+  if (live) items.push({ kind: liveNow ? 'live' : 'recorded', label: 'Aircraft position & flight data', source: 'External flight-data feed (ImHere737.updateFlightData)',
+    time: feedAt, note: liveNow ? '' : 'Feed has gone quiet: showing the last values received.' });
+  else items.push({ kind: 'simulated', label: 'Aircraft position & flight data', source: 'Built-in demo flight. No live feed is connected.',
+    note: mode === 'approach' ? `Scripted 3° approach to runway ${AP.rwy}, flare, touchdown and rollout; then it repeats.` : 'Scripted climb, cruise and descent; then it repeats.' });
+  if (d) {
+    const cur = aptSrc && aptSrc.curated;
+    items.push({ kind: 'data', label: `Runways: ${d.icao}${d.name ? ' · ' + d.name : ''}`,
+      source: cur ? 'Hand-checked airport file built from FAA data' : 'OurAirports open data (public domain), converted in the page',
+      note: (d.sources || '') + ' Not for real-world navigation.' });
+    items.push({ kind: 'assumed', label: 'Runway & approach lighting',
+      source: cur ? 'FAA lighting records; the items below are assumptions' : 'Assumed from runway length, surface and type (OurAirports lists no lighting systems)',
+      note: aptSrc && aptSrc.notes.length ? aptSrc.notes.join('\n') : '' });
+  }
+  const tiles = scenery && scenery.stats().loaded > 0;
+  items.push(tiles
+    ? { kind: 'recorded', label: 'Ground scenery', source: 'Google Photorealistic 3D Tiles: aerial imagery captured on past dates, not live',
+        note: 'Image credits are shown at the bottom right, as Google requires.' + (scenery.credits() ? ' Now: ' + scenery.credits() : '') }
+    : { kind: 'illustrative', label: 'Ground, sky and weather', source: 'Generic ground and sky drawn by I\'M HERE; not the real view, weather or traffic' });
+  items.push({ kind: 'illustrative', label: `Time of day: ${todName}`, source: 'Chosen with the Day/Dusk/Night buttons, not the real time at the airport' });
+  items.push({ kind: 'illustrative', label: '737-800 flight deck', source: '3D model "Boeing 737-800 Cockpit" by hakai315 (Sketchfab, CC BY 4.0), optimized', href: COCKPIT_URL,
+    note: 'Cockpit displays are drawn from the flight data above (737NG-style, simplified).' });
+  MARK.update({ subject: 'Boeing 737-800', location: d ? `${placeName(d)} (${shortName(d)})` : 'None',
+    position: live ? { time: feedAt } : 'Demo', scene: tiles ? 'Real + 3D render' : '3D render', video: 'None',
+    id: live ? (F.flight && F.flight !== 'DEMO' ? F.flight : 'Live flight') : mode === 'cruise' ? 'Cruise' : d ? `${shortName(d)} ${AP.rwy}` : '',
+    stats: [['Alt', Math.round(F.altitude).toLocaleString('en-US') + ' ft'], ['GS', Math.round(F.groundSpeed) + ' kt'],
+      ['HDG', String((Math.round(F.heading) % 360 + 360) % 360).padStart(3, '0') + '°']],
+    tag: live ? { text: fix, kind: liveNow ? 'live' : 'recorded' } : { text: 'Simulated demo flight', kind: 'simulated' }, items,
+    sceneNote: tiles ? 'Mixed: the ground is actual aerial imagery (Google Photorealistic 3D Tiles, captured on past dates, not live); the cockpit and sky are computer-rendered. Nothing is AI-generated.'
+      : 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.' });
+  MARK.setLive(liveNow);
+}
+// short readable place for the label: the city, else the airport name without "International Airport" etc.
+const placeName = (d) => (d.municipality || String(d.name || d.icao).split(/[\n(,]/)[0]
+  .replace(/\b(International|Intl\.?|Airport|Regional|Municipal|Metropolitan|Field|Air ?(Force|National Guard)? ?Base|Airfield)\b/gi, '')
+  .replace(/\s+/g, ' ').trim()) || d.icao;
+const fmtSince = (ms) => { const s = Math.round((Date.now() - ms) / 1000); return s < 90 ? s + ' s ago' : Math.round(s / 60) + ' min ago'; };
+if (MARK) MARK.init({ subject: 'Boeing 737-800', below: ['header'], credits: [{ text: 'Cockpit model: hakai315 · CC BY 4.0', href: COCKPIT_URL }] });
+setInterval(refreshMark, 1000);
+
+// ---------------------------------------------------------------------------
+// Display drawing (737NG-style). Redrawn ~15×/s, not every frame.
+// ---------------------------------------------------------------------------
+const C = { w: '#ffffff', g: '#3ff07a', m: '#ff4fe0', c: '#3fe0ff', a: '#ffb000', sky: '#1e78d2', gnd: '#8a5a2b', bg: '#000' };
+function T(x, s, X, Y, size, col = C.w, al = 'center') { x.fillStyle = col; x.font = `${size}px "Arial Narrow", Arial, sans-serif`; x.textAlign = al; x.textBaseline = 'middle'; x.fillText(s, X, Y); }
+function L(x, a, b, c, d, col = C.w, w = 2) { x.strokeStyle = col; x.lineWidth = w; x.beginPath(); x.moveTo(a, b); x.lineTo(c, d); x.stroke(); }
+const r0 = (v) => Math.round(v), pad3 = (v) => String(((r0(v) % 360) + 360) % 360).padStart(3, '0');
+
+function drawPFD(x) {
+  x.fillStyle = C.bg; x.fillRect(0, 0, 512, 512);
+  // attitude
+  x.save(); x.beginPath(); x.rect(116, 86, 280, 290); x.clip(); x.translate(256, 231); x.rotate(-F.bank * D2R);
+  const off = F.pitch * 8;
+  x.fillStyle = C.sky; x.fillRect(-500, -900 + off, 1000, 900); x.fillStyle = C.gnd; x.fillRect(-500, off, 1000, 900);
+  L(x, -500, off, 500, off, C.w, 2);
+  for (let d = -20; d <= 20; d += 2.5) { if (!d) continue; const y = off - d * 8, hw = d % 10 === 0 ? 46 : d % 5 === 0 ? 26 : 12;
+    L(x, -hw, y, hw, y, C.w, 2); if (d % 10 === 0) { T(x, Math.abs(d), -hw - 16, y, 16); T(x, Math.abs(d), hw + 16, y, 16); } }
+  x.restore();
+  // bank scale + pointer
+  x.save(); x.translate(256, 231);
+  for (const a of [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60]) { x.save(); x.rotate(a * D2R); L(x, 0, -132, 0, a % 30 === 0 ? -146 : -140, C.w, 2); x.restore(); }
+  x.rotate(-F.bank * D2R); x.fillStyle = C.w; x.beginPath(); x.moveTo(0, -130); x.lineTo(-8, -116); x.lineTo(8, -116); x.fill(); x.restore();
+  // aircraft symbol
+  x.fillStyle = '#000'; x.strokeStyle = C.w; x.lineWidth = 2;
+  for (const s of [-1, 1]) { x.fillRect(256 + s * 72 - (s < 0 ? 0 : 50), 227, 50, 8); x.strokeRect(256 + s * 72 - (s < 0 ? 0 : 50), 227, 50, 8); }
+  x.fillRect(251, 226, 10, 10); x.strokeRect(251, 226, 10, 10);
+  // speed tape
+  x.fillStyle = '#3a3f44'; x.fillRect(14, 86, 74, 290);
+  x.save(); x.beginPath(); x.rect(14, 86, 74, 290); x.clip();
+  for (let s = Math.floor(F.airspeed / 10) * 10 - 80; s <= F.airspeed + 80; s += 10) { const y = 231 - (s - F.airspeed) * 3.2;
+    L(x, 76, y, 88, y); if (s % 20 === 0 && s >= 0) T(x, s, 66, y, 18, C.w, 'right'); }
+  x.restore();
+  x.fillStyle = '#000'; x.fillRect(10, 214, 70, 34); x.strokeStyle = C.w; x.strokeRect(10, 214, 70, 34); T(x, r0(F.airspeed), 45, 231, 24);
+  T(x, '.' + String(r0(F.mach * 1000)).padStart(3, '0'), 50, 396, 18);
+  // altitude tape
+  x.fillStyle = '#3a3f44'; x.fillRect(420, 86, 74, 290);
+  x.save(); x.beginPath(); x.rect(420, 86, 74, 290); x.clip();
+  for (let a = Math.floor(F.altitude / 100) * 100 - 600; a <= F.altitude + 600; a += 100) { const y = 231 - (a - F.altitude) * 0.25;
+    L(x, 420, y, 430, y); if (a % 200 === 0) T(x, a, 488, y, 15, C.w, 'right'); }
+  x.restore();
+  x.fillStyle = '#000'; x.fillRect(416, 214, 92, 34); x.strokeStyle = C.w; x.strokeRect(416, 214, 92, 34); T(x, r0(F.altitude), 462, 231, 21);
+  T(x, F.selAlt, 457, 70, 19, C.m);
+  // vertical speed
+  T(x, (F.verticalSpeed >= 0 ? '+' : '') + r0(F.verticalSpeed / 50) * 50, 457, 396, 16);
+  // FMA
+  L(x, 0, 48, 512, 48, '#555', 1);
+  const app = ['APPROACH', 'FLARE', 'ROLLOUT'].includes(F.phase);
+  T(x, app ? (F.phase === 'ROLLOUT' ? 'RETARD' : 'MCP SPD') : F.phase === 'CRUISE' ? 'MCP SPD' : 'N1', 120, 26, 19, C.g);
+  T(x, app ? (F.phase === 'ROLLOUT' ? 'ROLLOUT' : 'VOR/LOC') : 'LNAV', 256, 26, 19, C.g);
+  T(x, app ? (F.phase === 'ROLLOUT' ? '' : F.phase === 'FLARE' ? 'FLARE' : 'G/S') : F.phase === 'CLIMB' ? 'VNAV SPD' : 'VNAV PTH', 392, 26, 19, C.g);
+  if (F.radioAlt < 2500) T(x, String(Math.max(0, r0(F.radioAlt / (F.radioAlt > 50 ? 10 : 1)) * (F.radioAlt > 50 ? 10 : 1))), 256, 396, 24, C.w);
+  T(x, 'CMD', 256, 74, 18, C.g);
+  // heading
+  x.save(); x.beginPath(); x.rect(116, 410, 280, 100); x.clip();
+  x.translate(256, 590); x.strokeStyle = C.w; x.beginPath(); x.arc(0, 0, 150, 0, Math.PI * 2); x.stroke();
+  for (let h = 0; h < 360; h += 5) { x.save(); x.rotate((h - F.heading) * D2R); L(x, 0, -150, 0, h % 10 ? -142 : -136);
+    if (h % 30 === 0) T(x, h / 10, 0, -120, 16); x.restore(); }
+  x.restore(); T(x, pad3(F.heading), 256, 436, 18);
+  T(x, 'GS ' + r0(F.groundSpeed), 60, 480, 16, C.w, 'left');
+}
+function drawND(x) {
+  x.fillStyle = C.bg; x.fillRect(0, 0, 512, 512);
+  T(x, 'GS', 18, 22, 15, C.w, 'left'); T(x, r0(F.groundSpeed), 48, 22, 21, C.w, 'left');
+  T(x, 'TAS', 100, 22, 15, C.w, 'left'); T(x, r0(F.groundSpeed + 18), 132, 22, 21, C.w, 'left');
+  T(x, `${pad3(F.windDirection)}°/${r0(F.windSpeed)}`, 18, 48, 17, C.w, 'left');
+  T(x, 'TRK', 205, 22, 16, C.g); T(x, pad3(F.track), 256, 22, 22); T(x, 'MAG', 304, 22, 16, C.g);
+  const cx = 256, cy = 440, R = 360;
+  x.save(); x.beginPath(); x.rect(0, 40, 512, 472); x.clip(); x.translate(cx, cy);
+  x.strokeStyle = C.w; x.lineWidth = 2; x.beginPath(); x.arc(0, 0, R, 0, Math.PI * 2); x.stroke();
+  for (let h = 0; h < 360; h += 5) { x.save(); x.rotate((h - F.track) * D2R); L(x, 0, -R, 0, h % 10 ? -R + 9 : -R + 16);
+    if (h % 30 === 0) T(x, h / 10, 0, -R + 32, 18); x.restore(); }
+  x.setLineDash([6, 8]); x.beginPath(); x.arc(0, 0, R / 2, Math.PI, Math.PI * 2); x.stroke(); x.setLineDash([]);
+  T(x, '20', -R / 2 - 18, -12, 15);
+  // route (magenta) relative to track
+  x.rotate((268 - F.track) * D2R); x.strokeStyle = C.m; x.lineWidth = 3;
+  const pts = [[0, 0], [-40, -170], [60, -300], [30, -420]];
+  x.beginPath(); pts.forEach(([a, b], i) => (i ? x.lineTo(a, b) : x.moveTo(a, b))); x.stroke();
+  for (const [a, b] of pts.slice(1)) { x.strokeStyle = C.c; x.lineWidth = 2; x.beginPath(); x.moveTo(a, b - 8); x.lineTo(a + 6, b); x.lineTo(a, b + 8); x.lineTo(a - 6, b); x.closePath(); x.stroke(); }
+  x.restore();
+  x.strokeStyle = C.w; x.lineWidth = 3; x.beginPath(); x.moveTo(cx, cy - 22); x.lineTo(cx - 12, cy + 10); x.lineTo(cx + 12, cy + 10); x.closePath(); x.stroke();
+  T(x, F.phase, 494, 22, 15, C.g, 'right');
+}
+function arcGauge(x, X, Y, v, max, label, val) {
+  const R = 58, a0 = 160 * D2R, sweep = 210 * D2R, f = Math.min(Math.max(v / max, 0), 1.05), a = a0 + f * sweep;
+  x.fillStyle = '#4a4f57'; x.beginPath(); x.moveTo(X, Y); x.arc(X, Y, R - 2, a0, a); x.closePath(); x.fill();
+  x.strokeStyle = C.w; x.lineWidth = 3; x.beginPath(); x.arc(X, Y, R, a0, a0 + sweep); x.stroke();
+  const red = a0 + sweep * 0.98; L(x, X + Math.cos(red) * (R - 10), Y + Math.sin(red) * (R - 10), X + Math.cos(red) * (R + 8), Y + Math.sin(red) * (R + 8), '#ff3030', 4);
+  L(x, X, Y, X + Math.cos(a) * R, Y + Math.sin(a) * R, C.w, 3);
+  x.fillStyle = '#000'; x.fillRect(X + 4, Y - R - 4, 70, 30); x.strokeStyle = C.w; x.lineWidth = 1.5; x.strokeRect(X + 4, Y - R - 4, 70, 30);
+  T(x, val, X + 68, Y - R + 11, 22, C.w, 'right'); if (label) T(x, label, 256, Y - 10, 17, C.c);
+}
+function drawENG(x) {
+  x.fillStyle = C.bg; x.fillRect(0, 0, 512, 512);
+  T(x, 'TAT ' + (F.tat >= 0 ? '+' : '') + r0(F.tat) + 'c', 20, 22, 17, C.w, 'left');
+  T(x, F.phase === 'CRUISE' ? 'CRZ' : F.phase === 'CLIMB' ? 'CLB' : 'CRZ', 300, 22, 17, C.g);
+  arcGauge(x, 120, 140, F.n1L, 110, '', F.n1L.toFixed(1)); arcGauge(x, 370, 140, F.n1R, 110, 'N1', F.n1R.toFixed(1));
+  arcGauge(x, 120, 290, F.egtL, 1000, '', r0(F.egtL)); arcGauge(x, 370, 290, F.egtR, 1000, 'EGT', r0(F.egtR));
+  T(x, 'FUEL', 256, 400, 16, C.c);
+  const fq = (v) => (v / 1000).toFixed(1);
+  for (const [X, v, lab] of [[110, F.fuelL, '1'], [256, F.fuelC, 'CTR'], [402, F.fuelR, '2']]) {
+    x.strokeStyle = C.w; x.lineWidth = 2; x.strokeRect(X - 52, 420, 104, 44); T(x, fq(v), X, 442, 24); T(x, lab, X, 482, 15, C.c);
+  }
+  T(x, 'LBS X 1000', 256, 500, 13, C.c);
+}
+function drawSYS(x) {
+  x.fillStyle = C.bg; x.fillRect(0, 0, 512, 512);
+  const bar = (X, Y, v, max, label) => { x.strokeStyle = C.w; x.lineWidth = 2; x.strokeRect(X, Y, 26, 120);
+    x.fillStyle = '#fff'; const y = Y + 120 - Math.min(v / max, 1) * 120; x.beginPath(); x.moveTo(X + 28, y); x.lineTo(X + 40, y - 7); x.lineTo(X + 40, y + 7); x.fill();
+    T(x, label, X + 13, Y + 140, 15, C.c); };
+  T(x, 'N2', 256, 40, 17, C.c); T(x, F.n2L.toFixed(1), 150, 40, 22); T(x, F.n2R.toFixed(1), 362, 40, 22);
+  T(x, 'FF', 256, 80, 17, C.c); T(x, F.ffL.toFixed(2), 150, 80, 22); T(x, F.ffR.toFixed(2), 362, 80, 22);
+  bar(60, 130, F.oilPL, 100, 'OIL P'); bar(150, 130, 98, 165, 'OIL T'); bar(306, 130, F.oilPR, 100, 'OIL P'); bar(396, 130, 99, 165, 'OIL T');
+  L(x, 20, 320, 492, 320, '#444', 1);
+  T(x, 'HYD A', 120, 350, 16, C.c); T(x, r0(F.hydA), 120, 378, 22); T(x, 'HYD B', 392, 350, 16, C.c); T(x, r0(F.hydB), 392, 378, 22);
+  T(x, 'FLAPS', 256, 350, 16, C.c); T(x, F.flaps ? String(F.flaps) : 'UP', 256, 378, 22, F.flaps ? C.g : C.w);
+  T(x, F.gear ? 'GEAR DOWN' : 'GEAR UP', 256, 440, 22, F.gear ? C.g : C.w);
+}
+const DRAW = { pfd: drawPFD, nd: drawND, eng: drawENG, sys: drawSYS };
+function redrawDisplays() { for (const d of displays) { DRAW[d.draw](d.ctx); d.tex.needsUpdate = true; } }
+
+// ---------------------------------------------------------------------------
+// Time of day
+// ---------------------------------------------------------------------------
+const TOD = {
+  day:   { top: 0x2f6fc0, hor: 0xc4d8ea, bot: 0x6e7d6a, sun: 0xfff1d6, fog: 0xbfd3e4, hemi: 1.6, sunI: 1.6, dome: 0, disp: 1.0, gnd: 0xffffff, lights: 0.55 },
+  dusk:  { top: 0x23305e, hor: 0xe39a6a, bot: 0x3b3a3a, sun: 0xffa060, fog: 0xc98a6e, hemi: 0.7, sunI: 0.7, dome: 1.0, disp: 0.9, gnd: 0x9a7a6a, lights: 1.0 },
+  night: { top: 0x02040c, hor: 0x0f1a2c, bot: 0x050608, sun: 0x000000, fog: 0x0b1424, hemi: 0.06, sunI: 0.0, dome: 3.0, disp: 0.75, gnd: 0x1a1d24, lights: 1.35 },
+};
+let todLights = 0.55;
+function setTOD(k) {
+  const p = TOD[k]; todLights = p.lights;
+  skyU.top.value.set(p.top); skyU.hor.value.set(p.hor); skyU.bot.value.set(p.bot); skyU.sunCol.value.set(p.sun);
+  scene.fog.color.set(p.fog); hemi.intensity = p.hemi; sun.intensity = p.sunI; dome.intensity = p.dome;
+  ground.material.color.set(p.gnd);
+  todTint = p.gnd; if (scenery) scenery.setTint(p.gnd);
+  for (const d of displays) d.mesh.material.color.setScalar(p.disp);
+  document.querySelectorAll('[data-tod]').forEach((b) => b.classList.toggle('on', b.dataset.tod === k));
+  todName = k; refreshMark();
+}
+
+// ---------------------------------------------------------------------------
+// Seats / camera
+// ---------------------------------------------------------------------------
+const toWorld = (a) => v3(a).multiplyScalar(S);
+let seat = 'captain';
+function setSeat(k) {
+  seat = k; const s = SEATS[k]; const eye = toWorld(s.eye), at = toWorld(s.at);
+  document.querySelectorAll('[data-seat]').forEach((b) => b.classList.toggle('on', b.dataset.seat === k));
+  dome.position.copy(toWorld([0, 2.6, 0.9]));
+  if (renderer.xr.isPresenting) { placeRig(); return; }
+  camera.position.copy(eye);
+  if (s.orbit) {   // orbit around the nose
+    controls.target.copy(at); controls.minDistance = 2; controls.maxDistance = 25; controls.rotateSpeed = 0.6; camera.fov = 50;
+  } else {         // look around from a fixed head position
+    const dir = at.clone().sub(eye).normalize();
+    controls.target.copy(eye).addScaledVector(dir, 0.05); controls.minDistance = controls.maxDistance = 0.05; controls.rotateSpeed = -0.35; camera.fov = 72;
+  }
+  camera.updateProjectionMatrix(); controls.update();
+}
+
+// WebXR: the headset's starting point is put at the seat eye, facing the nose
+const rig = new THREE.Group(); scene.add(rig);
+function placeRig() {
+  const s = SEATS[seat].orbit ? SEATS.captain : SEATS[seat];
+  rig.position.copy(toWorld(s.eye)); rig.rotation.set(0, Math.PI, 0);
+}
+const markXR = MARK ? MARK.xrPanel(THREE) : null;   // I'M HERE card: small HUD tag low in the corner of view in VR
+if (markXR) { markXR.visible = false; camera.add(markXR); }
+renderer.xr.addEventListener('sessionstart', () => { if (markXR) markXR.visible = true; });
+renderer.xr.addEventListener('sessionend', () => { if (markXR) markXR.visible = false; });
+renderer.xr.addEventListener('sessionstart', () => { placeRig(); rig.add(camera); camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0); controls.enabled = false; });
+renderer.xr.addEventListener('sessionend', () => { scene.add(camera); controls.enabled = true; setSeat(seat); });
+const seatCycle = ['captain', 'fo', 'jump'];
+for (let i = 0; i < 2; i++) {
+  const ctrl = renderer.xr.getController(i); rig.add(ctrl);
+  ctrl.addEventListener('selectstart', () => setSeat(seatCycle[(seatCycle.indexOf(seat) + 1) % seatCycle.length]));
+}
+
+// ---------------------------------------------------------------------------
+// UI
+// ---------------------------------------------------------------------------
+document.querySelectorAll('[data-seat]').forEach((b) => (b.onclick = () => setSeat(b.dataset.seat)));
+document.querySelectorAll('[data-tod]').forEach((b) => (b.onclick = () => setTOD(b.dataset.tod)));
+$('play').onclick = () => { paused = !paused; $('play').textContent = paused ? 'Play' : 'Pause'; $('play').classList.toggle('on', !paused); };
+$('restart').onclick = () => setMode(mode);
+document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+$('toggle').onclick = () => $('panel').classList.toggle('hidden');
+if (innerWidth <= 700) $('panel').classList.add('hidden');   // phone: first view is the scene + the small label; controls behind ☰
+$('aptGo').onclick = () => loadAirport($('apt').value);
+$('apt').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); loadAirport($('apt').value); } });
+$('rwy').onchange = () => { AP.rwy = $('rwy').value; setMode('approach'); };
+$('scenery').onclick = () => setScenery(!sceneryOn);
+$('glogo').onerror = () => { const s = document.createElement('b'); s.textContent = 'Google'; $('glogo').replaceWith(s); };
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ---------------------------------------------------------------------------
+// Loop
+// ---------------------------------------------------------------------------
+const pos = { x: 0, z: 0 };   // aircraft position over the ground (m), for ground motion
+const att = new THREE.Euler(0, 0, 0, 'YXZ');
+let last = performance.now(), dispClock = 1, uiClock = 1;
+setTOD('day'); setSeat('captain');
+loadAirport(params.get('apt') || 'KBNA', params.get('rwy'));
+renderer.setAnimationLoop((now) => {
+  const dt = Math.min((now - last) / 1000, 0.1); last = now;
+  const flying = demo && mode === 'approach' && airport;
+  if (demo && !paused) { if (flying) approachStep(dt); else if (mode === 'cruise') demoStep(dt); }
+  if (!paused && !flying) {   // move over the ground along the heading
+    const gs = F.groundSpeed * 0.5144, h = F.heading * D2R;
+    pos.x += -Math.sin(h) * gs * dt; pos.z += Math.cos(h) * gs * dt;
+  }
+  // world moves around the aircraft: inverse of aircraft attitude
+  att.set(-F.pitch * D2R, -F.heading * D2R, F.bank * D2R); world.quaternion.setFromEuler(att).invert();
+  const fieldFt = airport ? airport.data.elev_ft : 599;
+  const gy = EYE_Y - EYE_AGL_GROUND - (F.altitude - fieldFt) * FT;   // ground height in the world frame
+  ground.position.set(-(pos.x % TILE), gy - 0.05, -(pos.z % TILE));
+  const real = sceneryStep(dt, gy);   // true once Google tiles are showing: hide the flat ground and runway paint
+  ground.visible = !real; for (const m of surfaces) m.visible = !real; setNear(real ? 0.1 : 0.02);
+  if (airport) { airport.group.position.set(-pos.x, gy, -pos.z); airport.update(now / 1000, camera, renderer, todLights); }
+  landing.intensity = mode === 'approach' ? 900 : 0;
+  if ((dispClock += dt) > 1 / 15) { dispClock = 0; redrawDisplays(); }
+  if ((uiClock += dt) > 0.25) { uiClock = 0;
+    $('readout').innerHTML = `<b>${r0(F.altitude).toLocaleString()}</b> ft · <b>${r0(F.airspeed)}</b> kt<br>HDG ${pad3(F.heading)}° · ${F.verticalSpeed >= 0 ? '+' : ''}${r0(F.verticalSpeed)} fpm<br>${F.phase}`; }
+  if (!renderer.xr.isPresenting) controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "icao": "KBNA",
+  "name": "Nashville International",
+  "arp": [36.124475, -86.678181],
+  "elev_ft": 599,
+  "magvar": -4.2,
+  "sources": "Runway ends, elevations, lengths, displaced thresholds: FAA data via AirNav/Boeing airport noise page (Nov 2026). Lighting: FAA NASR via FlyAwaySimulation, AirNav, PRISM. Items marked verify are assumed.",
+  "runways": [
+    { "id": "02L/20R", "width_ft": 150, "centerline_lights": true,
+      "ends": [
+        { "id": "2L",  "lat": 36.1176761667, "lon": -86.6864749167, "elev_ft": 598.7, "displaced_ft": 801, "approach": "ALSF2", "tdz": true,  "papi": "left", "reil": false },
+        { "id": "20R", "lat": 36.1378422833, "lon": -86.6785661333, "elev_ft": 555.4, "displaced_ft": 0,   "approach": "MALSF", "tdz": false, "papi": "left", "reil": false } ],
+      "verify": "centerline lights and 2L TDZ assumed from ALSF-2 (CAT II/III)" },
+    { "id": "02C/20C", "width_ft": 150, "centerline_lights": false,
+      "ends": [
+        { "id": "2C",  "lat": 36.1033304500, "lon": -86.6879608333, "elev_ft": 568.9, "displaced_ft": 0, "approach": "MALSR", "tdz": false, "papi": "left", "reil": false },
+        { "id": "20C", "lat": 36.1242332500, "lon": -86.6795972000, "elev_ft": 571.7, "displaced_ft": 0, "approach": "",      "tdz": false, "papi": "left", "reil": true } ],
+      "verify": "MALSR end assumed 2C" },
+    { "id": "02R/20L", "width_ft": 150, "centerline_lights": true,
+      "ends": [
+        { "id": "2R",  "lat": 36.1127135000, "lon": -86.6676427167, "elev_ft": 589.8, "displaced_ft": 0, "approach": "ALSF2", "tdz": true,  "papi": "left", "reil": false },
+        { "id": "20L", "lat": 36.1336154667, "lon": -86.6592765333, "elev_ft": 540.0, "displaced_ft": 0, "approach": "MALSR", "tdz": false, "papi": "left", "reil": false } ],
+      "verify": "20L approach lights assumed MALSR" },
+    { "id": "13/31", "width_ft": 150, "centerline_lights": false,
+      "ends": [
+        { "id": "13", "lat": 36.1412778000, "lon": -86.6953555500, "elev_ft": 535.8, "displaced_ft": 800, "approach": "",      "tdz": false, "papi": "left", "reil": true },
+        { "id": "31", "lat": 36.1204957500, "lon": -86.6681771333, "elev_ft": 582.2, "displaced_ft": 741, "approach": "MALSR", "tdz": false, "papi": "left", "reil": false } ],
+      "verify": "31 approach lights assumed MALSR; 13/31 centerline lights assumed none" }
+  ]
+}
