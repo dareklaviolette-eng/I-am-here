@@ -142,7 +142,7 @@
     <li><b>Ride:</b> drag to look around; play/pause, previous/next stop; change the heart rate or use slow motion.</li>
     <li><b>Narrator and captions:</b> <b>Mute</b> silences the voice (captions keep going); <b>CC</b> turns the captions on or off. Where you are, in plain words, is on the I'M HERE label: tap it to show it again.</li>
     <li><b>Outside:</b> drag to turn, pinch or scroll to zoom. X-ray shows the chambers (blue = oxygen-poor, red = oxygen-rich).</li>
-    <li><b>VR:</b> open in a headset browser and press Enter VR. You start outside, with the whole heart in front of you. Push the thumbstick forward to move closer; pull it back, or press <b>Back up</b>, to back away. <b>Ride</b>, <b>Back outside</b>, Mute and CC are on the console low in front of you: point and pull the trigger. If the browser has no voice, the captions carry the narration.</li>
+    <li><b>VR:</b> open in a headset browser and press Enter VR. You start outside, with the whole heart in front of you. Push the thumbstick forward to move closer; pull it back to back away. The console stands to your left, a little below eye level, like a music stand: point and pull the trigger (or pinch). It has <b>Ride</b> / <b>Back outside</b>, <b>Previous</b>, <b>Next</b>, <b>Guide</b> (hear where you are again) and <b>Exit VR</b>; <b>More</b> has Mute, CC and Back up. On the ride you stay level: the heart turns around you, gently, so the way on is always straight ahead at eye level. B or Y also leaves VR. If the browser has no voice, the captions carry the narration.</li>
   </ul>
   <p class="note">For education only - not for diagnosis or treatment decisions.</p>
   <form method="dialog" style="text-align:right;margin-top:12px"><button>Close</button></form>
@@ -1553,6 +1553,99 @@ class Ride {
   arrive() { this.i += 1; this.s = this.path.stops[this.order[this.i]]; this.state = 'dwell'; this.t = 0; }
 }
 
+// ---------------------------------------------------------------- VR comfort: the ride as a "vehicle frame"
+// In a headset you never pitch or roll: the heart is turned and moved around you so that the way ahead is always in
+// front of your eyes, level with them. The heading looks a little ahead along the path (a smoothed path), and the turn
+// of the world is eased and capped at VEHICLE.maxRate. viewPitch() measures what you would have to look up / down by.
+// Quaternions are [x, y, z, w]; q maps heart directions into the rider's space (rider looks along -z, +y is up).
+const VEHICLE = { maxRate: (30 * Math.PI) / 180, maxPitch: (15 * Math.PI) / 180, ease: [6, 3, 1.6], look: [0.4, 1.2, 2.2, 3.4], ahead: 3, speed: 1.0 };
+// (speed: the ride's cruise speed in a headset, cm/s; slower than on screens so every bend fits inside maxRate)
+const qMul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+  a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+const qConj = (q) => [-q[0], -q[1], -q[2], q[3]];
+const qRot = (q, v) => { const r = qMul(qMul(q, [v[0], v[1], v[2], 0]), qConj(q)); return [r[0], r[1], r[2]]; };
+const qAngle = (a, b) => 2 * Math.acos(Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3])));
+const qNrm = (q) => { const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1; return [q[0] / l, q[1] / l, q[2] / l, q[3] / l]; };
+function qSlerp(a, b, t) {
+  let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3], bb = b;
+  if (d < 0) { d = -d; bb = [-b[0], -b[1], -b[2], -b[3]]; }
+  if (d > 0.9995) return qNrm(a.map((x, i) => x + (bb[i] - x) * t));
+  const th = Math.acos(d), s = Math.sin(th), wa = Math.sin((1 - t) * th) / s, wb = Math.sin(t * th) / s;
+  return qNrm(a.map((x, i) => x * wa + bb[i] * wb));
+}
+function qTowards(a, b, maxAng) { const ang = qAngle(a, b); return ang <= maxAng || ang < 1e-9 ? b.slice() : qSlerp(a, b, maxAng / ang); }
+function qFromBasis(X, Y, Z) {   // rotation whose columns are X, Y, Z
+  const m00 = X[0], m10 = X[1], m20 = X[2], m01 = Y[0], m11 = Y[1], m21 = Y[2], m02 = Z[0], m12 = Z[1], m22 = Z[2], tr = m00 + m11 + m22;
+  if (tr > 0) { const s = 0.5 / Math.sqrt(tr + 1); return qNrm([(m21 - m12) * s, (m02 - m20) * s, (m10 - m01) * s, 0.25 / s]); }
+  if (m00 > m11 && m00 > m22) { const s = 2 * Math.sqrt(1 + m00 - m11 - m22); return qNrm([0.25 * s, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s]); }
+  if (m11 > m22) { const s = 2 * Math.sqrt(1 + m11 - m00 - m22); return qNrm([(m01 + m10) / s, 0.25 * s, (m12 + m21) / s, (m02 - m20) / s]); }
+  const s = 2 * Math.sqrt(1 + m22 - m00 - m11); return qNrm([(m02 + m20) / s, (m12 + m21) / s, 0.25 * s, (m10 - m01) / s]);
+}
+// smoothed direction of travel at s: the average direction to a few points ahead (a gentle chord through bends)
+function rideHeading(path, s) {
+  const p = path.at(s); let h = mul(path.tangent(s), 0.5);
+  for (const d of VEHICLE.look) h = add(h, nrm(sub(path.at(Math.min(s + d, path.total)), p)));
+  return nrm(h);
+}
+const qAxis = (ax, ang) => { const h = ang / 2, sn = Math.sin(h); return [ax[0] * sn, ax[1] * sn, ax[2] * sn, Math.cos(h)]; };
+// The rider's view is turned by three small rotations each frame, in this order of priority, sharing one budget of
+// VEHICLE.maxRate: (1) level: keep the direction of travel at eye level; (2) flatten: roll about the direction of travel
+// so the path a little ahead is level too (bends come as left / right turns, not climbs or drops); (3) yaw: turn to face
+// the smoothed heading. In tight U-turns (inside the chambers) the yaw can lag, so the way on is briefly to one side;
+// it is never above or below you.
+class VehicleFrame {
+  constructor(path) { this.path = path; this.q = [0, 0, 0, 1]; this.rate = 0; this.reset(0); }
+  wants(s) {   // [level angle + axis, flatten angle + axis, yaw angle], all in the rider's space
+    const P = this.path, p = P.at(s), d = qRot(this.q, rideHeading(P, s)), h = d;
+    const a = qRot(this.q, nrm(sub(P.at(Math.min(s + VEHICLE.ahead, P.total)), p)));
+    const dh = Math.hypot(d[0], d[2]), lvAxis = dh > 1e-6 ? [-d[2] / dh, 0, d[0] / dh] : [1, 0, 0];   // horizontal, across d
+    const lv = -Math.atan2(d[1], dh);   // rotate by this about lvAxis to bring d level
+    let fl = 0;
+    const ap = sub(a, mul(d, dot(a, d)));   // the ahead direction, across the travel line
+    if (len(ap) > 0.05) {
+      const n = nrm(ap), side = nrm(cross([0, 1, 0], d));   // horizontal direction across d
+      fl = Math.atan2(dot(cross(n, side), d), dot(n, side));   // roll that takes n onto +-side (the nearer one)
+      if (fl > Math.PI / 2) fl -= Math.PI; else if (fl < -Math.PI / 2) fl += Math.PI;
+      fl *= smoothstep(0.05, 0.25, len(ap));
+    }
+    const yaw = Math.atan2(h[0], -h[2]);   // turn about +y by this to bring h to -z
+    return { lv, lvAxis, fl, d, yaw };
+  }
+  reset(s) {   // a jump (start of the ride, a new stop): snap level and facing the way on
+    const f = rideHeading(this.path, s), u0 = Math.abs(f[1]) > 0.8 ? [0, 0, 1] : [0, 1, 0], u = nrm(sub(u0, mul(f, dot(u0, f))));
+    this.q = qConj(qFromBasis(cross(u, mul(f, -1)), u, mul(f, -1)));
+    for (let i = 0; i < 60; i++) this.turn(s, Infinity, Math.PI);
+    this.rate = 0; return this.q;
+  }
+  turn(s, dt, budget) {   // dt = Infinity: go all the way (within the budget)
+    const w = this.wants(s); let left = budget, used = 0;
+    const take = (ang, rate) => { const g = clamp(ang * (1 - Math.exp(-dt * rate)), -left, left); left -= Math.abs(g); used += Math.abs(g); return g; };
+    const g1 = take(w.lv, VEHICLE.ease[0]); if (g1) this.q = qMul(qAxis(w.lvAxis, g1), this.q);
+    const d = qRot(this.q, rideHeading(this.path, s)), g2 = take(w.fl, VEHICLE.ease[1]); if (g2) this.q = qMul(qAxis(nrm(d), g2), this.q);
+    const g3 = take(w.yaw, VEHICLE.ease[2]); if (g3) this.q = qMul(qAxis([0, 1, 0], g3), this.q);
+    this.q = qNrm(this.q); return used;
+  }
+  step(s, dt) {   // eased, and never faster than VEHICLE.maxRate in total
+    const used = this.turn(s, dt, VEHICLE.maxRate * dt);
+    this.rate = dt > 0 ? used / dt : 0; return this.q;
+  }
+  // how far you would have to look up (+) or down (-) to see where you are going (radians): the way on (the smoothed
+  // heading), the path 2 cm ahead, and the momentary tangent (which swings round within a few mm in the tightest turns)
+  viewPitch(s) {
+    const p = this.path.at(s), a = this.path.at(Math.min(s + 2, this.path.total)), el = (v) => Math.asin(clamp(qRot(this.q, v)[1], -1, 1));
+    return { travel: el(rideHeading(this.path, s)), ahead: el(nrm(sub(a, p))), tangent: el(this.path.tangent(s)) };
+  }
+}
+// The VR console (a music stand): about 15 deg below eye level, 0.8 m out, beside the view (to the left; the shared red
+// Exit VR tag sits low on the right), tilted to face your eyes. Same place relative to you outside and on the ride.
+const CONSOLE = { dist: 0.8, down: (15 * Math.PI) / 180, side: (30 * Math.PI) / 180, w: 0.5 };
+function consolePose(eye = [0, 0, 0]) {
+  const c = CONSOLE, hd = c.dist * Math.cos(c.down);
+  const pos = [eye[0] - hd * Math.sin(c.side), eye[1] - c.dist * Math.sin(c.down), eye[2] - hd * Math.cos(c.side)];
+  // three.js Euler order YXZ: turn toward you (y), then tip the top back (x) so the face points at your eyes
+  return { pos, ry: c.side, rx: -c.down };
+}
+
 // ---------------------------------------------------------------- blood-flow speed for the cells (cm/s)
 function cellSpeed(ss, path, st) {
   const v = path.valves;
@@ -1726,7 +1819,7 @@ function ecg(t, T) {
   return g(T.a * 0.35, 0.025, 0.12) + g(qrs - 0.018, 0.008, -0.12) + g(qrs, 0.011, 1) + g(qrs + 0.02, 0.01, -0.25) + g(tw, 0.045 * T.s, 0.28) + g2(T.a * 0.35, 0.025, 0.12);
 }
 
-return { add, sub, mul, dot, len, nrm, cross, lerp3, clamp, mix, smoothstep, basis, vnoise, fbm, rng, sdPrim, smin, smax, catmull, evalComps, compDist, H, VALVES, valveDir, RIGHT, LEFT, EPI, sdfRight, sdfLeft, sdfEpi, GRID, surfaceNets, gradient, epiColor, lumenColor, cycleTimes, valveWindows, openness, windowMid, volumes, heartState, PHASE_TEXT, CHAMBERS, DEFORM, chamberWeights, deform, deformInto, leafletGeometry, chordae, PATH_KNOTS, STOPS, STOP_ORDER, buildPath, lungRadius, oxygenAt, easeG, easeH, easeIO, Ride, cellSpeed, advanceCell, surfaceAlong, projectToSurface, buildCoronaries, tubeGeometry, ecg };
+return { add, sub, mul, dot, len, nrm, cross, lerp3, clamp, mix, smoothstep, basis, vnoise, fbm, rng, sdPrim, smin, smax, catmull, evalComps, compDist, H, VALVES, valveDir, RIGHT, LEFT, EPI, sdfRight, sdfLeft, sdfEpi, GRID, surfaceNets, gradient, epiColor, lumenColor, cycleTimes, valveWindows, openness, windowMid, volumes, heartState, PHASE_TEXT, CHAMBERS, DEFORM, chamberWeights, deform, deformInto, leafletGeometry, chordae, PATH_KNOTS, STOPS, STOP_ORDER, buildPath, lungRadius, oxygenAt, easeG, easeH, easeIO, Ride, VEHICLE, qMul, qConj, qRot, qAngle, qSlerp, qTowards, qFromBasis, rideHeading, qAxis, VehicleFrame, CONSOLE, consolePose, cellSpeed, advanceCell, surfaceAlong, projectToSurface, buildCoronaries, tubeGeometry, ecg };
 })();
 
 const $ = (id) => document.getElementById(id);
@@ -1962,14 +2055,14 @@ async function main() {
   // VR closed captions (only inside a headset, where the HTML strip is invisible): low, centred, fixed to your body, not your head
   const capCanvas = document.createElement('canvas'); capCanvas.width = 1024; capCanvas.height = 160;
   const capTex = new THREE.CanvasTexture(capCanvas); capTex.colorSpace = THREE.SRGBColorSpace;
-  const caption = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1 * 160 / 1024), new THREE.MeshBasicMaterial({ map: capTex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
-  caption.position.set(0, -0.4, -1.35); caption.renderOrder = 1000; caption.visible = false; caption.frustumCulled = false;
+  const caption = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.72 * 160 / 1024), new THREE.MeshBasicMaterial({ map: capTex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+  caption.position.set(0, -0.36, -1.35); caption.renderOrder = 1000; caption.visible = false; caption.frustumCulled = false;
   dolly.add(caption);
   // VR copy of the one-time "no voice" notice, just above the captions
   const noteCanvas = document.createElement('canvas'); noteCanvas.width = 1024; noteCanvas.height = 96;
   const noteTex = new THREE.CanvasTexture(noteCanvas); noteTex.colorSpace = THREE.SRGBColorSpace;
-  const vrNote = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.8 * 96 / 1024), new THREE.MeshBasicMaterial({ map: noteTex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
-  vrNote.position.set(0, -0.29, -1.35); vrNote.renderOrder = 1001; vrNote.visible = false; vrNote.frustumCulled = false;
+  const vrNote = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6 * 96 / 1024), new THREE.MeshBasicMaterial({ map: noteTex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+  vrNote.position.set(0, -0.28, -1.35); vrNote.renderOrder = 1001; vrNote.visible = false; vrNote.frustumCulled = false;
   dolly.add(vrNote);
   // VR outside view: the whole heart about 2 m away, a little below eye level, sized to fit comfortably in view.
   // You can move closer / back away (thumbstick, grip-and-pull, "Back up"), within comfort limits.
@@ -2359,8 +2452,8 @@ async function main() {
     caption.visible = xr && NARR.cc && !!NARR.shown;
     if (xr) {
       scene.background = new THREE.Color(ride_ ? 0x2a0507 : 0x140607);
-      if (ride_) { heart.scale.setScalar(1); heart.position.set(0, 0, 0); }
-      else { heart.scale.setScalar(VRV.scale); placeVRHeart(); }
+      if (ride_) { heart.scale.setScalar(1); if (!vfOn) { vf.reset(ride.s); vfOn = true; } placeRideHeart(ride.s, null); }
+      else { vfOn = false; heart.scale.setScalar(VRV.scale); placeVRHeart(); }
     } else { scene.background = null; heart.scale.setScalar(1); heart.position.set(0, 0, 0); heart.rotation.set(0, 0, 0); }
   }
   function setMode(m) {
@@ -2370,7 +2463,7 @@ async function main() {
     $('mRide').textContent = m === 'ride' ? 'Ride' : 'Dive in'; $('mOut').textContent = m === 'ride' ? 'Back outside' : 'Outside';
     $('mRide').setAttribute('aria-selected', m === 'ride'); $('mOut').setAttribute('aria-selected', m === 'outside');
     if (m === 'outside') {
-      dolly.position.set(0, 0, 0); dolly.quaternion.identity();
+      dolly.position.set(0, 0, 0); dolly.quaternion.identity(); heart.rotation.set(0, 0, 0);
       VRV.dist = VRV.D0; VRV.vel = 0; VRV.goal = null; VRV.grab = null;   // VR: back to the comfortable default distance
       camera.rotation.set(0, 0, 0);
       const dist = 30 / Math.min(1, (innerWidth / innerHeight) * 1.25);
@@ -2378,10 +2471,11 @@ async function main() {
       controls.enabled = !renderer.xr.isPresenting; controls.update();
     } else {
       controls.enabled = false; camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
-      S.lookYaw = 0; S.lookPitch = 0; S.snap = true;
+      S.lookYaw = 0; S.lookPitch = 0; S.snap = !renderer.xr.isPresenting || !vfOn;
+      if (renderer.xr.isPresenting) { dolly.position.set(0, 0, 0); dolly.quaternion.identity(); }
     }
     tagEls.forEach((t) => { t.style.display = 'none'; });
-    applyMode(); refreshCard(true);
+    applyMode(); refreshCard(true); anchorEye();
   }
   const markXR = MARK ? MARK.xrPanel(THREE) : null;   // the I'M HERE card: small HUD tag low in the corner of view in VR
   if (markXR) { markXR.visible = false; camera.add(markXR); }
@@ -2395,7 +2489,10 @@ async function main() {
     resumeAudio();
     if (NARR.noticed) showVRNote();
   });
-  renderer.xr.addEventListener('sessionend', () => { setMode(S.mode); });
+  renderer.xr.addEventListener('sessionend', () => { vfOn = false; ride.speed = RIDE_SPEED; heart.quaternion.identity(); setMode(S.mode); });
+  // In a headset the ride is slower, so every bend fits inside the 30 deg/s turn cap (A.VEHICLE); valves are still crossed open.
+  const RIDE_SPEED = ride.speed;
+  renderer.xr.addEventListener('sessionstart', () => { ride.speed = A.VEHICLE.speed; anchorEye(); setTimeout(anchorEye, 700); });
 
   // WebXR button only when the browser has WebXR at all (otherwise it would be a link away from the page)
   if (navigator.xr && window.isSecureContext) {
@@ -2432,6 +2529,21 @@ async function main() {
     dolly.position.set(0, 0, VRV.dist - VRV.D0); dolly.quaternion.identity();
   }
   const vrOutside = () => renderer.xr.isPresenting && S.mode === 'outside' && !dive;
+  // ---------------------------------------------------------------- VR ride: the vehicle frame (A.VehicleFrame)
+  // You stay level and still (the rig never turns); the heart is turned and moved around you so the way on is straight
+  // ahead at eye level. The turn is eased, capped at 30 deg/s, and never tips the way on more than about 15 deg.
+  const vf = new A.VehicleFrame(path); let vfOn = false, vrConsole = null;
+  const eyeA = new THREE.Vector3(), qVF = new THREE.Quaternion(), vVF = new THREE.Vector3();
+  function anchorEye() {   // your eye in the rig: the ride's centre line and the console are placed from it
+    if (renderer.xr.isPresenting && isFinite(camera.position.y) && camera.position.lengthSq() < 9) eyeA.copy(camera.position); else eyeA.set(0, 0, 0);
+    if (vrConsole) vrConsole.place(eyeA);
+    caption.position.set(eyeA.x, eyeA.y - 0.36, eyeA.z - 1.35); vrNote.position.set(eyeA.x, eyeA.y - 0.28, eyeA.z - 1.35);
+  }
+  function placeRideHeart(s, pDeformed) {   // heart orientation from the vehicle frame; the path point at s sits at your eye
+    const q = vf.q; qVF.set(q[0], q[1], q[2], q[3]); heart.quaternion.copy(qVF);
+    const p = pDeformed || path.at(s); vVF.set(p[0], p[1], p[2]).multiplyScalar(heart.scale.x).applyQuaternion(qVF);
+    heart.position.copy(eyeA).sub(vVF);
+  }
   function backUp() { if (!vrOutside()) return; VRV.goal = Math.min(VRV.max, Math.max(VRV.dist, VRV.goal || 0) + 0.75); }
   function vrMove(dt) {   // thumbstick forward = closer, back = away; smooth, speed-capped, soft stop at the limits
     let y = 0;
@@ -2582,7 +2694,12 @@ async function main() {
     dive = { t: 0, T: xr ? 16 : 10, xr, p0: camera.position.clone(), q0: camera.quaternion.clone(), eye: dolly.position.clone(),
       approach: v3(P0).addScaledVector(tan0, -9), hs0: heart.scale.x, hp0: heart.position.clone(),
       hr0: Math.atan2(Math.sin(heart.rotation.y), Math.cos(heart.rotation.y)),   // shortest way back (no extra spins)
-      svc0: v3(P0).applyMatrix4(heart.matrixWorld) };
+      svc0: v3(P0).applyMatrix4(heart.matrixWorld), q0h: heart.quaternion.clone(), qEnd: null };
+    if (xr) {   // where the vehicle frame will start (the first stop), so the ride begins with no jump at all
+      heart.position.sub(dolly.position); dolly.position.set(0, 0, 0); heart.updateMatrixWorld(true);   // the world moves, not you
+      anchorEye(); dive.pS = v3(path.at(path.stops.svc)); dive.svc0 = dive.pS.clone().applyMatrix4(heart.matrixWorld);
+      const q = vf.reset(path.stops.svc); dive.qEnd = new THREE.Quaternion(q[0], q[1], q[2], q[3]);
+    }
     shownStop = null; narrate(DIVE_TEXT);
   }
   function diveStep(dt) {
@@ -2593,13 +2710,16 @@ async function main() {
       camera.quaternion.copy(dive.q0).slerp(qRide0, ease(Math.min(1, u * 1.25)));
     } else {          // headset: you stay put; the heart grows slowly around you until you are inside the vein
       const s = dive.hs0 * Math.pow(1 / dive.hs0, e);
-      heart.rotation.y = dive.hr0 * (1 - ease(Math.min(1, u * 2)));
-      heart.scale.setScalar(s); heart.updateMatrixWorld(true);
-      const target = dive.svc0.clone().lerp(dive.eye, e);          // where the vein opening should be (ends at you)
-      const now = v3(P0).applyMatrix4(heart.matrixWorld);
-      heart.position.add(target.sub(now));
+      heart.quaternion.copy(dive.q0h).slerp(dive.qEnd, ease(Math.min(1, u * 1.3)));   // <= about 25 deg/s
+      heart.scale.setScalar(s);
+      const target = dive.svc0.clone().lerp(eyeA, e);              // where the vein opening should be (ends at your eye)
+      heart.position.copy(target).sub(dive.pS.clone().multiplyScalar(s).applyQuaternion(heart.quaternion));
     }
-    if (u >= 1) { dive = null; flash(); ride.goto(0); spokenStop = null; S.snap = !renderer.xr.isPresenting; setMode('ride'); }
+    if (u >= 1) {
+      const xr = dive.xr; dive = null; ride.goto(0); spokenStop = null;
+      if (xr) { vfOn = true; S.snap = false; } else { flash(); S.snap = true; }   // VR: the frame is already there, no flash
+      setMode('ride');
+    }
   }
   let introT = 0;   // auto-dive once the intro has been on screen (and spoken) for a while
   function introStep(dt) {
@@ -2609,8 +2729,10 @@ async function main() {
   }
 
   // ---------------------------------------------------------------- VR console (point a controller / pinch at a button)
-  // Big "Ride" / "Back outside" / "Back up" on top, smaller Previous / Next / Mute / CC below. It sits low in front of you,
-  // within arm's reach, and travels with you (not with your head). Grip and pull also moves you closer / farther outside.
+  // A music stand: about 15 deg below eye level, 0.8 m out, to the left of the view, tilted to face your eyes (A.consolePose).
+  // Outside it stands beside the heart; on the ride it keeps the same place relative to you (the ride turns the heart around
+  // you, never you), so you never look down for it. Main: Ride / Back outside, Previous, Next, Guide, Exit VR.
+  // More: Mute, CC, Back up. Grip and pull (or the thumbstick) moves you closer / farther outside.
   function goOutside() {
     if (S.mode !== 'ride' && !dive) return;
     dive = null; S.intro = false; stopNarration();
@@ -2621,35 +2743,42 @@ async function main() {
     if (XRS) { XRS.exit('console Exit VR'); return; }
     const s = renderer.xr.getSession(); if (s) try { const p = s.end(); if (p && p.catch) p.catch(() => {}); } catch (e) { console.warn(e); }
   }
+  function guide() {   // the guide says where you are again (spoken where there is a voice, always captioned)
+    unlock();
+    if (!NARR.cc && (!NARR.voiceOn || NARR.noVoice || !NARR.ok)) setCC(true);
+    narrate(S.mode === 'ride' ? A.STOPS[ride.stopId].say : dive ? DIVE_TEXT : INTRO_TEXT);
+  }
   function setupVRConsole() {
     const W = 1280, H = 720, c = document.createElement('canvas'); c.width = W; c.height = H;
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
     const riding = () => S.mode === 'ride' || !!dive;
-    // [label, action, enabled, primary, x, y, w, h]
-    const big = 64, small = 40, gap = 16, top = 20, bh = 270, sh = 190;
+    const V = { more: false };
+    const gap = 16, r1 = [gap, 300], r2 = [r1[0] + r1[1] + gap, 180], r3 = [r2[0] + r2[1] + gap, 0];
+    r3[1] = H - gap - r3[0];
+    const w3 = (W - 4 * gap) / 3, w2 = (W - 3 * gap) / 2;
+    const cell3 = (i, r) => ({ x: gap + i * (w3 + gap), y: r[0], w: w3, h: r[1] }), cell2 = (i, r) => ({ x: gap + i * (w2 + gap), y: r[0], w: w2, h: r[1] });
+    const T = () => true;
+    // view: 'main' | 'more' | 'all';  show(): drawn and pressable at all;  on(): pressable now
     const btns = [
-      { label: () => (riding() ? 'Riding' : 'Ride'), act: () => { if (!riding()) startDive(); }, on: () => !riding(), main: () => !riding(), font: big },
-      { label: () => 'Back outside', act: goOutside, on: riding, main: riding, font: big },
-      { label: () => 'Back up', act: backUp, on: () => vrOutside(), main: () => false, font: big },
-      { label: () => 'Previous', act: () => { if (S.mode === 'ride') { flash(); ride.prev(); } }, on: () => S.mode === 'ride', font: small },
-      { label: () => 'Next', act: () => { if (S.mode === 'ride') $('next').click(); }, on: () => S.mode === 'ride', font: small },
-      { label: () => (NARR.voiceOn ? 'Mute' : 'Unmute'), act: () => setVoice(!NARR.voiceOn), on: () => true, font: small },
-      { label: () => 'CC: ' + (NARR.cc ? 'on' : 'off'), act: () => setCC(!NARR.cc), on: () => true, font: small },
-      { label: () => 'Exit VR', act: exitVR, on: () => true, main: () => true, exit: true, font: 80 },   // always there
+      { view: 'main', ...cell3(0, r1), font: 76, label: () => (riding() ? 'Back outside' : 'Ride'), act: () => { if (riding()) goOutside(); else startDive(); }, show: T, on: T, main: T },
+      { view: 'main', ...cell3(1, r1), font: 64, label: () => 'Previous', act: () => { flash(); ride.prev(); }, show: () => S.mode === 'ride', on: T },
+      { view: 'main', ...cell3(2, r1), font: 64, label: () => 'Next', act: () => $('next').click(), show: () => S.mode === 'ride', on: T },
+      { view: 'more', ...cell3(0, r1), font: 64, label: () => (NARR.voiceOn ? 'Mute' : 'Unmute'), act: () => setVoice(!NARR.voiceOn), show: T, on: T },
+      { view: 'more', ...cell3(1, r1), font: 64, label: () => 'CC: ' + (NARR.cc ? 'on' : 'off'), act: () => setCC(!NARR.cc), show: T, on: T },
+      { view: 'more', ...cell3(2, r1), font: 64, label: () => 'Back up', act: backUp, show: T, on: () => vrOutside() },
+      { view: 'all', ...cell2(0, r2), font: 60, label: () => 'Guide', act: guide, show: T, on: T },
+      { view: 'all', ...cell2(1, r2), font: 60, label: () => (V.more ? 'Done' : 'More'), act: () => { V.more = !V.more; }, show: T, on: T },
+      { view: 'all', x: gap, y: r3[0], w: W - 2 * gap, h: r3[1], font: 72, label: () => 'Exit VR', act: exitVR, show: T, on: T, exit: true },   // always there
     ];
-    const bw3 = (W - 2 * gap - 2 * gap) / 3, bw4 = (W - 2 * gap - 3 * gap) / 4;
-    btns.forEach((b, i) => {
-      if (b.exit) Object.assign(b, { x: gap, y: top + bh + gap + sh + gap, w: W - 2 * gap, h: H - (top + bh + gap + sh + gap) - gap });
-      else if (i < 3) Object.assign(b, { x: gap + i * (bw3 + gap), y: top, w: bw3, h: bh });
-      else Object.assign(b, { x: gap + (i - 3) * (bw4 + gap), y: top + bh + gap, w: bw4, h: sh });
-    });
+    const live = (b) => (b.view === 'all' || (b.view === 'more') === V.more) && b.show();
     let hover = -1, sig = '';
     function draw() {
-      const ns = btns.map((b) => b.label() + b.on() + (b.main ? b.main() : '')).join('|') + hover; if (ns === sig) return; sig = ns;
+      const ns = V.more + '|' + btns.map((b) => (live(b) ? b.label() + b.on() + (b.main ? b.main() : '') : '-')).join('|') + hover; if (ns === sig) return; sig = ns;
       const g = c.getContext('2d'); g.clearRect(0, 0, W, H);
       const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
-      g.fillStyle = 'rgba(24,10,12,0.88)'; rr(0, 0, W, H, 30); g.fill();
+      g.fillStyle = 'rgba(24,10,12,0.9)'; rr(0, 0, W, H, 30); g.fill();
       btns.forEach((b, i) => {
+        if (!live(b)) return;
         const on = b.on(), main = b.main && b.main();
         g.fillStyle = b.exit ? (i === hover ? '#ff4a52' : '#c8202a') : !on ? 'rgba(255,255,255,0.05)' : i === hover ? 'rgba(255,120,125,0.75)' : main ? 'rgba(214,48,56,0.9)' : 'rgba(255,255,255,0.16)';
         rr(b.x, b.y, b.w, b.h, 22); g.fill();
@@ -2660,11 +2789,15 @@ async function main() {
       });
       tex.needsUpdate = true;
     }
-    const PW = 0.66, PH = PW * H / W;   // about 66 x 37 cm; the big buttons are about 21 x 14 cm, Exit VR is full width
+    const PW = A.CONSOLE.w, PH = PW * H / W;   // 50 x 28 cm: Ride / Previous / Next about 16 x 12 cm, Guide / More 24 x 7 cm
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     panel.renderOrder = 9000; panel.frustumCulled = false; panel.visible = false;
-    panel.position.set(0, -0.42, -0.5); panel.rotation.x = -0.6;   // low in front of you, tilted up toward your eyes, in reach
     dolly.add(panel); draw();
+    function place(eye) {   // set from your eye position (in the rig) when VR starts and when you go in / out
+      const c0 = A.consolePose([eye.x, eye.y, eye.z]);
+      panel.position.set(c0.pos[0], c0.pos[1], c0.pos[2]); panel.rotation.set(c0.rx, c0.ry, 0, 'YXZ');
+    }
+    place(new THREE.Vector3());
     const ray = new THREE.Raycaster(), m4 = new THREE.Matrix4();
     const hit = (ctrl) => {
       if (!panel.visible) return -1;
@@ -2673,8 +2806,8 @@ async function main() {
       const h = ray.intersectObject(panel)[0]; if (!h || !h.uv) return -1;
       return uvButton(h.uv.x, h.uv.y);
     };
-    const uvButton = (u, v) => { const x = u * W, y = (1 - v) * H; return btns.findIndex((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h); };
-    const press = (i) => { if (i >= 0 && btns[i].on()) btns[i].act(); sig = ''; draw(); };
+    const uvButton = (u, v) => { const x = u * W, y = (1 - v) * H; return btns.findIndex((b) => live(b) && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h); };
+    const press = (i) => { if (i >= 0 && live(btns[i]) && btns[i].on()) btns[i].act(); sig = ''; draw(); };
     const ctrls = [0, 1].map((i) => {
       const ctrl = renderer.xr.getController(i); dolly.add(ctrl);
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
@@ -2690,12 +2823,13 @@ async function main() {
       ctrl.addEventListener('squeezeend', () => { if (VRV.grab && VRV.grab.ctrl === ctrl) VRV.grab = null; });
       return ctrl;
     });
-    renderer.xr.addEventListener('sessionstart', () => { panel.visible = true; sig = ''; draw(); });
+    renderer.xr.addEventListener('sessionstart', () => { panel.visible = true; V.more = false; sig = ''; draw(); });
     renderer.xr.addEventListener('sessionend', () => { panel.visible = false; VRV.grab = null; });
     setInterval(() => { if (!renderer.xr.isPresenting) return; let h = -1; for (const ct of ctrls) if (h < 0) h = hit(ct); hover = h; draw(); }, 100);
-    return { panel, btns, hit, uvButton, press, draw, ctrls };
+    return { panel, btns, hit, uvButton, press, draw, ctrls, place, view: V, live };
   }
-  const vrConsole = setupVRConsole();
+  vrConsole = setupVRConsole();
+  window.__heartXR = { A, vf, ride, path, heart, camera, dolly, console: vrConsole, eye: eyeA, state: S, dive: () => dive, setMode };   // read by test/xr-comfort.mjs
 
   function frame() {
     const rawDt = Math.min(clock.getDelta(), 0.05);
@@ -2739,20 +2873,18 @@ async function main() {
       up.addScaledVector(f, -up.dot(f));
       if (up.lengthSq() < 1e-4) up.set(0, 1, 0).addScaledVector(f, -f.y);
       up.normalize();
-      const eye = v3(pCam);
-      if (renderer.xr.isPresenting) {
-        const yaw = Math.atan2(-f.x, -f.z);
-        qTarget.setFromAxisAngle(Y_AXIS, yaw);
+      if (renderer.xr.isPresenting) {   // vehicle frame: the heart turns and moves around you; you stay level
+        if (S.snap || !vfOn) { vf.reset(sCam); vfOn = true; S.snap = false; } else vf.step(sCam, rawDt);
+        dolly.position.set(0, 0, 0); dolly.quaternion.identity();
+        placeRideHeart(sCam, pCam);
       } else {
+        const eye = v3(pCam);
         mTmp.lookAt(eye, vTmp.set(ahead[0], ahead[1], ahead[2]), up);
         qTarget.setFromRotationMatrix(mTmp);
+        dolly.position.copy(eye);
+        if (S.snap) { dolly.quaternion.copy(qTarget); S.snap = false; }
+        else dolly.quaternion.slerp(qTarget, 1 - Math.exp(-rawDt * 4));
       }
-      dolly.position.copy(eye);
-      if (S.snap) { dolly.quaternion.copy(qTarget); S.snap = false; }
-      else if (renderer.xr.isPresenting) {   // VR comfort: yaw only (level horizon), smoothed and capped at 30 deg/s
-        const qs = qTmp.copy(dolly.quaternion).slerp(qTarget, 1 - Math.exp(-rawDt * 2));
-        dolly.quaternion.rotateTowards(qs, (30 * Math.PI / 180) * rawDt);
-      } else dolly.quaternion.slerp(qTarget, 1 - Math.exp(-rawDt * 4));
       if (!renderer.xr.isPresenting) {
         if (!drag && S.time - S.lastDrag > 2.5) { S.lookYaw *= Math.exp(-rawDt * 0.8); S.lookPitch *= Math.exp(-rawDt * 0.8); }
         camera.rotation.set(-S.lookPitch * 0.6, -S.lookYaw, 0, 'YXZ');
