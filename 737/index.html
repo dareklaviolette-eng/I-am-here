@@ -769,7 +769,8 @@ import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { buildAirport } from './airport-kit.js';
 import { loadOurAirport, defaultEnd, nearestAirport } from './ourairports.js';
-import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit, COCKPIT_737, Backoff, SourcePool, FRESH_S as LIVE_FRESH_S, EXTRAP_MAX } from './live-flights.js';
+import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit, COCKPIT_737, Backoff, SourcePool, FRESH_S as LIVE_FRESH_S, EXTRAP_MAX,
+  fetchFR24, FR24Follow, FR24_NAME, FR24_FRESH_S, FR24_EXTRAP_MAX } from './live-flights.js';
 import { toLocal } from './airport-kit.js';
 import { fetchMetar, isLive as wxIsLive, summary as wxSummary, windComponents } from './weather.js';
 import { createGoogleScenery, debugOverlay, debugLines } from './google-scenery.js';
@@ -1284,7 +1285,12 @@ const _eye = new THREE.Vector3();
 const ORG = { lat: 0, lon: 0 };   // scene origin (airport reference point, or a re-origin point en route)
 let orgOff = [0, 0];               // airport position in the scene-origin frame
 const JOIN = { hex: null, info: null, src: null, tracker: null, list: [], busy: false, prevTrack: null, groundT: 0, landed: false, last: null,
-  back: new Backoff({ base: 2000, max: 30000, normal: 5000 }), backAt: 0, pool: new SourcePool() };   // the ridden aircraft: one request every 5 s
+  back: new Backoff({ base: 2000, max: 30000, normal: 5000 }), backAt: 0, pool: new SourcePool(),   // the ridden aircraft: one request every 5 s
+  // Flightradar24 first (through the relay: GitHub site only, CORS is locked to it; ?fr24=0 turns it off, ?fr24=1 on), every 20 s
+  fr24: new FR24Follow({ enabled: (/(^|\.)dareklaviolette-eng\.github\.io$/i.test(location.hostname) || params.get('fr24') === '1') && params.get('fr24') !== '0' }) };
+// how long a fix counts as live / may be extrapolated: longer while Flightradar24 (one fix per 20 s) is the source
+const liveFreshS = () => (JOIN.tracker ? JOIN.tracker.freshS : LIVE_FRESH_S), extrapMaxS = () => (JOIN.tracker ? JOIN.tracker.extrapMax : EXTRAP_MAX);
+function trackerLimits(tr, fr24) { if (tr) { tr.freshS = fr24 ? FR24_FRESH_S : LIVE_FRESH_S; tr.extrapMax = fr24 ? FR24_EXTRAP_MAX : EXTRAP_MAX; } }
 // Plain words on screen; the source-by-source details only with ?debug=1
 const feedWords = (e) => (/No live flight source|HTTP|Load failed|Failed to fetch|abort|JSON|ok:false/i.test(String(e && e.message)) ? 'live flights are not reachable right now' : String(e && e.message || 'not reachable'))
   + (params.get('debug') === '1' && e ? ' [' + String(e.message).slice(0, 300) + ']' : '');
@@ -1328,7 +1334,7 @@ function showTypeNote(f) { const t = typeNoteText(f); $('typeNote').textContent 
 function joinFlight(f) {
   showTypeNote(f);
   JOIN.hex = f.hex; JOIN.info = f; JOIN.tracker = new Tracker(); JOIN.tracker.onFix(f); JOIN.prevTrack = null; JOIN.landed = false; JOIN.groundT = 0;
-  JOIN.back.ok(); JOIN.backAt = 0;
+  JOIN.back.ok(); JOIN.back.next = 0; JOIN.backAt = 0; JOIN.fr24.reset();   // first poll right away (Flightradar24 first)
   live = true; demo = false; feedAt = f.fixAt; viewHdg = null;
   F.flight = (f.flight || f.reg || f.hex).slice(0, 24);
   $('liveLeave').hidden = false; $('liveList').textContent = '';
@@ -1372,6 +1378,7 @@ async function pollLive() {
   const hex = JOIN.hex, tracker = JOIN.tracker;
   if (JOIN.busy || !hex) return; JOIN.busy = true;
   try {
+    if (await pollFR24(hex, tracker)) return;   // Flightradar24 first (every 20 s); the free feeds below when it fails
     const r = await fetchHex(hex, { pool: JOIN.pool, timeoutMs: 5000 });   // spread across the direct feeds
     if (JOIN.hex !== hex || JOIN.tracker !== tracker) return;   // left or switched flights while this was in flight
     const wasLost = JOIN.back.fails > 0 || Date.now() - feedAt > LIVE_FRESH_S * 1000;
@@ -1380,13 +1387,50 @@ async function pollLive() {
   } catch (e) { if (JOIN.hex === hex) JOIN.back.fail(Date.now(), e.message); }
   finally { JOIN.busy = false; refreshMark(); }
 }
+// Flightradar24 first: one position every 20 s through the relay (dead reckoning from ground speed and track in between).
+// -> true when FR24 answered (or is in use and its next fix is not due yet); false: the free feeds should answer this poll
+// (FR24 failed and now rests, see FR24Follow, or it is off). JOIN.onType(type), if set, hears about a changed aircraft type.
+async function pollFR24(hex, tracker) {
+  if (!JOIN.fr24.due()) {
+    if (JOIN.fr24.healthy()) { JOIN.back.next = JOIN.fr24.next; return true; }   // FR24 in use: wait for its next fix
+    trackerLimits(tracker, false); return false;
+  }
+  let r;
+  try { r = await fetchFR24(JOIN.info, { timeoutMs: 8000 }); }
+  catch (e) {
+    if (JOIN.hex !== hex || JOIN.tracker !== tracker) return true;
+    JOIN.fr24.fail(e); trackerLimits(tracker, false);
+    if (JOIN.src === FR24_NAME) liveStatus(`Riding ${JOIN.info.flight || JOIN.info.reg || hex.toUpperCase()} · Flightradar24 not answering: live ADS-B from the free feeds`);
+    return false;
+  }
+  if (JOIN.hex !== hex || JOIN.tracker !== tracker) return true;   // left or switched flights meanwhile
+  JOIN.fr24.ok(); trackerLimits(tracker, true);
+  const wasLost = JOIN.back.fails > 0 || Date.now() - feedAt > FR24_FRESH_S * 1000;
+  // switching to FR24: a report up to 30 s older than the one we hold is still taken (glides there), so SIGNAL stays honest
+  const force = JOIN.src !== FR24_NAME && r.flight.fixAt > feedAt - 30000;
+  if (tracker.onFix(r.flight, Date.now(), force)) {
+    const t0 = JOIN.info && JOIN.info.type;
+    feedAt = r.flight.fixAt; JOIN.info = mergeInfo(JOIN.info, r.flight);
+    if (JOIN.src !== FR24_NAME) liveStatus(`Riding ${JOIN.info.flight || JOIN.info.reg || hex.toUpperCase()} (${JOIN.info.type || 'type not reported'}) · Flightradar24`);
+    JOIN.src = FR24_NAME; if (wasLost) JOIN.backAt = Date.now();
+    if (JOIN.info.type !== t0 && typeof JOIN.onType === 'function') JOIN.onType(JOIN.info.type);
+  }
+  JOIN.back.ok(); JOIN.back.next = JOIN.fr24.next;   // next poll when FR24 is due again
+  return true;
+}
+// a new report updates the flight's details; empty values never wipe ones we already have (FR24 light has no type/reg)
+function mergeInfo(old, f) {
+  const out = { ...(old || {}) };
+  for (const [k, v] of Object.entries(f)) if (v !== '' && v !== null && v !== undefined) out[k] = v;
+  out.hex = (old && old.hex) || f.hex; return out;
+}
 // Small on-screen status while the feed is quiet: "Signal lost, holding last position, reconnecting… 42 s since last fix".
 function sigText(now = Date.now()) {
   if (!JOIN.hex) return null;
   const age = Math.max(0, (now - feedAt) / 1000);
-  if (age >= LIVE_FRESH_S) {
+  if (age >= liveFreshS()) {
     const wait = JOIN.back.fails && !JOIN.busy ? JOIN.back.waitS(now) : 0;
-    return { lost: true, text: `Signal lost, holding last ${age >= EXTRAP_MAX ? 'position' : 'course'}, reconnecting… ${Math.round(age)} s since last fix` + (wait > 2 ? ` · next try in ${wait} s` : '') };
+    return { lost: true, text: `Signal lost, holding last ${age >= extrapMaxS() ? 'position' : 'course'}, reconnecting… ${Math.round(age)} s since last fix` + (wait > 2 ? ` · next try in ${wait} s` : '') };
   }
   if (JOIN.backAt && now - JOIN.backAt < 4000) return { lost: false, text: 'Signal back: catching up smoothly' };
   return null;
@@ -1445,15 +1489,18 @@ const COCKPIT_URL = 'https://sketchfab.com/3d-models/boeing-737-800-cockpit-d463
 let todName = 'day';
 function refreshMark() {
   if (!MARK) return;
-  const liveNow = live && Date.now() - feedAt < LIVE_FRESH_S * 1000;   // LIVE only while an external feed is actually sending
+  const liveNow = live && Date.now() - feedAt < liveFreshS() * 1000;   // LIVE only while an external feed is actually sending
   const d = airport && airport.data;
   const fix = live ? (liveNow ? fmtSince(feedAt) : 'feed quiet ' + fmtSince(feedAt)) : '';
   const items = [];
   if (live && JOIN.hex) {
     const st = JOIN.tracker && JOIN.tracker.state(Date.now()), i = JOIN.info || {};
+    const fr = JOIN.src === FR24_NAME, xs = Math.round(extrapMaxS());
     items.push({ kind: liveNow ? 'live' : 'recorded', label: 'Position, altitude, ground speed, track, vertical rate',
-      source: `Live ADS-B via ${JOIN.src} (${[i.flight, i.reg, i.type].filter(Boolean).join(', ')})`, time: feedAt, timeLabel: 'Last report',
-      note: st && st.frozen ? 'Feed lost for over 30 s: the aircraft is holding its last state.' : st && st.extrapolating ? 'Feed quiet: extrapolating along the last track (max 30 s).' : 'Smoothed between reports (dead reckoning with easing).' });
+      source: (fr ? 'Flightradar24 live data via the I\'M HERE relay' : `Live ADS-B via ${JOIN.src}`) + ` (${[i.flight, i.reg, i.type].filter(Boolean).join(', ')})`, time: feedAt, timeLabel: 'Last report',
+      note: st && st.frozen ? `Feed lost for over ${xs} s: the aircraft is holding its last state.` : st && st.extrapolating ? `Feed quiet: extrapolating along the last track (max ${xs} s).`
+        : fr ? 'One Flightradar24 position about every 20 s; in between the aircraft moves on from its ground speed and track (dead reckoning with easing).'
+        : 'Smoothed between reports (dead reckoning with easing).' });
     items.push({ kind: 'estimated', label: 'Pitch, bank, airspeed, engine N1/EGT, flaps/gear', source: 'derived from live track (ADS-B does not broadcast these)' });
   } else if (live) items.push({ kind: liveNow ? 'live' : 'recorded', label: 'Aircraft position & flight data', source: 'External flight-data feed (ImHere737.updateFlightData)',
     time: feedAt, note: liveNow ? '' : 'Feed has gone quiet: showing the last values received.' });

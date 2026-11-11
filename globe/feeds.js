@@ -6,10 +6,13 @@
 //      or { flights:[...] } or a bare array; field names are read loosely (see normFlight).
 //   2. the 737 page's point sources (737/live-flights.js): relay /lat/../lon/../dist/.., airplanes.live, adsb.lol, OpenSky.
 //      A point query reaches at most 250 nm, so a wide view loads around its centre only (the page says so).
+//   3. last resort: relay /fr24/area (Flightradar24 light positions, paid credits, cached 60 s on the relay; GitHub site only).
 //   /flights/summary (if the relay has it) gives counts for views too wide to load aircraft.
+// The flight on an open card is followed with Flightradar24 first (relay /fr24/flight, every 20 s; see app.js followFR24).
 // Nothing is invented: a value the feed did not send stays null and the card says "not in the feed".
-import { SOURCES, RELAY, COCKPIT_737, parseV2, parseOpenSky, distNm, getFlightJSON, SourcePool } from '../737/live-flights.js';
-export { RELAY, COCKPIT_737, distNm };
+import { SOURCES, RELAY, COCKPIT_737, parseV2, parseOpenSky, distNm, getFlightJSON, SourcePool,
+  fetchFR24, FR24Follow, FR24_NAME, FR24_FRESH_S, FR24_EXTRAP_MAX } from '../737/live-flights.js';
+export { RELAY, COCKPIT_737, distNm, fetchFR24, FR24Follow, FR24_NAME, FR24_FRESH_S, FR24_EXTRAP_MAX };
 
 export const ON_SITE = typeof location !== 'undefined' && /(^|\.)dareklaviolette-eng\.github\.io$/i.test(location.hostname);
 export const FRESH_S = 30;          // "live" (green) only when the position report is younger than this
@@ -48,7 +51,7 @@ export function parseFlights(j, receivedAt = Date.now()) {
 }
 export const is737 = (f) => COCKPIT_737.test(f.type || '');
 export const ageS = (f, now = Date.now()) => Math.max(0, (now - f.fixAt) / 1000);
-export const isLive = (f, now = Date.now()) => ageS(f, now) < FRESH_S;
+export const isLive = (f, now = Date.now()) => ageS(f, now) < (f.freshS || FRESH_S);   // FR24 fixes (every 20 s) carry freshS
 
 // Bounds helpers. b = { s, w, n, e } in degrees (w may be > e across the antimeridian: we split that into two queries).
 export function boundsCenter(b) { let e = b.e; if (e < b.w) e += 360; let lo = (b.w + e) / 2; if (lo > 180) lo -= 360; return [(b.s + b.n) / 2, lo]; }
@@ -83,6 +86,7 @@ export class FlightFeed {
     this.relayArea = onSite ? null : false;      // null = unknown, true/false once tried
     this.relaySummary = onSite ? null : false;
     this.relayFind = onSite ? null : false;
+    this.fr24AreaNext = 0;   // Flightradar24 area fallback: rests after a failure (cap / not set up: 15 min, else 1 min)
   }
   // -> { source, flights, coverage: 'view' | { lat, lon, nm } }
   async load(b) {
@@ -99,6 +103,7 @@ export class FlightFeed {
       } catch (e) { this.pool.fail(s.name, e.status); errs.push(s.name + ': ' + e.message); }
     }
     if (relayArea && !order.some((s) => s.opensky)) { const r = await this._area(b, errs); if (r) return r; }
+    if (this.onSite && radius <= 600 && Date.now() >= this.fr24AreaNext) { const r = await this._fr24Area(b, errs); if (r) return r; }
     const err = new Error('No live flight source reachable (' + errs.join('; ') + ')'); err.all = errs; throw err;
   }
   async _area(b, errs) {
@@ -107,6 +112,19 @@ export class FlightFeed {
       this.relayArea = true;
       return { source: 'I\'M HERE relay', flights: parseFlights(j, t), coverage: 'view' };
     } catch (e) { if (e.status === 404 || e.status === 400) this.relayArea = false; errs.push('relay area: ' + e.message); return null; }
+  }
+  // Flightradar24 light positions for the view (bounds N,S,W,E; not across the antimeridian), only when every free feed failed.
+  async _fr24Area(b, errs) {
+    if (b.w >= b.e) return null;
+    try {
+      const f = (x) => (+x).toFixed(3);
+      const j = await getFlightJSON(`${RELAY}/fr24/area?bounds=${f(b.n)},${f(b.s)},${f(b.w)},${f(b.e)}&limit=300`, this.fetchFn, 8000), t = Date.now();
+      const flights = parseFlights(j, t).map((x) => ({ ...x, fr24: true, freshS: FR24_FRESH_S, extrapS: FR24_EXTRAP_MAX }));
+      return { source: FR24_NAME, flights, coverage: 'view' };
+    } catch (e) {
+      this.fr24AreaNext = Date.now() + (e.status === 429 || e.status === 503 || e.status === 404 ? 900000 : 60000);
+      errs.push('Flightradar24 area: ' + e.message); return null;
+    }
   }
   // World/region counts for wide views, if the relay has /flights/summary. -> [{ lat, lon, n }] or null
   async summary(b) {
@@ -274,7 +292,7 @@ export function cluster(pts, cell = 56) {
 
 // Dead reckoning for the map between refreshes (at most 30 s past the last report, like the cockpit).
 export function predict(f, now = Date.now()) {
-  const t = Math.max(0, Math.min(30, (now - f.fixAt) / 1000));
+  const t = Math.max(0, Math.min(f.extrapS || 30, (now - f.fixAt) / 1000));   // FR24 fixes (every 20 s) carry extrapS
   if (!f.gs || f.track === null || f.onGround) return [f.lat, f.lon];
   const d = f.gs * 0.514444 * t, tr = f.track * Math.PI / 180, R = 6371008.8;
   return [f.lat + (d * Math.cos(tr)) / R * 180 / Math.PI, f.lon + (d * Math.sin(tr)) / (R * Math.cos(f.lat * Math.PI / 180)) * 180 / Math.PI];

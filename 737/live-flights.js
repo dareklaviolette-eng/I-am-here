@@ -138,16 +138,18 @@ export function searchFlights(list, q) {
 // live: data fresher than FRESH_S. After EXTRAP_MAX the aircraft holds its last state (frozen).
 export const FRESH_S = 10, EXTRAP_MAX = 30, EASE_S = 2.5;
 export class Tracker {
-  constructor() { this.fix = null; this.corr = null; }
+  // freshS / extrapMax can change while riding (Flightradar24 fixes come every 20 s: FR24_FRESH_S, FR24_EXTRAP_MAX)
+  constructor({ freshS = FRESH_S, extrapMax = EXTRAP_MAX } = {}) { this.fix = null; this.corr = null; this.freshS = freshS; this.extrapMax = extrapMax; }
   predict(f, now) {
-    const t = Math.max(0, Math.min(EXTRAP_MAX, (now - f.fixAt) / 1000));
+    const t = Math.max(0, Math.min(this.extrapMax, (now - f.fixAt) / 1000));
     const gs = (f.gs || 0) * KT, tr = (f.track || 0) * D2R, d = f.onGround && (f.gs || 0) < 3 ? 0 : gs * t;
     const lat = f.lat + (d * Math.cos(tr)) / R / D2R, lon = f.lon + (d * Math.sin(tr)) / (R * Math.cos(f.lat * D2R)) / D2R;
     const altFt = f.altFt == null ? null : f.onGround ? 0 : Math.max(0, f.altFt + (f.vr || 0) * t / 60);
     return { lat, lon, altFt, gs: f.gs, track: f.track, vr: f.vr, onGround: f.onGround };
   }
-  onFix(f, now = Date.now()) {
-    if (this.fix && f.fixAt <= this.fix.fixAt) return false;   // stale or duplicate report
+  // force: take a slightly older report anyway (switching to another source, e.g. Flightradar24); the easing glides there
+  onFix(f, now = Date.now(), force = false) {
+    if (this.fix && f.fixAt <= this.fix.fixAt && !(force && f.fixAt !== this.fix.fixAt)) return false;   // stale or duplicate report
     if (this.fix) {   // ease from where we are showing it to the new prediction
       const a = this.state(now), b = this.predict(f, now);
       const m = Math.hypot((a.lat - b.lat) * 111320, (a.lon - b.lon) * 111320 * Math.cos(b.lat * D2R));
@@ -167,7 +169,7 @@ export class Tracker {
       else { p.lat += this.corr.lat * k; p.lon += this.corr.lon * k; if (p.altFt != null) p.altFt += this.corr.alt * k;
         if (p.track != null && Number.isFinite(this.corr.trk)) p.track = (p.track + this.corr.trk * k + 360) % 360; }
     }
-    return { ...p, ageS: age, live: age < FRESH_S, extrapolating: age >= FRESH_S && age < EXTRAP_MAX, frozen: age >= EXTRAP_MAX, fixAt: this.fix.fixAt };
+    return { ...p, ageS: age, live: age < this.freshS, extrapolating: age >= this.freshS && age < this.extrapMax, frozen: age >= this.extrapMax, fixAt: this.fix.fixAt };
   }
 }
 
@@ -180,4 +182,60 @@ export function deriveCockpit(s, prevTrack, dt) {
   const pitch = s.onGround ? 0 : Math.max(-8, Math.min(18, fpa + 2.5));
   const n1 = s.onGround ? (gs > 60 ? 60 : 22) : Math.max(25, Math.min(95, 55 + vr / 60 + (gs > 250 ? 25 : 10)));
   return { bank, pitch, n1 };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Flightradar24 through the I'M HERE relay (GET RELAY/fr24/flight?callsign=|reg=; the paid key stays in the Worker).
+// Asked FIRST for the one flight being ridden / shown, about every 20 s (the relay caches 20 s and keeps a daily credit cap);
+// between fixes the aircraft is dead-reckoned from ground speed and track. When FR24 fails, the free feeds above take over
+// and FR24 rests a while (cap reached: 15 min; not set up: 1 h; flight not found: 2 min; other errors: 1 min).
+export const FR24_EVERY_MS = 20000;
+export const FR24_FRESH_S = 50, FR24_EXTRAP_MAX = 75;   // a 20 s poll of a 20 s cache: a fix can be ~45 s old before the next one
+export const FR24_NAME = 'Flightradar24';
+// The query for a flight record: its callsign (what ADS-B and FR24 both carry), else its registration. null = cannot ask.
+export function fr24Query(f) {
+  const cs = String((f && f.flight) || '').toUpperCase().replace(/\s+/g, ''), reg = String((f && f.reg) || '').toUpperCase().replace(/\s+/g, '');
+  if (/^[A-Z0-9]{2,8}$/.test(cs) && /[A-Z]/.test(cs)) return 'callsign=' + encodeURIComponent(cs);
+  if (/^[A-Z0-9-]{2,10}$/.test(reg)) return 'reg=' + encodeURIComponent(reg);
+  return null;
+}
+// relay answer -> our flight record (same fields as parseV2, plus orig/dest; values FR24 did not send stay empty/null)
+export function parseFR24(j, receivedAt = Date.now()) {
+  if (!j || j.ok === false || !Number.isFinite(j.lat) || !Number.isFinite(j.lon)) return null;
+  const n = (v) => (Number.isFinite(v) ? v : null), s = (v) => String(v || '').trim();
+  const ts = n(j.ts), fixAt = ts !== null ? (ts < 1e12 ? ts * 1000 : ts) : receivedAt - (n(j.age_s) || 0) * 1000;
+  return { hex: s(j.hex).toLowerCase(), flight: s(j.callsign || j.flight), reg: s(j.reg), type: s(j.type).toUpperCase(), desc: '',
+    lat: j.lat, lon: j.lon, altFt: n(j.alt_ft), onGround: !!j.on_ground, gs: n(j.gs_kt), track: n(j.track), vr: n(j.vs_fpm) ?? 0,
+    orig: s(j.orig).toUpperCase(), dest: s(j.dest).toUpperCase(), flightNo: s(j.flight), fixAt: Math.min(fixAt, receivedAt), fr24: true };
+}
+// One FR24 position for flight record f. -> { source: 'Flightradar24', flight } or throws (e.status, e.code: cap | not_found | not_configured)
+export async function fetchFR24(f, { fetchFn = (u, o) => fetch(u, o), base = RELAY, timeoutMs = 8000 } = {}) {
+  const q = fr24Query(f);
+  if (!q) throw Object.assign(new Error('no callsign or registration to ask Flightradar24 for'), { status: 0, code: 'no_id' });
+  const ac = typeof AbortController === 'function' ? new AbortController() : null;
+  const to = ac && setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    let r, j = null;
+    try { r = await fetchFn(`${base}/fr24/flight?${q}`, ac ? { signal: ac.signal, cache: 'no-store' } : undefined); }
+    catch (e) { throw Object.assign(new Error('relay not reachable'), { status: 0, code: 'network' }); }
+    try { j = await r.json(); } catch (e) { /* not JSON, or cut off by the time limit */ }
+    if (!j) throw Object.assign(new Error('Flightradar24: no readable answer (HTTP ' + r.status + ')'), { status: r.status, code: 'bad' });
+    if (!r.ok || j.ok === false) throw Object.assign(new Error('Flightradar24: ' + (j.message || j.error || 'HTTP ' + r.status)), { status: r.status, code: j.error || 'http_' + r.status });
+    const flight = parseFR24(j, Date.now());
+    if (!flight) throw Object.assign(new Error('Flightradar24 answered without a position'), { status: 0, code: 'bad' });
+    return { source: FR24_NAME, flight };
+  } finally { if (to) clearTimeout(to); }
+}
+// When to ask FR24 next. due(now): time for a call; healthy(now): FR24 gave a position recently (it is the source in use).
+export class FR24Follow {
+  constructor({ every = FR24_EVERY_MS, enabled = true } = {}) { this.every = every; this.enabled = enabled; this.next = 0; this.okAt = 0; this.fails = 0; this.lastErr = ''; }
+  due(now = Date.now()) { return this.enabled && now >= this.next; }
+  ok(now = Date.now()) { this.okAt = now; this.fails = 0; this.lastErr = ''; this.next = now + this.every; }
+  fail(e, now = Date.now()) {
+    this.fails++; this.lastErr = String((e && e.message) || e || '');
+    const c = e && e.code, s = e && e.status;
+    this.next = now + (c === 'cap' || s === 429 ? 900000 : c === 'not_configured' || s === 503 ? 3600000 : c === 'no_id' ? 3600000 : c === 'not_found' || s === 404 ? 120000 : 60000);
+  }
+  healthy(now = Date.now()) { return this.enabled && this.okAt > 0 && now - this.okAt < FR24_FRESH_S * 1000 && this.fails === 0; }
+  reset() { this.next = 0; this.okAt = 0; this.fails = 0; this.lastErr = ''; }
 }

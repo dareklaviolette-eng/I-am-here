@@ -15,6 +15,12 @@
 //                             Planespotters' rules: show the photographer's name and link to the photo page; use the
 //                             image URLs as given (not re-hosted or altered). This relay only passes the links on.
 //   GET /iss               -> wheretheiss.at ISS position, cached about 3 s
+// Flightradar24 (paid; secret FR24_API_KEY; daily credit cap FR24_DAILY_CAP, default 1500; see the Flightradar24 section):
+//   GET /fr24/flight?callsign=|flight=|reg=  -> one flight { lat, lon, alt_ft, gs_kt, track, vs_fpm, callsign, flight, reg, type,
+//                             orig, dest, ts, source:"Flightradar24" }, cached 20 s; full endpoint once per flight per 10 min
+//   GET /fr24/area?bounds=N,S,W,E[&limit<=300] -> light positions, cached 60 s per bounds rounded to 0.5°
+//   GET /fr24/status       -> key set?, credits used today (estimate), cap, FR24 /usage
+//   Over the cap: 429 { ok:false, error:"cap" }. No key: 503 { ok:false, error:"not_configured" }.
 //   GET /ais/snapshot?box=lat1,lon1,lat2,lon2 -> listens to aisstream for up to about 6 s, compact vessel list, cached 30 s
 //   GET /metar/<ICAO>      -> aviationweather.gov METAR (used only if the browser cannot reach it)
 //   wss /ais?box=...       -> aisstream PositionReport + ShipStaticData passed through (secret AISSTREAM_KEY stays here)
@@ -432,6 +438,208 @@ async function iss(env, headers) {
   return json(body, 200, headers);
 }
 
+// ---------- Flightradar24 (paid API; key = Worker secret FR24_API_KEY, never sent to the browser or written anywhere) ----------
+// Docs: https://fr24api.flightradar24.com/docs . Headers: Accept: application/json, Accept-Version: v1, Authorization: Bearer <key>.
+// /live/flight-positions/light|full take bounds=N,S,W,E (3 decimals), flights=, callsigns=, registrations= (comma lists, max 15), limit.
+// Answer: { data: [ { fr24_id, hex, callsign, lat, lon, track, alt, gspeed, vspeed, squawk, timestamp, source,
+//   + full only: flight, type, reg, painted_as, operating_as, orig_iata, orig_icao, dest_iata, dest_icao, eta } ] }.
+// /usage?period=24h -> { data: [ { endpoint, request_count, credits } ] }.
+// Credits are spent frugally: one flight is asked at most every 20 s (shared by every viewer through the cache), the "full"
+// endpoint (route and type) at most once per flight per 10 min, and a daily cap stops all calls (429 { error: "cap" }).
+const FR24_BASE = "https://fr24api.flightradar24.com/api";
+const FR24_FLIGHT_FRESH_S = 20, FR24_FULL_EVERY_S = 600, FR24_AREA_FRESH_S = 60, FR24_USAGE_FRESH_S = 900;
+const FR24_DEFAULT_CAP = 1500, FR24_AREA_LIMIT = 300;
+// Estimated credits per call (the plan's own figures may differ; /fr24/status shows FR24's real /usage next to this estimate).
+// Each can be changed without a deploy: FR24_COST_LIGHT, FR24_COST_FULL, FR24_COST_SUMMARY (Worker variables).
+const FR24_COST = { light: 2, full: 8, summary: 10, usage: 0 };
+function fr24Cost(env, kind) { const v = num(env && env["FR24_COST_" + kind.toUpperCase()]); return v !== null && v >= 0 ? v : FR24_COST[kind]; }
+function fr24Cap(env) { const v = num(env && env.FR24_DAILY_CAP); return v !== null && v >= 0 ? v : FR24_DEFAULT_CAP; }
+const fr24Key = (env) => (env && typeof env.FR24_API_KEY === "string" ? env.FR24_API_KEY.trim() : "");
+
+// Daily credit counter (UTC day). There is no KV binding in wrangler.toml, so this is best effort: it lives in this isolate's
+// memory (it RESETS on a cold start, and each Cloudflare isolate/location counts on its own) and is also copied into the
+// local Cache API so a restarted isolate in the same location picks it up again. The real total is FR24's /usage (in /fr24/status).
+const FR24_SPEND = { day: "", used: 0, calls: 0, loaded: false, by: {} };
+const utcDay = (t) => new Date(t || Date.now()).toISOString().slice(0, 10);
+const spendKey = (day) => "fr24:spend:" + day;
+async function fr24Ledger() {
+  const day = utcDay();
+  if (FR24_SPEND.day !== day) Object.assign(FR24_SPEND, { day, used: 0, calls: 0, loaded: false, by: {} });
+  if (!FR24_SPEND.loaded) {
+    FR24_SPEND.loaded = true;
+    const c = edgeCache();
+    if (c) {
+      try {
+        const r = await c.match(new Request(CACHE_ORIGIN + encodeURIComponent(spendKey(day))));
+        const j = r ? await r.json() : null;
+        if (j && j.day === day && num(j.used) !== null && j.used > FR24_SPEND.used) Object.assign(FR24_SPEND, { used: +j.used, calls: num(j.calls) || 0, by: j.by || {} });
+      } catch (e) {}
+    }
+  }
+  return FR24_SPEND;
+}
+function capError() { const e = new Error("cap"); e.status = 429; e.code = "cap"; e.noStale = true; return e; }
+// Reserve the credits BEFORE calling (a failed call may still cost). Throws the cap error when the day's budget is used up.
+async function fr24Spend(env, kind) {
+  const L = await fr24Ledger(), cost = fr24Cost(env, kind);
+  if (cost > 0 && L.used + cost > fr24Cap(env)) throw capError();
+  L.used += cost; L.calls += 1; L.by[kind] = (L.by[kind] || 0) + 1;
+  const c = edgeCache();
+  if (c) {
+    try {
+      await c.put(new Request(CACHE_ORIGIN + encodeURIComponent(spendKey(L.day))), new Response(JSON.stringify({ day: L.day, used: L.used, calls: L.calls, by: L.by }),
+        { headers: { "Content-Type": "application/json", "Cache-Control": "max-age=172800" } }));
+    } catch (e) {}
+  }
+  return cost;
+}
+
+// One FR24 call. Never passes FR24's own error body on (it could echo request details); errors are short plain words.
+async function fr24Get(env, path, params, kind) {
+  const key = fr24Key(env);
+  if (!key) { const e = new Error("Flightradar24 is not set up on the relay yet (Worker secret FR24_API_KEY is missing)"); e.status = 503; e.code = "not_configured"; e.noStale = true; throw e; }
+  await fr24Spend(env, kind);
+  const qs = new URLSearchParams(params).toString();
+  let r;
+  try {
+    r = await getText(FR24_BASE + path + (qs ? "?" + qs : ""), timeoutMs(env, 6000),
+      { headers: { Accept: "application/json", "Accept-Version": "v1", Authorization: "Bearer " + key } });
+  } catch (e) { throw scrubbed(new Error("Flightradar24: " + words(e)), key, 502); }
+  if (!r.ok) {
+    const s = r.status;
+    const why = s === 401 ? "did not accept the API key (HTTP 401); check the FR24_API_KEY secret"
+      : s === 402 || s === 403 ? "refused the request (HTTP " + s + "); the plan may not include this endpoint or its credits are used up"
+      : s === 429 ? "is rate limiting us or the plan's credits are used up (HTTP 429)" : httpWords(s);
+    const e = new Error("Flightradar24 " + why); e.status = s === 429 ? 503 : 502; e.code = "upstream_" + s; e.noStale = s === 401;
+    throw e;
+  }
+  try { return JSON.parse(r.text); } catch (e) { throw Object.assign(new Error("Flightradar24 answered with something that is not JSON"), { status: 502 }); }
+}
+function scrubbed(e, key, status) {
+  if (key) e.message = String(e.message).split(key).join("***");
+  e.status = e.status || status; return e;
+}
+const fr24List = (j) => (j && Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : null);
+
+// FR24 record -> our normalized answer. Values FR24 did not send stay null.
+function fr24Norm(a, details) {
+  const d = details || {}, lat = num(a && a.lat), lon = num(a && a.lon);
+  if (lat === null || lon === null) return null;
+  const s = (v) => (v === null || v === undefined ? "" : String(v).trim());
+  const ts = a.timestamp ? Date.parse(a.timestamp) : NaN;
+  const alt = num(a.alt);
+  return {
+    lat, lon, alt_ft: alt === null ? null : Math.round(alt), gs_kt: num(a.gspeed), track: num(a.track), vs_fpm: num(a.vspeed),
+    callsign: s(a.callsign) || null, flight: s(a.flight) || d.flight || null, reg: s(a.reg) || d.reg || null,
+    type: s(a.type).toUpperCase() || d.type || null,
+    orig: s(a.orig_icao).toUpperCase() || d.orig || s(a.orig_iata).toUpperCase() || null,
+    dest: s(a.dest_icao).toUpperCase() || d.dest || s(a.dest_iata).toUpperCase() || null,
+    orig_iata: s(a.orig_iata).toUpperCase() || d.orig_iata || null, dest_iata: s(a.dest_iata).toUpperCase() || d.dest_iata || null,
+    eta: s(a.eta) || d.eta || null,
+    ts: Number.isFinite(ts) ? ts : null, hex: s(a.hex).toLowerCase() || null, fr24_id: s(a.fr24_id) || null,
+    on_ground: alt !== null && alt <= 0 && (num(a.gspeed) || 0) < 60, source: "Flightradar24",
+  };
+}
+const detailsOf = (f) => (f ? { flight: f.flight, reg: f.reg, type: f.type, orig: f.orig, dest: f.dest, orig_iata: f.orig_iata, dest_iata: f.dest_iata, eta: f.eta } : null);
+
+// Concurrent requests for the same key share one upstream call.
+const FR24_PENDING = new Map();
+function shared(key, run) {
+  if (FR24_PENDING.has(key)) return FR24_PENDING.get(key);
+  const p = run().finally(() => FR24_PENDING.delete(key));
+  FR24_PENDING.set(key, p); return p;
+}
+function fr24Fail(e, headers) {
+  if (e && e.code === "cap") return json({ ok: false, error: "cap", message: "Today's Flightradar24 credit budget for this relay is used up; use the free feeds" }, 429, headers);
+  return json({ ok: false, error: (e && e.code) || "upstream", message: words(e) }, (e && e.status) || 502, headers);
+}
+
+// GET /fr24/flight?callsign=SWA1234 | ?flight=WN1234 | ?reg=N8710M
+async function fr24Flight(url, env, headers) {
+  const sp = url.searchParams;
+  const pick = [["callsign", "callsigns"], ["flight", "flights"], ["reg", "registrations"]].find(([k]) => sp.get(k));
+  if (!pick) return oops(400, "give callsign= (SWA1234), flight= (WN1234) or reg= (N8710M)", headers);
+  const id = String(sp.get(pick[0])).toUpperCase().replace(/\s+/g, "");
+  if (!/^[A-Z0-9-]{2,10}$/.test(id)) return oops(400, pick[0] + " must be 2 to 10 letters, digits or dashes", headers);
+  const key = "fr24:f:" + pick[0] + ":" + id;
+  let hit;
+  try {
+    hit = await shared(key, () => cached(key, FR24_FLIGHT_FRESH_S, 900, async (prev) => {
+      // full (route, type, registration) on the first call per flight per 10 min; light otherwise
+      const full = !prev || !prev.fullAt || Date.now() - prev.fullAt > FR24_FULL_EVERY_S * 1000;
+      const j = await fr24Get(env, "/live/flight-positions/" + (full ? "full" : "light"), { [pick[1]]: id }, full ? "full" : "light");
+      const list = fr24List(j);
+      if (!list) throw Object.assign(new Error("Flightradar24 answered in an unexpected shape"), { status: 502 });
+      const best = list.map((a) => fr24Norm(a, prev && prev.details)).filter(Boolean).sort((a, b) => (b.ts || 0) - (a.ts || 0))[0] || null;
+      // a full call that found nothing is not repeated for 2 min (light answers then keep the position coming)
+      const fullAt = !full ? prev.fullAt : best ? Date.now() : Date.now() - (FR24_FULL_EVERY_S - 120) * 1000;
+      return { flight: best, fullAt: fullAt || 0, details: full && best ? detailsOf(best) : prev && prev.details, used: full ? "full" : "light" };
+    }));
+  } catch (e) { return fr24Fail(e, headers); }
+  const f = hit.data.flight, age = Math.round(hit.age_s || 0);
+  if (!f) return json({ ok: false, error: "not_found", message: id + " is not airborne in Flightradar24's live data right now", source: "Flightradar24", age_s: age }, 404, headers);
+  const body = Object.assign({ ok: true }, f, { age_s: age, endpoint: hit.data.used, now: Date.now() });
+  if (hit.stale) Object.assign(body, { stale: true, why: hit.why });
+  return json(body, 200, Object.assign({}, headers, { "X-Relay-Source": "Flightradar24", "X-Relay-Age": String(age) }));
+}
+
+// GET /fr24/area?bounds=N,S,W,E[&limit=] (light positions; the globe's last fallback). Bounds are rounded outwards to 0.5°
+// so nearby views share one cached answer for 60 s.
+function fr24Bounds(text) {
+  const v = String(text || "").split(",").map(Number);
+  if (v.length !== 4 || !v.every(Number.isFinite)) return null;
+  let [n, s, w, e] = v;
+  if (n <= s || Math.abs(n) > 90 || Math.abs(s) > 90 || Math.abs(w) > 180 || Math.abs(e) > 180 || w >= e) return null;
+  const up = (x) => Math.ceil(x * 2) / 2, down = (x) => Math.floor(x * 2) / 2;
+  return { n: Math.min(90, up(n)), s: Math.max(-90, down(s)), w: Math.max(-180, down(w)), e: Math.min(180, up(e)) };
+}
+async function fr24Area(url, env, headers) {
+  const b = fr24Bounds(url.searchParams.get("bounds"));
+  if (!b) return oops(400, "bounds must be north,south,west,east in degrees (west < east; split views that cross 180°)", headers);
+  const lim = num(url.searchParams.get("limit"));
+  const limit = Math.max(1, Math.min(FR24_AREA_LIMIT, lim === null ? FR24_AREA_LIMIT : Math.round(lim)));
+  const bounds = [b.n, b.s, b.w, b.e].map((x) => x.toFixed(1)).join(",");
+  const key = "fr24:a:" + bounds + ":" + limit;
+  let hit;
+  try {
+    hit = await shared(key, () => cached(key, FR24_AREA_FRESH_S, 600, async () => {
+      const j = await fr24Get(env, "/live/flight-positions/light", { bounds, limit: String(limit) }, "light");
+      const list = fr24List(j);
+      if (!list) throw Object.assign(new Error("Flightradar24 answered in an unexpected shape"), { status: 502 });
+      return { flights: list.map((a) => fr24Norm(a)).filter(Boolean) };
+    }));
+  } catch (e) { return fr24Fail(e, headers); }
+  const age = Math.round(hit.age_s || 0), now = Date.now();
+  // Also the names the globe reads (alt, gs, vr, seen) like /flights/area.
+  const flights = hit.data.flights.map((f) => Object.assign({}, f, { alt: f.alt_ft, gs: f.gs_kt, vr: f.vs_fpm, seen: f.ts ? r1(Math.max(0, (now - f.ts) / 1000)) : null }));
+  const body = { ok: true, source: "Flightradar24", now, bounds, limit, age_s: age, count: flights.length, flights };
+  if (hit.stale) Object.assign(body, { stale: true, why: hit.why });
+  return json(body, 200, Object.assign({}, headers, { "X-Relay-Source": "Flightradar24", "X-Relay-Age": String(age) }));
+}
+
+// GET /fr24/status: is the key set (never shown), our credit estimate for today, the cap, and FR24's own /usage (24 h,
+// asked at most every 15 min; /usage is not counted as a credit spend here).
+async function fr24Status(url, env, headers) {
+  const L = await fr24Ledger(), cap = fr24Cap(env), configured = !!fr24Key(env);
+  const body = { ok: true, configured, day_utc: L.day, credits_used_today: L.used, calls_today: L.calls, calls_by_endpoint: L.by, cap,
+    remaining: Math.max(0, cap - L.used), over_cap: L.used >= cap,
+    costs: { light: fr24Cost(env, "light"), full: fr24Cost(env, "full"), summary: fr24Cost(env, "summary") },
+    counter: "estimate kept by this relay: in memory plus the local edge cache; it resets on a cold start and counts per Cloudflare location",
+    cache_s: { flight: FR24_FLIGHT_FRESH_S, full_every: FR24_FULL_EVERY_S, area: FR24_AREA_FRESH_S } };
+  if (configured && url.searchParams.get("usage") !== "0") {
+    try {
+      const hit = await shared("fr24:usage", () => cached("fr24:usage", FR24_USAGE_FRESH_S, 3600, async () => {
+        const j = await fr24Get(env, "/usage", { period: "24h" }, "usage");
+        const list = fr24List(j) || [];
+        const rows = list.map((x) => ({ endpoint: x.endpoint || null, requests: num(x.request_count), credits: num(x.credits) }));
+        return { period: "24h", credits: rows.reduce((t, x) => t + (x.credits || 0), 0), endpoints: rows };
+      }));
+      body.usage = Object.assign({}, hit.data, { age_s: Math.round(hit.age_s || 0) }, hit.stale ? { stale: true } : {});
+    } catch (e) { body.usage = { ok: false, error: (e && e.code) || "upstream", message: words(e) }; }
+  }
+  return json(body, 200, headers);
+}
+
 // ---------- ships ----------
 function parseBox(text) {
   const n = String(text || "").split(",").map(Number);
@@ -551,6 +759,9 @@ export default {
       if (path === "/route") return await route(url, env, headers);
       if (path === "/photo") return await photo(url, env, headers);
       if (path === "/iss") return await iss(env, headers);
+      if (path === "/fr24/flight") return await fr24Flight(url, env, headers);
+      if (path === "/fr24/area") return await fr24Area(url, env, headers);
+      if (path === "/fr24/status") return await fr24Status(url, env, headers);
       const metar = METAR.exec(path);
       if (metar) {
         try {
@@ -562,7 +773,7 @@ export default {
       const m = ALLOWED.exec(path);
       if (m) return await legacyFlights(m, env, headers);
       return new Response(JSON.stringify({ error: "not allowed", ok: false,
-        routes: ["/flights/area", "/flights/summary", "/flights/find", "/route", "/photo", "/iss", "/ais/snapshot", "/metar/<ICAO>", "/lat/<lat>/lon/<lon>/dist/<nm>", "/hex/<hex>"] }), { status: 404, headers });
+        routes: ["/flights/area", "/flights/summary", "/flights/find", "/route", "/photo", "/iss", "/fr24/flight", "/fr24/area", "/fr24/status", "/ais/snapshot", "/metar/<ICAO>", "/lat/<lat>/lon/<lon>/dist/<nm>", "/hex/<hex>"] }), { status: 404, headers });
     } catch (e) {
       return oops(500, "the relay hit an unexpected problem (" + words(e) + ")", headers);
     }

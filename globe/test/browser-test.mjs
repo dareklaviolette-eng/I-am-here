@@ -28,7 +28,7 @@ const ev = async (expression) => { const r = await send('Runtime.evaluate', { ex
 // ---------------- mock world
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkqGeoBwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 const T = () => Date.now();
-let MODE = { area: false, down: false, directDown: false };
+let MODE = { area: false, down: false, directDown: false, fr24: false };
 const ROUTE_ADSBDB = { response: { flightroute: { callsign: 'SWA1234', callsign_iata: 'WN1234', airline: { name: 'Southwest Airlines', icao: 'SWA', iata: 'WN' },
   origin: { iata_code: 'ATL', icao_code: 'KATL', municipality: 'Atlanta', name: 'Hartsfield-Jackson' }, destination: { iata_code: 'SEA', icao_code: 'KSEA', municipality: 'Seattle', name: 'Seattle-Tacoma' } } } };
 const PHOTO = { photos: [{ id: '123', thumbnail: { src: 'https://t.plnspttrs.net/12345/1234567_abc_t.jpg', size: { width: 200, height: 133 } },
@@ -50,6 +50,15 @@ function mock(url) {
   if (/arcgisonline\.com/.test(u.host)) return { status: 200, body: PNG, type: 'image/png' };
   if (/workers\.dev$/.test(u.host)) {
     if (MODE.down && /^\/(flights|lat|hex)/.test(u.pathname)) return j({ ok: false, upstream: 'adsb.lol: HTTP 403; adsb.fi: HTTP 429' });   // what the live relay answered
+    if (u.pathname === '/fr24/flight') {   // relay shape (relay/worker.js fr24Flight)
+      if (!MODE.fr24) return j({ ok: false, error: 'upstream', message: 'Flightradar24 HTTP 500 (their server had a problem)' }, 502);
+      const cs = u.searchParams.get('callsign');
+      if (cs === 'SWA1234') return j({ ok: true, lat: 36.2, lon: -86.75, alt_ft: 11000, gs_kt: 300, track: 50, vs_fpm: 0, callsign: 'SWA1234', flight: 'WN1234', reg: 'N8711Q', type: 'B38M',
+        orig: 'KMDW', dest: 'KBNA', ts: T() - 3000, hex: 'a1b2c3', source: 'Flightradar24', age_s: 0 });
+      if (cs === 'AAL55') return j({ ok: true, lat: 36.31, lon: -86.91, alt_ft: 12500, gs_kt: 330, track: 200, vs_fpm: -500, callsign: 'AAL55', flight: 'AA55', reg: 'N117AN', type: 'A321',
+        orig: 'KDFW', dest: 'KBNA', ts: T() - 3000, hex: 'a0beef', source: 'Flightradar24', age_s: 0 });
+      return j({ ok: false, error: 'not_found' }, 404);
+    }
     if (u.pathname === '/route') { if (!MODE.area) return j({ error: 'not allowed' }, 404);   // relay shape (relay/worker.js)
       return u.searchParams.get('callsign') === 'SWA1234' ? j({ ok: true, found: true, callsign: 'SWA1234', callsign_iata: 'WN1234', airline: { name: 'Southwest Airlines' },
         origin: { iata: 'ATL', icao: 'KATL', city: 'Atlanta' }, destination: { iata: 'SEA', icao: 'KSEA', city: 'Seattle' } }) : j({ ok: true, found: false }); }
@@ -293,6 +302,45 @@ await ev("document.getElementById('liveLeave').click()"); await sleep(300);
 ok('D leaving the flight hides the note', await ev("document.getElementById('typeNote').hidden"));
 const badD = logs.filter((l) => !/WebGL|GPU|three|THREE/.test(l));
 ok('D no exceptions / console errors', badD.length === 0, badD.slice(0, 3).join(' | '));
+
+// ================= E. Flightradar24 first for the pinned card (globe, on the site); free feeds take over when it fails
+MODE.fr24 = true; MODE.directDown = false; MODE.down = false;
+ok('E globe loads on the site', await openGlobe('?lat=36.12&lon=-86.68&z=8', { onSite: true, refreshMs: 1500, markMs: 100, lookupMs: 30, fr24EveryMs: 2000 }));
+await sleep(600);
+ok('E hovering a plane asks Flightradar24 for nothing (no credits on previews)', await (async () => { const [hx, hy] = await screenOf('a1b2c3'); await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hx, y: hy }); await sleep(800); return !seen.some((u) => /\/fr24\//.test(u)); })());
+[x, y] = await screenOf('a1b2c3'); await click(x, y);
+ok('E pinned card: /fr24/flight?callsign=SWA1234 asked first', await waitFor("__globe.S.sel && __globe.S.sel.ref.fr24 === true", 5000, 'fr24 fix') && seen.some((u) => /workers\.dev\/fr24\/flight\?callsign=SWA1234$/.test(u)));
+ok('E card says Flightradar24, route from FR24 (KMDW → KBNA), live', await waitFor("(() => { const t = document.getElementById('card').textContent; return /Flightradar24/.test(document.querySelector('#card .age').textContent) && /KMDW → KBNA/.test(t) && !!document.querySelector('#card .live'); })()", 4000, 'fr24 card'),
+  await ev("document.getElementById('card').textContent.slice(0, 300)"));
+ok('E label SIGNAL: "Flightradar24, live"', await waitFor("/SIGNAL: Flightradar24, live/.test(ImHereMark.label())", 4000, 'fr24 signal'), await ev('ImHereMark.label()'));
+await sleep(3500);
+ok('E free-feed refreshes do not overwrite the FR24 position of the followed flight', await ev("__globe.S.flights.get('a1b2c3').fr24 === true && __globe.S.flights.get('a1b2c3').altFt === 11000"));
+ok('E FR24 polled about every fr24EveryMs (not every frame)', (() => { const n = seen.filter((u) => /\/fr24\/flight/.test(u)).length; return n >= 2 && n <= 4; })(), String(seen.filter((u) => /\/fr24\/flight/.test(u)).length));
+await shot('E1-globe-fr24');
+MODE.fr24 = false;
+ok('E FR24 fails: the free feed position takes over, card and SIGNAL name the free feed', await waitFor("(() => { const f = __globe.S.flights.get('a1b2c3'); return f && !f.fr24 && f.altFt === 9000 && !/Flightradar24/.test(ImHereMark.label()) && !/Flightradar24/.test(document.querySelector('#card .age').textContent); })()", 9000, 'fr24 fallback'),
+  await ev('ImHereMark.label()'));
+ok('E no exceptions / console errors', logs.length === 0, logs.slice(0, 3).join(' | '));
+await ev('__globe.closeCard()');
+
+// ================= F. 737 ride: Flightradar24 first (?fr24=1 forces it off the site), smooth between fixes, free feeds when it fails
+MODE.fr24 = true; logs = []; seen.length = 0;
+await send('Page.navigate', { url: `http://127.0.0.1:${port}/737/?flight=a0beef&cs=AAL55&lat=36.300&lon=-86.900&fr24=1` });
+ok('F 737 joins and switches to Flightradar24', await waitFor("/Riding AAL55 .*Flightradar24/.test(document.getElementById('liveStatus').textContent)", 150000, '737 fr24'), await ev("document.getElementById('liveStatus').textContent"));
+ok('F asked /fr24/flight?callsign=AAL55', seen.some((u) => /workers\.dev\/fr24\/flight\?callsign=AAL55$/.test(u)));
+ok('F label SIGNAL: "Flightradar24, live"', await waitFor("/SIGNAL: Flightradar24, live/.test(ImHereMark.label())", 5000, '737 fr24 signal'), await ev('ImHereMark.label()'));
+const fa = await ev('ImHere737.getFlightData().altitude'); await sleep(2000);
+const fb = await ev('ImHere737.getFlightData().altitude');
+ok('F between fixes the aircraft moves on (dead reckoning: -500 fpm)', fb < fa - 5 && fb > fa - 40, `${fa.toFixed(1)} -> ${fb.toFixed(1)}`);
+const nHex = seen.filter((u) => /\/v2\/hex\/a0beef/.test(u)).length; await sleep(6000);
+ok('F while FR24 answers, the free feeds are not polled every few seconds', seen.filter((u) => /\/v2\/hex\/a0beef/.test(u)).length === nHex && seen.filter((u) => /\/fr24\/flight/.test(u)).length <= 2,
+  `hex ${seen.filter((u) => /\/v2\/hex\/a0beef/.test(u)).length - nHex}, fr24 ${seen.filter((u) => /\/fr24\/flight/.test(u)).length}`);
+ok('F no "signal lost" note 8 s after a 20 s FR24 fix', await ev("document.getElementById('sigNote').hidden"));
+await shot('F1-737-fr24');
+MODE.fr24 = false;
+ok('F FR24 fails: free feeds take over (SIGNAL names the free feed, live)', await waitFor("!/Flightradar24/.test(ImHereMark.label()) && ImHereMark.isLive() && /live ADS-B from/.test(document.getElementById('liveStatus').textContent)", 60000, '737 fallback'), await ev('ImHereMark.label()'));
+const badF = logs.filter((l) => !/WebGL|GPU|three|THREE/.test(l));
+ok('F no exceptions / console errors', badF.length === 0, badF.slice(0, 3).join(' | '));
 
 console.log(results.join('\n'));
 console.log(failures ? `\n${failures} FAILED` : '\nALL PASSED');

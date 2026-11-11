@@ -3,7 +3,7 @@
 // Only the visible area is loaded; wide views show counts instead of every icon.
 import { TinyMap } from './map.js';
 import { FlightFeed, is737, ageS, isLive, FRESH_S, predict, cluster, joinURL, typeName, airlineOf, classifyQuery, searchLocal,
-  boundsRadiusNm, loadShips, loadISS, ON_SITE, CardLookups, flightTitle } from './feeds.js';
+  boundsRadiusNm, loadShips, loadISS, ON_SITE, CardLookups, flightTitle, fetchFR24, FR24Follow, FR24_NAME, FR24_FRESH_S, FR24_EXTRAP_MAX } from './feeds.js';
 import { Backoff } from '../737/live-flights.js';
 
 const $ = (id) => document.getElementById(id);
@@ -27,7 +27,10 @@ const S = {
 };
 const feed = new FlightFeed({ fetchFn, onSite: TEST.onSite ?? ON_SITE });
 const looks = new CardLookups({ fetchFn, onSite: TEST.onSite ?? ON_SITE });
-window.__globe = { S, on, feed, looks, get map() { return map; } };   // for tests and the console
+// The flight on a pinned card (tap/click, not a hover preview) follows Flightradar24 first: relay /fr24/flight every 20 s,
+// dead reckoning between fixes; when FR24 fails the free feeds' positions take over again (FR24Follow rests, then retries).
+const FR = { follow: new FR24Follow({ enabled: !!(TEST.onSite ?? ON_SITE) && params.get('fr24') !== '0', every: TEST.fr24EveryMs || undefined }), hex: null, busy: false };
+window.__globe = { S, on, feed, looks, FR, get map() { return map; } };   // for tests and the console
 
 // ------------------------------------------------------------------ map
 const v0 = { lat: +params.get('lat') || saved.lat || 36.12, lon: +params.get('lon') || saved.lon || -86.68, zoom: +params.get('z') || saved.zoom || 7 };
@@ -78,6 +81,7 @@ async function loadFlights(force) {
     for (const f of r.flights) {
       if (!f.hex) continue;
       const old = S.flights.get(f.hex);
+      if (old && old.fr24 && FR.hex === f.hex && FR.follow.healthy(now)) { next.set(f.hex, old); continue; }   // followed with FR24
       if (old) {   // glide from where the plane is drawn to the new report (no jumps, also after a signal gap)
         const a = dispPos(old, now), p = predict(f, now), dla = a[0] - p[0], dlo = ((a[1] - p[1] + 540) % 360) - 180;
         if (Math.abs(dla) + Math.abs(dlo) > 1e-6 && Math.abs(dla) + Math.abs(dlo) < 3) f.ease = { dla, dlo, at: now };
@@ -131,7 +135,35 @@ async function loadIssNow(force) {
 async function loadWild() {
   try { const j = await (await fetchFn('wildlife-samples.json')).json(); S.wild = j.tracks || []; map.invalidate(); } catch (e) { S.wild = []; }
 }
-function refreshAll(force) { loadFlights(force); loadShipsNow(force); loadIssNow(force); }
+function refreshAll(force) { loadFlights(force); loadShipsNow(force); loadIssNow(force); followFR24(); }
+async function followFR24() {
+  const sel = S.sel && S.sel.kind === 'flight' && on.flights ? S.sel : null;
+  if (!sel) { FR.hex = null; return; }
+  const hex = sel.ref.hex;
+  if (FR.hex !== hex) { FR.hex = hex; FR.follow.reset(); }
+  if (FR.busy || !FR.follow.due()) return;
+  FR.busy = true;
+  try {
+    const r = await fetchFR24(sel.ref, { fetchFn });
+    if (!S.sel || S.sel.kind !== 'flight' || S.sel.ref.hex !== hex) return;   // card closed or another flight picked meanwhile
+    FR.follow.ok();
+    const now = Date.now(), old = S.flights.get(hex) || S.sel.ref, g = { ...old };
+    for (const [k, v] of Object.entries(r.flight)) if (v !== '' && v !== null && v !== undefined && k !== 'hex') g[k] = v;
+    if (!old.fr24 && old.fixAt > r.flight.fixAt + 10000) {   // the free feed is clearly newer: keep its position, take FR24's details only
+      for (const k of ['lat', 'lon', 'altFt', 'onGround', 'gs', 'track', 'vr', 'fixAt']) g[k] = old[k];
+      g.fr24 = false;
+    } else {
+      Object.assign(g, { fr24: true, freshS: FR24_FRESH_S, extrapS: FR24_EXTRAP_MAX });
+      const a = dispPos(old, now), p = predict(g, now), dla = a[0] - p[0], dlo = ((a[1] - p[1] + 540) % 360) - 180;
+      g.ease = Math.abs(dla) + Math.abs(dlo) > 1e-6 && Math.abs(dla) + Math.abs(dlo) < 3 ? { dla, dlo, at: now } : null;
+    }
+    S.flights.set(hex, g);
+    for (const o of [S.sel, S.hover]) if (o && o.kind === 'flight' && o.ref.hex === hex) o.ref = g;
+    if (S.pinned && S.pinned.hex === hex) S.pinned = g;
+    animate(EASE_MS);
+  } catch (e) { if (FR.hex === hex) FR.follow.fail(e); }
+  finally { FR.busy = false; status(); map.invalidate(); if (shown()) renderCard(); }
+}
 setInterval(() => { refreshAll(false); }, 1000);
 setInterval(() => { if (on.flights && map.zoom >= 6) map.invalidate(); if (shown()) renderCard(); status(); }, 1000);   // planes move between reports
 loadWild();
@@ -341,7 +373,7 @@ function cardParts(sel) {
       <dt>Heading</dt><dd>${f.track != null ? String(Math.round(f.track)).padStart(3, '0') + '°' : '—'}</dd>
       <dt>Speed</dt><dd>${f.gs != null ? n0(f.gs) + ' kt' : dim('not in the feed')}</dd>
       <dt>V/S</dt><dd>${vs}</dd></dl>
-      <div class="age">${live ? '<span class="live">● live</span> · ' : ''}last report ${fmtAge(a)} · ${esc(S.flightSrc || 'ADS-B')}${rt && rt.via !== 'feed' ? ' · route: adsbdb.com' : ''}</div>`;
+      <div class="age">${live ? '<span class="live">● live</span> · ' : ''}last report ${fmtAge(a)} · ${esc(f.fr24 ? FR24_NAME : S.flightSrc || 'ADS-B')}${rt && rt.via !== 'feed' ? ' · route: adsbdb.com' : ''}</div>`;
     P.go = `${b7 ? '' : `<div class="note">Cockpit shown is a 737-800; this flight is ${f.type ? article(typeName(f.type)) + ' ' + esc(typeName(f.type)) : 'of a type the feed did not report'}.</div>`}
       <a class="go" id="beThere" href="${esc(joinURL(f))}">Be there</a>`;
   } else if (sel.kind === 'ship') {
@@ -408,8 +440,11 @@ function status() {
   let lastFix = 0; for (const f of S.flights.values()) if (f.fixAt > lastFix && f.fixAt <= Date.now() + 5000) lastFix = f.fixAt;
   sigPill(lastFix);
   const MARK = window.ImHereMark; if (!MARK) return;
-  const fresh = on.flights && !S.flightErr && [...S.flights.values()].some((f) => isLive(f));
-  MARK.update({ signal: on.flights && S.flightAt ? { source: S.flightSrc, time: lastFix || S.flightAt } : { text: 'Map' }, view: 'Satellite imagery (Esri), not live' });
+  // a pinned flight followed with Flightradar24: SIGNAL names Flightradar24 and that flight's own report age
+  const sf = S.sel && S.sel.kind === 'flight' && on.flights && S.sel.ref.fr24 ? S.sel.ref : null;
+  const fresh = sf ? isLive(sf) : on.flights && !S.flightErr && [...S.flights.values()].some((f) => isLive(f));
+  MARK.update({ signal: sf ? { source: FR24_NAME, time: sf.fixAt } : on.flights && S.flightAt ? { source: S.flightSrc, time: lastFix || S.flightAt } : { text: 'Map' },
+    view: 'Satellite imagery (Esri), not live' });
   MARK.setLive(!!fresh);   // SIGNAL shows "live" only while reports are under 30 s old; otherwise their age
 }
 // "Signal lost, holding last positions, reconnecting… 42 s since last fix" while the flight feed is down

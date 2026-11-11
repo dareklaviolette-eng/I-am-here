@@ -98,4 +98,41 @@ const [pl] = F.predict({ lat: 0, lon: 0, gs: 360, track: 0, fixAt: T - 60000 }, 
 ok(Math.abs(pl - 0.05) < 0.002, 'dead reckoning capped at 30 s (360 kt north -> 3 nm)');
 const url = F.joinURL(fl[0]);
 ok(url === '../737/?flight=a1b2c3&cs=SWA1234&lat=36.200&lon=-86.700', 'Be there link: ' + url);
+
+// Flightradar24 through the relay (client side: 737/live-flights.js), mocked relay answers
+const L = await import(pathToFileURL(path.join(here, '..', '..', '737', 'live-flights.js')));
+ok(L.fr24Query({ flight: 'SWA1234 ', reg: 'N8711Q' }) === 'callsign=SWA1234' && L.fr24Query({ flight: '', reg: 'N8711Q' }) === 'reg=N8711Q' && L.fr24Query({ hex: 'a1b2c3' }) === null,
+  'FR24 query: callsign first, then registration, nothing for a bare hex');
+const FRJ = { ok: true, lat: 36.2, lon: -86.75, alt_ft: 11000, gs_kt: 300, track: 50, vs_fpm: -640, callsign: 'SWA1234', flight: 'WN1234', reg: 'N8711Q', type: 'b38m', orig: 'KMDW', dest: 'KBNA', ts: T - 3000, hex: 'A1B2C3', source: 'Flightradar24' };
+const pr = L.parseFR24(FRJ, T);
+ok(pr.hex === 'a1b2c3' && pr.flight === 'SWA1234' && pr.type === 'B38M' && pr.altFt === 11000 && pr.gs === 300 && pr.vr === -640 && pr.fixAt === T - 3000 && pr.orig === 'KMDW' && pr.fr24 === true,
+  'FR24 relay answer -> flight record (callsign as flight, fix time from ts)');
+ok(L.parseFR24({ ok: false, error: 'cap' }) === null, 'FR24 error answer is not a position');
+const fr = (status, body) => async (u) => { fr.last = u; return { ok: status === 200, status, json: async () => body }; };
+let got = await L.fetchFR24({ flight: 'SWA1234' }, { fetchFn: fr(200, FRJ) });
+ok(got.source === 'Flightradar24' && got.flight.lat === 36.2 && /\/fr24\/flight\?callsign=SWA1234$/.test(fr.last), 'fetchFR24 asks RELAY/fr24/flight?callsign=');
+const errOf = async (status, body) => { try { await L.fetchFR24({ flight: 'SWA1234' }, { fetchFn: fr(status, body) }); return null; } catch (e) { return e; } };
+const eCap = await errOf(429, { ok: false, error: 'cap' }), eNo = await errOf(503, { ok: false, error: 'not_configured' }), eNf = await errOf(404, { ok: false, error: 'not_found' });
+ok(eCap.code === 'cap' && eNo.code === 'not_configured' && eNf.code === 'not_found', 'fetchFR24 errors carry the relay code (cap, not_configured, not_found)');
+const fol = new L.FR24Follow({ every: 20000 });
+ok(fol.due(T) && !fol.healthy(T), 'follow: due at start, not yet healthy');
+fol.ok(T); ok(!fol.due(T + 19000) && fol.due(T + 20000) && fol.healthy(T + 19000), 'follow: next FR24 call 20 s after a fix; healthy meanwhile');
+fol.fail(eCap, T); ok(!fol.healthy(T) && !fol.due(T + 899000) && fol.due(T + 900000), 'follow: cap -> FR24 rests 15 min (free feeds meanwhile)');
+fol.fail(eNf, T); ok(fol.due(T + 120000) && !fol.due(T + 119000), 'follow: not found -> retry in 2 min');
+fol.fail(eNo, T); ok(!fol.due(T + 3599000), 'follow: not set up -> rests 1 h');
+ok(!new L.FR24Follow({ enabled: false }).due(T), 'follow: off the GitHub site it is never due');
+const tr = new L.Tracker();
+tr.onFix({ lat: 36, lon: -86, altFt: 10000, gs: 360, track: 0, vr: 0, fixAt: T - 1000 }, T);
+ok(!tr.onFix({ lat: 36, lon: -86, altFt: 10000, gs: 360, track: 0, vr: 0, fixAt: T - 3000 }, T), 'tracker: an older report is ignored');
+ok(tr.onFix({ lat: 36.001, lon: -86, altFt: 10000, gs: 360, track: 0, vr: 0, fixAt: T - 3000 }, T, true), 'tracker: an older report is taken when switching source (force)');
+tr.freshS = L.FR24_FRESH_S; tr.extrapMax = L.FR24_EXTRAP_MAX;
+const st40 = tr.state(T + 37000), st90 = tr.state(T + 90000);
+ok(st40.live && !st40.frozen && st40.lat > 36.05 && st90.frozen, 'tracker with FR24 limits: live 40 s after a fix, dead reckoning moves it on, holds after 75 s');
+const fp = F.predict({ lat: 0, lon: 0, gs: 360, track: 0, fixAt: T - 60000, extrapS: 75 }, T)[0];
+ok(Math.abs(fp - 0.1) < 0.003 && F.isLive({ fixAt: T - 40000, freshS: 50 }, T) && !F.isLive({ fixAt: T - 40000 }, T), 'globe: FR24 records dead-reckon up to 75 s and count as live up to 50 s');
+// globe area fallback: /fr24/area only after every free source failed, on the site
+const af = []; const areaFeed = new F.FlightFeed({ onSite: true, sources: sources.slice(0, 2), fetchFn: async (u) => { af.push(u); if (/fr24\/area/.test(u)) return mk({ ok: true, source: 'Flightradar24', now: T, flights: [{ ...FRJ, alt: 11000, gs: 300 }] }); throw new TypeError('blocked'); } });
+r = await areaFeed.load(b);
+ok(r.source === 'Flightradar24' && r.flights[0].hex === 'a1b2c3' && r.flights[0].fr24 && /fr24\/area\?bounds=37\.000,35\.000,-88\.000,-85\.000&limit=300$/.test(af[af.length - 1]) && af.filter((u) => /fr24/.test(u)).length === 1,
+  'globe: FR24 area (bounds N,S,W,E, limit 300) only as the last fallback');
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED'); process.exit(fails ? 1 : 0);
