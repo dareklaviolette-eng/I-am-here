@@ -1,0 +1,14 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sound test</title>
+<style>body{font:20px system-ui;background:#0b1220;color:#e8eef7;padding:24px;max-width:560px;margin:auto}button{display:block;width:100%;font-size:22px;padding:22px;margin:14px 0;border-radius:12px;border:0;background:#1d6e5a;color:#fff}pre{white-space:pre-wrap;background:#16233a;padding:14px;border-radius:8px;font-size:16px}</style></head>
+<body><h2>Sound test</h2>
+<button id="b1">1 · Play a tone</button>
+<button id="b2">2 · Speak with the browser voice</button>
+<pre id="o">Tap a button.</pre>
+<script>
+const o=document.getElementById('o');const log=t=>o.textContent+='\n'+t;
+document.getElementById('b1').onclick=()=>{o.textContent='Tone: playing for 1 second…';try{const c=new (window.AudioContext||window.webkitAudioContext)();c.resume();const g=c.createGain();g.gain.value=.3;const s=c.createOscillator();s.frequency.value=440;s.connect(g).connect(c.destination);s.start();s.stop(c.currentTime+1);log('If you heard a beep, your sound works.');}catch(e){log('Tone failed: '+e);}};
+document.getElementById('b2').onclick=()=>{o.textContent='';if(!('speechSynthesis' in window)){log('This browser has NO built-in voice.');return;}
+const v=speechSynthesis.getVoices();log('Voices available: '+v.length);let started=false;
+const u=new SpeechSynthesisUtterance('This is your tour through the heart.');u.onstart=()=>{started=true;log('Speaking now.');};u.onerror=e=>log('Voice error: '+e.error);
+speechSynthesis.cancel();speechSynthesis.speak(u);setTimeout(()=>{if(!started)log('The voice did not start. This browser cannot speak.');},2000);};
+</script></body></html>
