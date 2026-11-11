@@ -30,6 +30,7 @@
   #readout { font: 12px ui-monospace, monospace; line-height: 1.6; color: #cfe3ee; }
   #readout b { color: #fff; }
   .src { color: #7d93a3; font-size: 10px; margin-top: 8px; line-height: 1.4; }
+  #sceneryNote { color: #c4d6e3; font-size: 11px; min-height: 1.4em; }
   #loader { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; padding: 18px 22px;
     border-radius: 12px; background: #07131ee8; border: 1px solid var(--line); min-width: 240px; }
   #bar { height: 4px; background: #1a2c38; border-radius: 2px; margin-top: 10px; overflow: hidden; }
@@ -468,7 +469,7 @@ import { loadOurAirport, defaultEnd, nearestAirport } from './ourairports.js';
 import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit } from './live-flights.js';
 import { toLocal } from './airport-kit.js';
 import { fetchMetar, isLive as wxIsLive, summary as wxSummary, windComponents } from './weather.js';
-import { createGoogleScenery } from './google-scenery.js';
+import { createGoogleScenery, debugOverlay, debugLines } from './google-scenery.js';
 
 // Google Map Tiles API key. Safe to publish: Google only accepts it from https://dareklaviolette-eng.github.io/
 const GOOGLE_KEY = 'AIzaSyD5_qsBFe74zBURZ8UTYFzz_7es3dPSM9A';
@@ -823,10 +824,15 @@ function sceneryStep(dt, gy) {
   scenery.holder.position.set(-pos.x, gy, -pos.z);
   try { scenery.update(dt); } catch (e) { sceneryFail(e); return false; }
   const st = scenery.stats(); sceneryT += dt;
-  if (!st.loaded && (sceneryT > 25 || (st.failed >= 3 && sceneryT > 6))) { sceneryFail(st.lastError || 'no tiles arrived after 25 s'); return false; }
-  if ((creditClock += dt) > 1) { creditClock = 0; $('gattr').textContent = scenery.credits();
-    if (st.loaded) $('sceneryNote').textContent = st.aligned ? 'Google 3D tiles on (ground matched to runway)' : 'Google 3D tiles on'; }
-  return st.loaded > 0;
+  // give up only when nothing at all has appeared (tiles that load but fail to show count as nothing)
+  if (!st.visible && (sceneryT > 25 || (st.failed >= 3 && !st.loaded && sceneryT > 6))) {
+    sceneryFail(st.lastError || (st.requested ? 'no tiles showed after 25 s (' + st.requested + ' requested, ' + st.loaded + ' loaded)' : 'no tiles were requested after 25 s')); return false; }
+  if ((creditClock += dt) > 1) { creditClock = 0; $('gattr').textContent = scenery.credits(); }
+  const note = st.near ? (st.aligned ? 'Google 3D tiles on (ground matched to runway)' : 'Google 3D tiles on')
+      : st.visible ? 'Google 3D tiles streaming: detail near you not loaded yet…'
+      : 'Waiting for Google 3D tiles… (' + st.requested + ' requested, ' + st.loaded + ' loaded' + (st.failed ? ', ' + st.failed + ' failed' : '') + ')';
+  if ($('sceneryNote').textContent !== note) $('sceneryNote').textContent = note;
+  return st.near > 0;
 }
 // ---------------------------------------------------------------------------
 // Realism (test control): how strongly the Google tiles show over our own render. Auto by default from the time of day
@@ -840,7 +846,7 @@ let realNow = 0;   // eased blend actually applied (0..1)
 const saveReal = () => { try { localStorage.setItem('imhere737.realism', JSON.stringify({ auto: REAL.auto, manual: REAL.manual })); } catch (e) { /* private mode */ } };
 const realTarget = () => (REAL.auto ? REAL_AUTO[todName] : REAL.manual[todName]) / 100;
 function syncRealUI() {
-  const v = Math.round(realTarget() * 100), ready = !!(scenery && scenery.stats().loaded);
+  const v = Math.round(realTarget() * 100), ready = !!(scenery && scenery.stats().visible);
   $('realism').value = v; $('realVal').textContent = v + '%'; $('realAuto').checked = REAL.auto;
   $('realism').disabled = !ready; $('realRow').classList.toggle('off', !ready);
   $('realNote').textContent = ready ? (REAL.auto ? 'Auto: follows the time of day.' : 'Manual (remembered for ' + todName + ').')
@@ -1081,7 +1087,7 @@ function refreshMark() {
       source: cur ? 'FAA lighting records; the items below are assumptions' : 'Assumed from runway length, surface and type (OurAirports lists no lighting systems)',
       note: aptSrc && aptSrc.notes.length ? aptSrc.notes.join('\n') : '' });
   }
-  const tiles = scenery && scenery.stats().loaded > 0;
+  const tiles = scenery && scenery.stats().near > 0;
   items.push(tiles
     ? { kind: 'recorded', label: 'Ground scenery', source: 'Google Photorealistic 3D Tiles: aerial imagery captured on past dates, not live',
         note: 'Image credits are shown at the bottom right, as Google requires.' + (scenery.credits() ? ' Now: ' + scenery.credits() : '') }
@@ -1344,7 +1350,7 @@ const efb = (() => {
     if (tab === 'Time') ['day', 'dusk', 'night'].forEach((k, i) => B(X, Y + i * (chh + 14), cw, chh, k[0].toUpperCase() + k.slice(1), () => setTOD(k), todName === k));
     if (tab === 'Weather') { B(X, Y, cw, chh, 'Live (METAR)', () => setWeatherMode('live'), WX.mode === 'live'); B(X + cw + 14, Y, cw, chh, 'Clear', () => setWeatherMode('clear'), WX.mode === 'clear'); }
     if (tab === 'Realism') {
-      const ready = !!(scenery && scenery.stats().loaded);
+      const ready = !!(scenery && scenery.stats().visible);
       B(X, Y, cw, chh, 'Auto: ' + (REAL.auto ? 'on' : 'off'), () => setRealAuto(!REAL.auto), REAL.auto, !ready);
       B(X, Y + chh + 14, 120, chh, '−', () => setRealManual(realTarget() * 100 - 10), false, !ready);
       B(X + 290, Y + chh + 14, 120, chh, '+', () => setRealManual(realTarget() * 100 + 10), false, !ready);
@@ -1386,7 +1392,7 @@ const efb = (() => {
       if (WX.data) { g.fillStyle = '#7f8c99'; g.font = '400 20px ui-monospace, monospace'; wrapText(WX.data.raw, X, y + 12, 560, 28, 5); }
     }
     if (tab === 'Realism') { g.fillStyle = '#e8eef4'; g.font = '700 44px system-ui, sans-serif'; g.textAlign = 'center';
-      g.fillText(scenery && scenery.stats().loaded ? Math.round(realTarget() * 100) + '%' : '—', X + 205, 84 + 78 + 14 + 39); g.textAlign = 'left';
+      g.fillText(scenery && scenery.stats().visible ? Math.round(realTarget() * 100) + '%' : '—', X + 205, 84 + 78 + 14 + 39); g.textAlign = 'left';
       g.fillStyle = '#aab6c2'; g.font = '400 22px system-ui, sans-serif'; wrapText('Realism (test): how strongly Google 3D tiles show over our render. ' + $('realNote').textContent, X, 380, 560, 30, 5); }
     if (tab === 'Airport' && airport) { g.fillStyle = '#e8eef4'; g.font = '600 24px system-ui, sans-serif'; g.fillText(`${airport.data.icao} · runways`, X, 104); g.fillText('Go to airport', X, 314); }
     if (tab === 'Flight') { g.fillStyle = '#aab6c2'; g.font = '400 20px system-ui, sans-serif'; if (!JOIN.hex) g.fillText(JOIN.list.length ? '737s within 150 nm (tap to ride):' : 'Live ADS-B: 737s first.', X, 278); }
@@ -1454,7 +1460,13 @@ $('liveLeave').onclick = leaveFlight;
 $('realism').addEventListener('input', () => setRealManual(+$('realism').value));
 $('realAuto').addEventListener('change', () => setRealAuto($('realAuto').checked));
 setInterval(syncRealUI, 1000);   // enables the control once tiles have actually streamed in
-if (/github\.io$/i.test(location.hostname)) setScenery(true);   // Auto realism needs the tiles: load them where the key works
+if (/github\.io$/i.test(location.hostname)) setScenery(true);   // on by default on the GitHub site (the key only works there); off elsewhere
+if (params.get('debug') === '1') debugOverlay(() => debugLines(scenery, {
+  status: (sceneryOn ? 'on' : 'off') + ' · ' + ($('sceneryNote').textContent || '(no message)'),
+  realism: `blend ${realNow.toFixed(2)} → target ${realTarget().toFixed(2)} (${REAL.auto ? 'auto' : 'manual'}, ${todName}) · tiles drawn ${!!(scenery && scenery.holder.visible)}`,
+  'drawn ground': `${ground.visible ? 'visible' : 'HIDDEN'} · airport ${airport ? (airport.group.visible ? 'visible' : 'hidden') : 'not loaded'} · near plane ${camera.near}`,
+  host: location.hostname + (renderer.xr.isPresenting ? ' · in VR' : ''),
+}), { bottom: 58 });
 $('glogo').onerror = () => { const s = document.createElement('b'); s.textContent = 'Google'; $('glogo').replaceWith(s); };
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 

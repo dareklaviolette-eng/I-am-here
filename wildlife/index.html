@@ -1185,14 +1185,18 @@ if (MARK) MARK.init({ context: 'Wildlife', below: ['header'], zIndex: 4 });
 // Google Photorealistic 3D Tiles under the animal (GitHub build only: tools/build-github.mjs injects the domain-restricted
 // key; the claude.ai artifact has no key and keeps the procedural landscape). Same module as the 737 (google-scenery.js).
 const GOOGLE_KEY = 'AIzaSyD5_qsBFe74zBURZ8UTYFzz_7es3dPSM9A';   // restricted to dareklaviolette-eng.github.io
-const GTILES = { sc: null, trying: false, failed: false, ready: false, t: 0, creditT: 0 };
+const GTILES = { sc: null, trying: false, failed: false, ready: false, t: 0, creditT: 0, nearT: 0, status: 'not started', mod: null };
+const HERE = typeof location !== 'undefined' ? location : { hostname: '', search: '' };
+const ON_GITHUB = /github\.io$/i.test(HERE.hostname), WL_DEBUG = new URLSearchParams(HERE.search).get('debug') === '1';
 const wlTilesOn = () => !!(GTILES.sc && GTILES.ready && world && world.mode === 'land');
 async function startTiles() {
   if (!GOOGLE_KEY || GTILES.sc || GTILES.trying || GTILES.failed) return;
-  GTILES.trying = true;
+  GTILES.trying = true; GTILES.status = 'Loading real scenery…';
   try {
     const [gs, gl, dr] = await Promise.all([import('./google-scenery.js'), import('three/addons/loaders/GLTFLoader.js'), import('three/addons/loaders/DRACOLoader.js')]);
-    const sc = await gs.createGoogleScenery({ THREE, GLTFLoader: gl.GLTFLoader, DRACOLoader: dr.DRACOLoader, renderer, camera, key: GOOGLE_KEY });
+    GTILES.mod = gs;
+    const sc = await gs.createGoogleScenery({ THREE, GLTFLoader: gl.GLTFLoader, DRACOLoader: dr.DRACOLoader, renderer, camera, key: GOOGLE_KEY,
+      onStatus: (t) => { GTILES.status = t; } });
     sc.holder.rotation.y = Math.PI;   // tiles frame (x west, z north) -> this world (x east, z south)
     scene.add(sc.holder); GTILES.sc = sc; GTILES.t = 0; placeTiles();
     const logo = document.createElement('img'); logo.alt = 'Google'; logo.src = 'https://www.google.com/images/branding/googlelogo/2x/googlelogo_light_color_272x92dp.png';
@@ -1202,12 +1206,12 @@ async function startTiles() {
   finally { GTILES.trying = false; }
 }
 function tilesFailed(why) {   // say why in plain words (HTTP status + Google's message), then keep the procedural landscape
-  GTILES.why = String(why || 'unknown error').replace(/[?&]key=[^&\s]+/g, '');
+  GTILES.why = String(why || 'unknown error').replace(/[?&]key=[^&\s]+/g, ''); GTILES.status = 'failed: ' + GTILES.why;
   toast('Real scenery failed: ' + GTILES.why + '. Showing the drawn landscape instead.', 12000);
 }
 function placeTiles() {
   if (!GTILES.sc || !cur) return;
-  GTILES.ready = false; GTILES.t = 0;
+  GTILES.ready = false; GTILES.t = 0; GTILES.nearT = 0;
   GTILES.sc.setOrigin(cur.lat0, cur.lon0, 0);
   const pts = [], step = Math.max(1, Math.floor(cur.n / 8));   // align the real ground to this world's ground under the track
   for (let i = 0; i < cur.n && pts.length < 8; i += step) pts.push([-cur.x[i], -cur.z[i]]);
@@ -1217,15 +1221,29 @@ function tilesStep(dt) {
   const sc = GTILES.sc; if (!sc) return;
   const land = world && world.mode === 'land';
   sc.holder.visible = land; sc.holder.position.set(-ORIGIN.x, 0, -ORIGIN.z);
-  if (land) { try { sc.update(dt); } catch (e) { GTILES.failed = true; sc.dispose(); GTILES.sc = null; $('#gcredit').hidden = true; tilesFailed(e.message); return; } }
-  const st = sc.stats(); GTILES.t += dt;
-  if (st.loaded > 0) GTILES.ready = true;
-  else if ((GTILES.t > 25 || (st.failed >= 3 && GTILES.t > 6)) && land) { GTILES.failed = true; sc.dispose(); GTILES.sc = null; $('#gcredit').hidden = true; tilesFailed(st.lastError || 'no tiles arrived after 25 s'); return; }   // fall back
+  if (land) { try { sc.update(dt); } catch (e) { GTILES.failed = true; sc.dispose(); GTILES.sc = null; GTILES.ready = false; $('#gcredit').hidden = true;
+    if (terrain.mesh) terrain.mesh.visible = true; cedars.visible = hards.visible = water.visible = true; tilesFailed(e.message); return; } }
+  const st = sc.stats(); GTILES.t += dt; GTILES.status = st.stage;
+  // Hide the drawn landscape only once detailed real ground is on screen near the camera (and matched in height,
+  // or has had a few seconds to match). Coarse first tiles sit far below the surface: hiding the landscape for those
+  // left only fog and sky, which was the white ground.
+  GTILES.nearT = st.near > 0 ? GTILES.nearT + dt : 0;
+  if (land) GTILES.ready = GTILES.nearT > 0.5 && (st.aligned || GTILES.nearT > 8);
+  if (!st.visible && land && (GTILES.t > 25 || (st.failed >= 3 && !st.loaded && GTILES.t > 6))) { GTILES.failed = true; sc.dispose(); GTILES.sc = null; GTILES.ready = false; $('#gcredit').hidden = true;
+    if (terrain.mesh) terrain.mesh.visible = true; cedars.visible = hards.visible = water.visible = true;
+    tilesFailed(st.lastError || (st.requested ? 'no tiles showed after 25 s (' + st.requested + ' requested, ' + st.loaded + ' loaded)' : 'no tiles were requested after 25 s')); return; }   // fall back
   const real = wlTilesOn();
   if (terrain.mesh) terrain.mesh.visible = !real; cedars.visible = hards.visible = water.visible = !real;
   if ((GTILES.creditT += dt) > 1) { GTILES.creditT = 0; $('#gattr').textContent = sc.credits(); }
 }
-startTiles();
+if (ON_GITHUB || new URLSearchParams(HERE.search).get('scenery') === '1') startTiles();   // on by default on the GitHub site only (the key works only there)
+else GTILES.status = 'off (real scenery loads on the GitHub site)';
+if (WL_DEBUG) import('./google-scenery.js').then((gs) => gs.debugOverlay(() => gs.debugLines(GTILES.sc, {
+  status: GTILES.status + (GTILES.why ? ' · ' + GTILES.why : ''),
+  realism: 'blend 1.00 (tiles fully opaque on this page) · tiles drawn ' + !!(GTILES.sc && GTILES.sc.holder.visible) + ' · using real ground ' + wlTilesOn(),
+  'drawn terrain': (terrain.mesh ? (terrain.mesh.visible ? 'visible' : 'HIDDEN') : 'not built') + ' · trees ' + (cedars.visible ? 'visible' : 'hidden') + ' · mode ' + (world ? world.mode : '?'),
+  host: HERE.hostname + (renderer.xr.isPresenting ? ' · in VR' : ''),
+}), { bottom: 74 })).catch(() => {});
 const markXR = MARK ? MARK.xrPanel(THREE) : null;   // the I'M HERE card: small HUD tag low in the corner of view in VR
 if (markXR) { markXR.visible = false; camera.add(markXR);
   renderer.xr.addEventListener('sessionstart', () => { markXR.visible = true; }); renderer.xr.addEventListener('sessionend', () => { markXR.visible = false; }); }
