@@ -8,7 +8,7 @@
 //      A point query reaches at most 250 nm, so a wide view loads around its centre only (the page says so).
 //   /flights/summary (if the relay has it) gives counts for views too wide to load aircraft.
 // Nothing is invented: a value the feed did not send stays null and the card says "not in the feed".
-import { SOURCES, RELAY, COCKPIT_737, parseV2, parseOpenSky, distNm } from '../737/live-flights.js';
+import { SOURCES, RELAY, COCKPIT_737, parseV2, parseOpenSky, distNm, getFlightJSON, SourcePool } from '../737/live-flights.js';
 export { RELAY, COCKPIT_737, distNm };
 
 export const ON_SITE = typeof location !== 'undefined' && /(^|\.)dareklaviolette-eng\.github\.io$/i.test(location.hostname);
@@ -74,37 +74,39 @@ async function getJSON(url, fetchFn, timeoutMs = 7000) {
   } finally { if (to) clearTimeout(to); }
 }
 
-// Flight loader with memory of what works. One instance per page.
+// Flight loader. One instance per page. Primary: the DIRECT browser feeds (airplanes.live, adsb.lol, adsb.fi), one request per
+// refresh, taken in turn (SourcePool); a source that fails rests (2 min after HTTP 429). Then the relay (point route, then
+// /flights/area) and OpenSky. Any 404, non-JSON or { ok: false } from a relay route = "route unavailable": next path, same refresh.
 export class FlightFeed {
   constructor({ fetchFn = (u, o) => fetch(u, o), onSite = ON_SITE, sources = SOURCES } = {}) {
-    this.fetchFn = fetchFn; this.onSite = onSite; this.sources = sources;
+    this.fetchFn = fetchFn; this.onSite = onSite; this.sources = sources; this.pool = new SourcePool(sources);
     this.relayArea = onSite ? null : false;      // null = unknown, true/false once tried
     this.relaySummary = onSite ? null : false;
     this.relayFind = onSite ? null : false;
-    this.pointPref = null;                        // name of the point source that answered last
   }
-  // -> { source, flights, coverage: 'view' | { lat, lon, nm } , note }
+  // -> { source, flights, coverage: 'view' | { lat, lon, nm } }
   async load(b) {
-    const errs = [];
-    const radius = boundsRadiusNm(b);
-    if (this.relayArea !== false && radius < 1500) {
-      try {
-        const j = await getJSON(areaURL(b), this.fetchFn), t = Date.now();
-        this.relayArea = true;
-        return { source: 'I\'M HERE relay (adsb.lol / adsb.fi)', flights: parseFlights(j, t), coverage: 'view' };
-      } catch (e) { if (e.status === 404 || e.status === 400) this.relayArea = false; errs.push('relay area: ' + e.message); }
-    }
+    const errs = [], radius = boundsRadiusNm(b);
     const [la, lo] = boundsCenter(b), nm = Math.max(5, Math.min(POINT_MAX_NM, Math.ceil(radius)));
-    const order = this.pointPref ? [...this.sources].sort((x, y) => (y.name === this.pointPref) - (x.name === this.pointPref)) : this.sources;
+    const order = this.pool.order(), relayArea = this.relayArea !== false && radius < 1500;
     for (const s of order) {
+      if (s.opensky && relayArea) { const r = await this._area(b, errs); if (r) return r; }   // the relay's area route before OpenSky
       try {
-        const j = await getJSON(s.point(la, lo, nm), this.fetchFn), t = Date.now();
-        this.pointPref = s.name;
+        const j = await getFlightJSON(s.point(la, lo, nm), this.fetchFn, 6000), t = Date.now();
+        this.pool.ok(s.name);
         const flights = (s.opensky ? parseOpenSky(j, t).map((f) => ({ ...f, orig: '', dest: '' })) : parseFlights(j, t));
         return { source: s.name, flights, coverage: radius > POINT_MAX_NM ? { lat: la, lon: lo, nm } : 'view' };
-      } catch (e) { errs.push(s.name + ': ' + e.message); }
+      } catch (e) { this.pool.fail(s.name, e.status); errs.push(s.name + ': ' + e.message); }
     }
+    if (relayArea && !order.some((s) => s.opensky)) { const r = await this._area(b, errs); if (r) return r; }
     const err = new Error('No live flight source reachable (' + errs.join('; ') + ')'); err.all = errs; throw err;
+  }
+  async _area(b, errs) {
+    try {
+      const j = await getFlightJSON(areaURL(b), this.fetchFn, 6000), t = Date.now();
+      this.relayArea = true;
+      return { source: 'I\'M HERE relay', flights: parseFlights(j, t), coverage: 'view' };
+    } catch (e) { if (e.status === 404 || e.status === 400) this.relayArea = false; errs.push('relay area: ' + e.message); return null; }
   }
   // World/region counts for wide views, if the relay has /flights/summary. -> [{ lat, lon, n }] or null
   async summary(b) {
@@ -112,6 +114,7 @@ export class FlightFeed {
     try {
       const f = (x) => (+x).toFixed(2);
       const j = await getJSON(`${RELAY}/flights/summary?lamin=${f(b.s)}&lomin=${f(b.w)}&lamax=${f(b.n)}&lomax=${f(b.e)}`, this.fetchFn);
+      if (!j || j.ok === false) { this.relaySummary = false; return null; }
       this.relaySummary = true; return parseSummary(j);
     } catch (e) { if (e.status === 404 || e.status === 400) this.relaySummary = false; return null; }
   }
@@ -119,17 +122,18 @@ export class FlightFeed {
   async find(q) {
     const k = classifyQuery(q); if (!k.flightLike) return null;
     const tries = [];
-    if (this.relayFind !== false) tries.push({ url: `${RELAY}/flights/find?q=${encodeURIComponent(k.raw)}`, relay: true });
     const direct = ['https://api.airplanes.live/v2/', 'https://api.adsb.lol/v2/'];
     for (const base of direct) {
       if (k.hex) tries.push({ url: base + 'hex/' + k.hex });
       for (const cs of k.callsigns) tries.push({ url: base + 'callsign/' + cs });
       if (k.reg) tries.push({ url: base + 'reg/' + k.reg });
     }
-    if (this.onSite && k.hex) tries.unshift({ url: `${RELAY}/hex/${k.hex}` });
+    if (this.relayFind !== false) tries.push({ url: `${RELAY}/flights/find?q=${encodeURIComponent(k.raw)}`, relay: true });   // relay last
+    if (this.onSite && k.hex) tries.push({ url: `${RELAY}/hex/${k.hex}` });
     for (const t of tries) {
       try {
-        const j = await getJSON(t.url, this.fetchFn, 6000), list = Array.isArray(j) || j.ac || j.aircraft || j.flights ? parseFlights(j) : [normFlight(j.flight || j, Date.now())].filter(Boolean);
+        const j = await getJSON(t.url, this.fetchFn, 6000); if (!j || j.ok === false) throw Object.assign(new Error('unavailable'), { status: 404 });
+        const list = Array.isArray(j) || j.ac || j.aircraft || j.flights ? parseFlights(j) : [normFlight(j.flight || j, Date.now())].filter(Boolean);
         if (t.relay) this.relayFind = true;
         const hit = pickMatch(list, k); if (hit) return hit;
       } catch (e) { if (t.relay && (e.status === 404 || e.status === 400)) this.relayFind = false; }
@@ -283,4 +287,98 @@ export function joinURL(f, base = '../737/') {
   if (f.flight) p.set('cs', f.flight.replace(/\s+/g, ''));
   p.set('lat', f.lat.toFixed(3)); p.set('lon', f.lon.toFixed(3));
   return base + '?' + p.toString();
+}
+
+// ------------------------------------------------------------------ card extras: route, aircraft photo, species photo
+// Route (origin -> destination) for a callsign: relay /route?callsign= first on the GitHub site (when it answers), then
+// adsbdb directly (https://api.adsbdb.com/v0/callsign/<cs>). Routes are looked up by callsign, so they can be out of date.
+// Shapes read loosely: adsbdb { response: { flightroute: { origin: { iata_code, icao_code, municipality }, destination, airline } } },
+// or { route | flightroute: ... }, or flat { orig/origin, dest/destination } with codes or objects.
+const apCode = (a) => (a == null ? '' : typeof a === 'string' ? a.trim().toUpperCase() : str(a.iata_code ?? a.iata ?? a.icao_code ?? a.icao ?? a.code).toUpperCase());
+const apCity = (a) => (a && typeof a === 'object' ? str(a.municipality ?? a.city ?? a.name) : '');
+export function parseRoute(j) {
+  if (!j || typeof j !== 'object') return null;
+  const r = (j.response && typeof j.response === 'object' && (j.response.flightroute || j.response.route)) || j.flightroute || j.route || j;
+  if (!r || typeof r !== 'object') return null;
+  const o = r.origin ?? r.orig ?? r.from ?? r.dep ?? r.departure, d = r.destination ?? r.dest ?? r.to ?? r.arr ?? r.arrival;
+  const orig = apCode(o), dest = apCode(d);
+  if (!orig || !dest) return null;
+  const al = r.airline && typeof r.airline === 'object' ? r.airline : null;
+  return { orig, dest, origCity: apCity(o), destCity: apCity(d), airline: al ? str(al.name) : str(r.airline_name ?? r.airline),
+    flightIata: str(r.callsign_iata ?? r.flight_iata ?? r.iata) };
+}
+// Planespotters photo of one airframe (https://api.planespotters.net/pub/photos/hex/<hex>): thumbnail only, with the
+// photographer and the link back to the photo page, as their terms ask. Relay /photo?hex= first on the GitHub site.
+export function parsePhoto(j) {
+  const p = j && Array.isArray(j.photos) ? j.photos[0] : j && j.photo ? j.photo : null;
+  if (!p) return null;
+  const th = p.thumbnail || p.thumb || {}, src = str(th.src ?? th.url ?? (typeof p.thumbnail === 'string' ? p.thumbnail : ''));
+  if (!/^https:\/\//.test(src)) return null;
+  const size = th.size || {};
+  return { src, w: num(size.width ?? th.width) || 200, h: num(size.height ?? th.height) || 133, link: /^https:\/\//.test(str(p.link)) ? str(p.link) : 'https://www.planespotters.net/',
+    by: str(p.photographer ?? p.author) || 'unknown photographer' };
+}
+// Species photo for the SAMPLE wildlife tracks: the lead image of the species' Wikipedia article, from Wikimedia Commons,
+// with the author and licence from Commons. Only a species picture: never a photo of the (made-up) tagged animal.
+const stripTags = (h) => String(h || '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/\s+/g, ' ').trim();
+export function parseCommonsInfo(j) {
+  const pages = j && j.query && j.query.pages, pg = pages && Object.values(pages)[0], ii = pg && pg.imageinfo && pg.imageinfo[0];
+  if (!ii) return null;
+  const src = str(ii.thumburl || ii.url); if (!/^https:\/\//.test(src)) return null;
+  const m = ii.extmetadata || {}, v = (k) => (m[k] && m[k].value) || '';
+  return { src, link: str(ii.descriptionurl) || 'https://commons.wikimedia.org/', by: stripTags(v('Artist')).slice(0, 80) || 'see Wikimedia Commons',
+    license: stripTags(v('LicenseShortName')).slice(0, 40), licenseUrl: str(v('LicenseUrl')) };
+}
+export class CardLookups {
+  constructor({ fetchFn = (u, o) => fetch(u, o), onSite = ON_SITE } = {}) {
+    this.fetchFn = fetchFn; this.onSite = onSite; this.relay = { route: onSite ? null : false, photo: onSite ? null : false };
+    this.cache = new Map();
+  }
+  // relay first (if it has the route and answers), then the direct API. A 404 from the relay means "no such route on it".
+  async _try(kind, relayUrl, directUrl, parse) {
+    if (this.relay[kind] !== false) {
+      try { const j = await getJSON(relayUrl, this.fetchFn, 5000), v = parse(j); this.relay[kind] = true;
+        if (v || (j && j.found === false)) return { v, via: 'relay' }; }   // the relay asked upstream already: "none on file" is an answer
+      catch (e) { if (e.status === 404 && this.relay[kind] === null) this.relay[kind] = false; }
+    }
+    const v = parse(await getJSON(directUrl, this.fetchFn, 6000)); return { v, via: 'direct' };
+  }
+  _memo(key, fn) {   // one request per key; a failure is retried after a minute
+    const c = this.cache.get(key); if (c && (c.ok || Date.now() - c.at < 60000)) return c.p;
+    const e = { at: Date.now(), ok: false, settled: false };
+    e.p = fn().then((r) => { e.ok = true; e.settled = true; return r; }, () => { e.settled = true; return null; }); this.cache.set(key, e); return e.p;
+  }
+  peek(key) { const c = this.cache.get(key); return c && c.ok ? c.val : undefined; }
+  state(key) { const c = this.cache.get(key); return !c ? 'none' : !c.settled ? 'wait' : c.ok ? 'ok' : 'fail'; }   // fail: not reachable
+  route(callsign) {
+    const cs = String(callsign || '').toUpperCase().replace(/\s+/g, ''); if (!/^[A-Z0-9]{3,8}$/.test(cs)) return Promise.resolve(null);
+    const key = 'route:' + cs;
+    return this._memo(key, async () => { const r = await this._try('route', `${RELAY}/route?callsign=${cs}`, `https://api.adsbdb.com/v0/callsign/${cs}`, parseRoute);
+      const val = r.v ? { ...r.v, via: r.via } : null; this.cache.get(key).val = val; return val; });
+  }
+  photo(hex) {
+    const h = String(hex || '').toLowerCase(); if (!/^[0-9a-f]{6}$/.test(h)) return Promise.resolve(null);
+    const key = 'photo:' + h;
+    return this._memo(key, async () => { const r = await this._try('photo', `${RELAY}/photo?hex=${h}`, `https://api.planespotters.net/pub/photos/hex/${h}`, parsePhoto);
+      this.cache.get(key).val = r.v; return r.v; });
+  }
+  species(wikiTitle) {
+    const t = String(wikiTitle || ''); if (!t) return Promise.resolve(null);
+    const key = 'species:' + t;
+    return this._memo(key, async () => {
+      const j = await getJSON(`https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=pageimages&piprop=name&titles=${encodeURIComponent(t)}`, this.fetchFn);
+      const pg = j && j.query && j.query.pages && Object.values(j.query.pages)[0], file = pg && pg.pageimage;
+      if (!file) { this.cache.get(key).val = null; return null; }
+      const info = parseCommonsInfo(await getJSON('https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=320&titles=' +
+        encodeURIComponent('File:' + file), this.fetchFn));
+      this.cache.get(key).val = info; return info;
+    });
+  }
+}
+// "Southwest 1234" from SWA1234; null when the callsign is not airline-style or the airline is not known.
+export function flightTitle(cs, airlineName = '') {
+  const m = /^([A-Z]{3})(\d{1,4}[A-Z]{0,2})$/.exec(String(cs || '').toUpperCase().replace(/\s+/g, ''));
+  if (!m) return null;
+  const name = AIRLINE_NAME[m[1]] || airlineName.replace(/\s+(Air ?lines|Airways)$/i, '') || '';
+  return name ? { airline: name, number: m[2], text: name + ' ' + m[2] } : null;
 }

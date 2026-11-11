@@ -24,28 +24,43 @@ ok(alt[0].hex === 'a1b2c4' && alt[0].flight === 'DAL9' && alt[0].altFt === 30000
 const os = F.parseFlights({ states: [['a1b2c3', 'SWA1234 ', 'US', 0, T / 1000 - 2, -86.745, 35.98, 1889, false, 108, 20.5, -4.5, null, 1900]] }, T);
 ok(os.length === 1 && os[0].type === '' && Math.round(os[0].gs) === 210, 'OpenSky shape accepted');
 
-// FlightFeed: relay area first on site; 404 -> remembers and falls back to point sources
-const calls = []; let areaStatus = 404;
+// FlightFeed: DIRECT browser feeds first, one request per refresh, taken in turn; relay (point, then area) only as a fallback;
+// any 404 / non-JSON / { ok:false } from a relay route = unavailable -> next path in the same refresh
+const calls = []; let mode = { direct: 200, relayPoint: 'okfalse', area: 404 };
 const mk = (j, s = 200) => ({ ok: s === 200, status: s, json: async () => j });
-const fetchFn = async (u) => { calls.push(u); if (/flights\/area/.test(u)) return areaStatus === 200 ? mk(V2) : mk({ error: 'not allowed' }, areaStatus);
-  if (/workers\.dev\/lat\//.test(u)) return mk(V2); throw new TypeError('blocked'); };
-const sources = [{ name: 'relay-point', point: (la, lo, nm) => `https://imhere-flights.bt4w8jn5ty.workers.dev/lat/${la.toFixed(4)}/lon/${lo.toFixed(4)}/dist/${nm}` },
-  { name: 'airplanes.live', point: (la, lo, nm) => `https://api.airplanes.live/v2/point/${la}/${lo}/${nm}` }];
+const fetchFn = async (u) => { calls.push(u);
+  if (/flights\/area/.test(u)) return mode.area === 200 ? mk(V2) : mk({ error: 'not allowed' }, mode.area);
+  if (/workers\.dev\/lat\//.test(u)) return mode.relayPoint === 'okfalse' ? mk({ ok: false, upstream: 'adsb.lol: HTTP 403' }) : mode.relayPoint === 'html' ? { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token <'); } } : mk(V2);
+  if (/airplanes\.live|adsb\.lol/.test(u)) { if (mode.direct === 200) return mk(V2); if (mode.direct === 'blocked') throw new TypeError('Load failed'); return mk({}, mode.direct); }
+  throw new TypeError('blocked'); };
+const sources = [{ name: 'airplanes.live', primary: true, point: (la, lo, nm) => `https://api.airplanes.live/v2/point/${la}/${lo}/${nm}` },
+  { name: 'adsb.lol', primary: true, point: (la, lo, nm) => `https://api.adsb.lol/v2/point/${la}/${lo}/${nm}` },
+  { name: 'relay-point', point: (la, lo, nm) => `https://imhere-flights.bt4w8jn5ty.workers.dev/lat/${la.toFixed(4)}/lon/${lo.toFixed(4)}/dist/${nm}` }];
 const feed = new F.FlightFeed({ fetchFn, onSite: true, sources });
 const b = { s: 35, n: 37, w: -88, e: -85 };
 let r = await feed.load(b);
-ok(r.source === 'relay-point' && r.flights.length === 3 && feed.relayArea === false && /flights\/area\?lamin=35\.000&lomin=-88\.000&lamax=37\.000&lomax=-85\.000/.test(calls[0]), 'relay /flights/area 404 -> point fallback, remembered');
+ok(r.source === 'airplanes.live' && r.flights.length === 3 && calls.length === 1, 'direct feed first: one request per refresh');
 calls.length = 0; r = await feed.load(b);
+ok(r.source === 'adsb.lol' && calls.length === 1, 'next refresh goes to the next direct feed (requests spread across sources)');
+mode.direct = 'blocked'; mode.area = 200; calls.length = 0; r = await feed.load(b);
+ok(/relay/.test(r.source) && r.flights.length === 3 && feed.relayArea === true && calls.some((u) => /workers\.dev\/lat\//.test(u)), 'direct feeds down, relay point answers {ok:false} -> relay /flights/area in the same refresh');
+mode.relayPoint = 'html'; mode.area = 404; let err = '';
+const feed3 = new F.FlightFeed({ fetchFn, onSite: true, sources }); try { await feed3.load(b); } catch (e) { err = e.message; }
+ok(/No live flight source reachable/.test(err) && feed3.relayArea === false, 'non-JSON relay answer and a 404 area route are "unavailable" (error, never an empty list)');
+calls.length = 0; try { await feed3.load(b); } catch (e) { /* */ }
 ok(!calls.some((u) => /flights\/area/.test(u)), 'after a 404 the area route is not asked again');
-const feed2 = new F.FlightFeed({ fetchFn, onSite: true, sources }); areaStatus = 200;
-r = await feed2.load(b);
-ok(feed2.relayArea === true && r.coverage === 'view' && /relay/.test(r.source), 'relay /flights/area used when present');
+mode = { direct: 429, relayPoint: 'okfalse', area: 404 };
+const feed4 = new F.FlightFeed({ fetchFn, onSite: false, sources: sources.slice(0, 2) }); try { await feed4.load(b); } catch (e) { /* */ }
+mode.direct = 200; calls.length = 0;
+const p4 = new F.FlightFeed({ fetchFn, onSite: false, sources: sources.slice(0, 2) }); p4.pool.fail('airplanes.live', 429);
+r = await p4.load(b);
+ok(r.source === 'adsb.lol' && !calls.some((u) => /airplanes\.live/.test(u)), 'a source that answered 429 rests (the next one is asked)');
 const offsite = new F.FlightFeed({ fetchFn, onSite: false, sources }); calls.length = 0;
 await offsite.load(b);
 ok(!calls.some((u) => /flights\/area/.test(u)), 'off the GitHub site the relay area route is not tried (CORS is locked to the site)');
-r = await feed.load({ s: 20, n: 50, w: -110, e: -70 });
+r = await offsite.load({ s: 20, n: 50, w: -110, e: -70 });
 ok(r.coverage !== 'view' && r.coverage.nm === 250, 'wide view: point query capped at 250 nm, coverage reported');
-let err = ''; try { await new F.FlightFeed({ fetchFn: async () => { throw new TypeError('blocked'); }, onSite: false, sources }).load(b); } catch (e) { err = e.message; }
+err = ''; try { await new F.FlightFeed({ fetchFn: async () => { throw new TypeError('blocked'); }, onSite: false, sources }).load(b); } catch (e) { err = e.message; }
 ok(/No live flight source reachable/.test(err), 'clear error when every source fails');
 
 // search classification
@@ -61,7 +76,7 @@ ok(F.searchLocal(items, 'WN1234')[0].kind === 'flight' && F.searchLocal(items, '
 // find(): relay /flights/find absent -> direct callsign endpoint
 const f2 = new F.FlightFeed({ onSite: true, sources, fetchFn: async (u) => /flights\/find/.test(u) ? mk({}, 404) : /callsign\/SWA1234$/.test(u) ? mk(V2) : mk({ ac: [] }) });
 const found = await f2.find('WN1234');
-ok(found && found.hex === 'a1b2c3' && f2.relayFind === false, 'find WN1234 worldwide via callsign SWA1234 (relay find missing)');
+ok(found && found.hex === 'a1b2c3', 'find WN1234 worldwide via the direct callsign endpoint (relay only as a fallback)');
 
 // ships / ISS / clustering / links
 const ships = F.parseShips({ ships: [{ mmsi: 366999, name: 'TEST VESSEL@@', lat: 37.8, lon: -122.4, sog: 12.1, cog: 45, at: T - 5000 }, { MetaData: { MMSI: 1, ShipName: 'X', latitude: 1, longitude: 2, time_utc: '2026-11-10 12:00:00.123456789 +0000 UTC' } }] }, T);

@@ -15,13 +15,18 @@
 // falls through to the direct feeds below.
 export const RELAY = 'https://imhere-flights.bt4w8jn5ty.workers.dev';
 const onSite = typeof location !== 'undefined' && /(^|\.)dareklaviolette-eng\.github\.io$/i.test(location.hostname);
+// Order matters: the DIRECT browser feeds (CORS-enabled, free, about 1 request/s each) are the primary path; the relay's
+// upstreams are often blocked from Cloudflare's datacenter IPs, so it is only a fallback, then OpenSky (tight anonymous limits).
+// primary: true = taken in turn (SourcePool spreads the requests across them).
 export const SOURCES = [
-  ...(onSite ? [{ name: 'adsb.lol/adsb.fi (relay)', point: (la, lo, nm) => `${RELAY}/lat/${la.toFixed(4)}/lon/${lo.toFixed(4)}/dist/${Math.round(Math.min(250, nm))}`,
-    hex: (h) => `${RELAY}/hex/${h}` }] : []),
-  { name: 'airplanes.live', point: (la, lo, nm) => `https://api.airplanes.live/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${Math.min(250, nm)}`,
+  { name: 'airplanes.live', primary: true, point: (la, lo, nm) => `https://api.airplanes.live/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${Math.round(Math.min(250, nm))}`,
     hex: (h) => `https://api.airplanes.live/v2/hex/${h}` },
-  { name: 'adsb.lol', point: (la, lo, nm) => `https://api.adsb.lol/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${Math.min(250, nm)}`,
+  { name: 'adsb.lol', primary: true, point: (la, lo, nm) => `https://api.adsb.lol/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${Math.round(Math.min(250, nm))}`,
     hex: (h) => `https://api.adsb.lol/v2/hex/${h}` },
+  { name: 'adsb.fi', primary: true, point: (la, lo, nm) => `https://opendata.adsb.fi/api/v2/lat/${la.toFixed(4)}/lon/${lo.toFixed(4)}/dist/${Math.round(Math.min(250, nm))}`,
+    hex: (h) => `https://opendata.adsb.fi/api/v2/hex/${h}` },
+  ...(onSite ? [{ name: 'I\'M HERE relay', point: (la, lo, nm) => `${RELAY}/lat/${la.toFixed(4)}/lon/${lo.toFixed(4)}/dist/${Math.round(Math.min(250, nm))}`,
+    hex: (h) => `${RELAY}/hex/${h}` }] : []),
   { name: 'OpenSky', opensky: true,
     point: (la, lo, nm) => { const d = nm / 60; return `https://opensky-network.org/api/states/all?lamin=${(la - d).toFixed(3)}&lamax=${(la + d).toFixed(3)}&lomin=${(lo - d / Math.cos(la * Math.PI / 180)).toFixed(3)}&lomax=${(lo + d / Math.cos(la * Math.PI / 180)).toFixed(3)}`; },
     hex: (h) => `https://opensky-network.org/api/states/all?icao24=${h}` },
@@ -57,31 +62,65 @@ export function parseOpenSky(j, receivedAt = Date.now()) {
     vr: Number.isFinite(s[11]) ? s[11] / FTM * 60 : 0, fixAt: Number.isFinite(s[3]) ? s[3] * 1000 : receivedAt }));
 }
 
-async function getJSON(url, fetchFn, timeoutMs = 6000) {
+// A flight answer must be JSON with an aircraft list; a 404, an HTML page or { ok: false } counts as "not available" (e.status).
+export async function getFlightJSON(url, fetchFn, timeoutMs = 6000) {
   const ac = typeof AbortController === 'function' ? new AbortController() : null;
   const to = ac && setTimeout(() => ac.abort(), timeoutMs);
-  try { const r = await fetchFn(url, ac ? { signal: ac.signal, cache: 'no-store' } : undefined); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
-  finally { if (to) clearTimeout(to); }
+  try {
+    const r = await fetchFn(url, ac ? { signal: ac.signal, cache: 'no-store' } : undefined);
+    if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
+    let j; try { j = await r.json(); } catch (e) { const e2 = new Error('not JSON'); e2.status = 0; throw e2; }
+    if (!j || typeof j !== 'object' || j.ok === false || !(Array.isArray(j) || 'ac' in j || 'aircraft' in j || 'flights' in j || 'states' in j)) {
+      const e = new Error(j && j.ok === false ? 'answered ok:false' : 'unexpected answer'); e.status = 0; throw e; }
+    return j;
+  } finally { if (to) clearTimeout(to); }
+}
+const getJSON = getFlightJSON;
+// Spreads requests across the primary sources (one per refresh while they answer), rests a source that failed
+// (2 min after HTTP 429, 30 s otherwise), and only then uses the secondary ones.
+export class SourcePool {
+  constructor(sources = SOURCES) { this.sources = sources; this.i = 0; this.rest = new Map(); }
+  order(now = Date.now()) {
+    const P = this.sources.filter((s) => s.primary), Q = this.sources.filter((s) => !s.primary), rot = [];
+    for (let k = 0; k < P.length; k++) rot.push(P[(this.i + k) % P.length]);
+    this.i = (this.i + 1) % Math.max(1, P.length);
+    const all = [...rot, ...Q], up = all.filter((s) => !(this.rest.get(s.name) > now));
+    return up.length ? up : all;   // all resting: try them anyway (the caller's backoff spaces these tries out)
+  }
+  ok(name) { this.rest.delete(name); }
+  fail(name, status, now = Date.now()) { this.rest.set(name, now + (status === 429 ? 120000 : 30000)); }
 }
 // Try each source until one answers. Returns { source, flights } or throws with every source's error.
-export async function fetchNearby(lat, lon, nm, { fetchFn = (u, o) => fetch(u, o), sources = SOURCES } = {}) {
+export async function fetchNearby(lat, lon, nm, { fetchFn = (u, o) => fetch(u, o), sources = SOURCES, pool } = {}) {
   const errs = [];
-  for (const s of sources) {
-    try { const j = await getJSON(s.point(lat, lon, nm), fetchFn), t = Date.now();
+  for (const s of pool ? pool.order() : sources) {
+    try { const j = await getJSON(s.point(lat, lon, nm), fetchFn), t = Date.now(); if (pool) pool.ok(s.name);
       return { source: s.name, flights: (s.opensky ? parseOpenSky(j, t) : parseV2(j, t)) }; }
-    catch (e) { errs.push(s.name + ': ' + e.message); }
+    catch (e) { if (pool) pool.fail(s.name, e.status); errs.push(s.name + ': ' + e.message); }
   }
   throw new Error('No live flight source reachable (' + errs.join('; ') + ')');
 }
-export async function fetchHex(hex, { fetchFn = (u, o) => fetch(u, o), sources = SOURCES, prefer } = {}) {
-  const order = prefer ? [...sources].sort((a, b) => (b.name === prefer) - (a.name === prefer)) : sources;
+export async function fetchHex(hex, { fetchFn = (u, o) => fetch(u, o), sources = SOURCES, prefer, timeoutMs = 6000, pool } = {}) {
+  const order = pool ? pool.order() : prefer ? [...sources].sort((a, b) => (b.name === prefer) - (a.name === prefer)) : sources;
   const errs = [];
   for (const s of order) {
-    try { const j = await getJSON(s.hex(hex), fetchFn), t = Date.now(); const f = (s.opensky ? parseOpenSky(j, t) : parseV2(j, t)).find((x) => x.hex === hex);
+    try { const j = await getJSON(s.hex(hex), fetchFn, timeoutMs), t = Date.now(); if (pool) pool.ok(s.name);
+      const f = (s.opensky ? parseOpenSky(j, t) : parseV2(j, t)).find((x) => x.hex === hex);
       if (f) return { source: s.name, flight: f }; errs.push(s.name + ': not in feed'); }
-    catch (e) { errs.push(s.name + ': ' + e.message); }
+    catch (e) { if (pool) pool.fail(s.name, e.status); errs.push(s.name + ': ' + e.message); }
   }
   throw new Error(errs.join('; '));
+}
+
+// Retry timing when every source fails: 2 s, 4 s, 8 s, 16 s, then every 30 s (each try goes through all sources again).
+// ok() puts it back to the normal polling interval. Used by the 737 ride and the globe.
+export class Backoff {
+  constructor({ base = 2000, max = 30000, normal = 2000 } = {}) { this.base = base; this.max = max; this.normal = normal; this.fails = 0; this.next = 0; this.lastErr = ''; }
+  delay() { return this.fails ? Math.min(this.max, this.base * 2 ** (this.fails - 1)) : this.normal; }
+  fail(now = Date.now(), err = '') { this.fails++; this.lastErr = String(err || ''); this.next = now + this.delay(); return this.delay(); }
+  ok(now = Date.now()) { this.fails = 0; this.lastErr = ''; this.next = now + this.normal; }
+  due(now = Date.now()) { return now >= this.next; }
+  waitS(now = Date.now()) { return Math.max(0, Math.ceil((this.next - now) / 1000)); }
 }
 
 // 737s first (we only have that cockpit), then nearest. Adds distNm and is737.
@@ -111,7 +150,11 @@ export class Tracker {
     if (this.fix && f.fixAt <= this.fix.fixAt) return false;   // stale or duplicate report
     if (this.fix) {   // ease from where we are showing it to the new prediction
       const a = this.state(now), b = this.predict(f, now);
-      this.corr = { at: now, lat: a.lat - b.lat, lon: a.lon - b.lon, alt: (a.altFt ?? 0) - (b.altFt ?? 0), trk: ((a.track - b.track + 540) % 360) - 180 };
+      const m = Math.hypot((a.lat - b.lat) * 111320, (a.lon - b.lon) * 111320 * Math.cos(b.lat * D2R));
+      // a small correction eases out in EASE_S; a big one (feed back after a gap) glides over up to 8 s, never a jump
+      this.corr = { at: now, lat: a.lat - b.lat, lon: a.lon - b.lon, alt: (a.altFt ?? 0) - (b.altFt ?? 0), trk: ((a.track - b.track + 540) % 360) - 180,
+        dur: Math.max(EASE_S, Math.min(8, m / 1500)) };
+      for (const k of ['lat', 'lon', 'alt', 'trk']) if (!Number.isFinite(this.corr[k])) this.corr[k] = 0;
     }
     this.fix = f; return true;
   }
@@ -119,7 +162,7 @@ export class Tracker {
     if (!this.fix) return null;
     const p = this.predict(this.fix, now), age = (now - this.fix.fixAt) / 1000;
     if (this.corr) {
-      const k = Math.exp(-Math.max(0, now - this.corr.at) / 1000 / (EASE_S / 3));
+      const k = Math.exp(-Math.max(0, now - this.corr.at) / 1000 / ((this.corr.dur || EASE_S) / 3));
       if (k < 0.002) this.corr = null;
       else { p.lat += this.corr.lat * k; p.lon += this.corr.lon * k; if (p.altFt != null) p.altFt += this.corr.alt * k;
         if (p.track != null && Number.isFinite(this.corr.trk)) p.track = (p.track + this.corr.trk * k + 360) % 360; }

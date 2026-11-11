@@ -46,9 +46,13 @@
   #liveList button { text-align: left; font-size: 11px; padding: 5px 7px; line-height: 1.3; }
   #liveList button small { display: block; color: #9fb6c6; font-size: 10px; }
   #liveList button.no737 { opacity: .55; cursor: not-allowed; }
-  #typeNote { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 6px 12px; border-radius: 14px;
-    background: #07131ee0; border: 1px solid #ffc24a88; color: #f3e6c8; font-size: 12px; pointer-events: none; text-align: center; }
-  #typeNote[hidden] { display: none; }
+  #notes { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); display: flex; flex-direction: column; align-items: center; gap: 6px;
+    pointer-events: none; z-index: 5; }
+  #typeNote { padding: 6px 12px; border-radius: 14px; background: #07131ee0; border: 1px solid #ffc24a88; color: #f3e6c8; font-size: 12px; text-align: center; }
+  #typeNote[hidden], #sigNote[hidden] { display: none; }
+  #sigNote { padding: 6px 12px; border-radius: 14px; background: #07131ee8; border: 1px solid #ff9c7a99; color: #ffe1d6; font-size: 12px; text-align: center;
+    font-variant-numeric: tabular-nums; }
+  #sigNote.back { border-color: #5DCAA5aa; color: #d4f5e8; }
   #toGlobe { display: inline-block; margin-top: 6px; color: #9fd8c4; font-size: 11px; }
   #liveQ { flex: 1; min-width: 0; }
   #realRow { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; color: #93a8b8; }
@@ -71,7 +75,7 @@
 <body>
 <div id="view"></div>
 <header><div id="brand">737-800 <small>flight deck</small></div></header>
-<div id="typeNote" hidden></div>
+<div id="notes"><div id="typeNote" hidden></div><div id="sigNote" hidden role="status" aria-live="polite"></div></div>
 
 <aside id="panel">
   <div class="lbl">Seat</div>
@@ -765,7 +769,7 @@ import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { buildAirport } from './airport-kit.js';
 import { loadOurAirport, defaultEnd, nearestAirport } from './ourairports.js';
-import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit, COCKPIT_737 } from './live-flights.js';
+import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit, COCKPIT_737, Backoff, SourcePool, FRESH_S as LIVE_FRESH_S, EXTRAP_MAX } from './live-flights.js';
 import { toLocal } from './airport-kit.js';
 import { fetchMetar, isLive as wxIsLive, summary as wxSummary, windComponents } from './weather.js';
 import { createGoogleScenery, debugOverlay, debugLines } from './google-scenery.js';
@@ -1279,7 +1283,11 @@ const _eye = new THREE.Vector3();
 // ---------------------------------------------------------------------------
 const ORG = { lat: 0, lon: 0 };   // scene origin (airport reference point, or a re-origin point en route)
 let orgOff = [0, 0];               // airport position in the scene-origin frame
-const JOIN = { hex: null, info: null, src: null, tracker: null, list: [], pollT: 0, busy: false, prevTrack: null, groundT: 0, landed: false, last: null };
+const JOIN = { hex: null, info: null, src: null, tracker: null, list: [], busy: false, prevTrack: null, groundT: 0, landed: false, last: null,
+  back: new Backoff({ base: 2000, max: 30000, normal: 5000 }), backAt: 0, pool: new SourcePool() };   // the ridden aircraft: one request every 5 s
+// Plain words on screen; the source-by-source details only with ?debug=1
+const feedWords = (e) => (/No live flight source|HTTP|Load failed|Failed to fetch|abort|JSON|ok:false/i.test(String(e && e.message)) ? 'live flights are not reachable right now' : String(e && e.message || 'not reachable'))
+  + (params.get('debug') === '1' && e ? ' [' + String(e.message).slice(0, 300) + ']' : '');
 const liveStatus = (t) => { $('liveStatus').textContent = t; };
 function renderLiveList(list) {
   const box = $('liveList'); box.textContent = '';
@@ -1297,13 +1305,13 @@ async function findLive(q) {
   if (!airport) return;
   const [la, lo] = airport.data.arp; liveStatus('Looking for live flights…'); $('liveFind').disabled = true;
   try {
-    const r = await fetchNearby(la, lo, 150); JOIN.src = r.source;
+    const r = await fetchNearby(la, lo, 150, { pool: JOIN.pool }); JOIN.src = r.source;
     JOIN.list = sortFlights(r.flights, la, lo);
     const shown = searchFlights(JOIN.list, q);
     renderLiveList(shown);
     liveStatus(shown.length ? `${shown.length} flight${shown.length === 1 ? '' : 's'} from ${r.source} (live ADS-B). 737s first.`
       : q ? `"${q}" is not within 150 nm of ${airport.data.icao} right now.` : 'No flights in range right now.');
-  } catch (e) { liveStatus('Live flights not reachable from here: ' + e.message.slice(0, 140)); }
+  } catch (e) { liveStatus('Live flights reconnecting… (' + feedWords(e) + '). Try again in a moment.'); }
   finally { $('liveFind').disabled = false; }
 }
 // The cockpit is a 737-800. A flight of another type can still be ridden (opened from the globe with ?flight=),
@@ -1320,6 +1328,7 @@ function showTypeNote(f) { const t = typeNoteText(f); $('typeNote').textContent 
 function joinFlight(f) {
   showTypeNote(f);
   JOIN.hex = f.hex; JOIN.info = f; JOIN.tracker = new Tracker(); JOIN.tracker.onFix(f); JOIN.prevTrack = null; JOIN.landed = false; JOIN.groundT = 0;
+  JOIN.back.ok(); JOIN.backAt = 0;
   live = true; demo = false; feedAt = f.fixAt; viewHdg = null;
   F.flight = (f.flight || f.reg || f.hex).slice(0, 24);
   $('liveLeave').hidden = false; $('liveList').textContent = '';
@@ -1343,7 +1352,7 @@ async function autoJoin(q) {
   const hint = { cs: params.get('cs') || '', lat: num('lat'), lon: num('lon') };
   liveStatus(`Finding flight ${(hint.cs || q).toUpperCase()}…`);
   let r = null;
-  try { r = await findFlightForJoin(q, hint); } catch (e) { liveStatus('Could not join: ' + e.message.slice(0, 160) + '. Showing the demo.'); }
+  try { r = await findFlightForJoin(q, hint); } catch (e) { liveStatus('Could not join: ' + feedWords(e) + '. Showing the demo.'); }
   let apt = params.get('apt') || 'KBNA';
   if (r) { const a = await nearestAirport(r.flight.lat, r.flight.lon).catch(() => null); if (a && a.ident) apt = a.ident; }
   await loadAirport(apt, params.get('rwy'));
@@ -1352,15 +1361,41 @@ async function autoJoin(q) {
   joinFlight({ ...r.flight, is737: COCKPIT_737.test(r.flight.type || '') });
 }
 function leaveFlight() {
-  JOIN.hex = null; JOIN.tracker = null; $('liveLeave').hidden = true; showTypeNote(null); liveStatus('Left the live flight. Back to the demo.');
+  JOIN.hex = null; JOIN.tracker = null; $('liveLeave').hidden = true; showTypeNote(null); sigNote(); liveStatus('Left the live flight. Back to the demo.');
   ORG.lat = airport.data.arp[0]; ORG.lon = airport.data.arp[1]; orgOff = [0, 0]; if (scenery) placeScenery();
   F.flight = 'DEMO'; setMode(mode);
 }
+// Polling: about every 2 s while the feed answers. When every source fails: retry with exponential backoff (2, 4, 8, 16, then
+// every 30 s; each try goes through all sources again). The aircraft extrapolates along its last track for up to 30 s, then
+// holds its last position; when a report comes back it glides there (Tracker easing), it never jumps.
 async function pollLive() {
-  if (JOIN.busy || !JOIN.hex) return; JOIN.busy = true;
-  try { const r = await fetchHex(JOIN.hex, { prefer: JOIN.src }); if (JOIN.hex && JOIN.tracker.onFix(r.flight)) { feedAt = r.flight.fixAt; JOIN.info = { ...JOIN.info, ...r.flight }; JOIN.src = r.source; } }
-  catch (e) { /* keep the last state: the label shows how old it is; after 30 s the aircraft freezes */ }
-  finally { JOIN.busy = false; }
+  const hex = JOIN.hex, tracker = JOIN.tracker;
+  if (JOIN.busy || !hex) return; JOIN.busy = true;
+  try {
+    const r = await fetchHex(hex, { pool: JOIN.pool, timeoutMs: 5000 });   // spread across the direct feeds
+    if (JOIN.hex !== hex || JOIN.tracker !== tracker) return;   // left or switched flights while this was in flight
+    const wasLost = JOIN.back.fails > 0 || Date.now() - feedAt > LIVE_FRESH_S * 1000;
+    JOIN.back.ok();
+    if (tracker.onFix(r.flight)) { feedAt = r.flight.fixAt; JOIN.info = { ...JOIN.info, ...r.flight }; JOIN.src = r.source; if (wasLost) JOIN.backAt = Date.now(); }
+  } catch (e) { if (JOIN.hex === hex) JOIN.back.fail(Date.now(), e.message); }
+  finally { JOIN.busy = false; refreshMark(); }
+}
+// Small on-screen status while the feed is quiet: "Signal lost, holding last position, reconnecting… 42 s since last fix".
+function sigText(now = Date.now()) {
+  if (!JOIN.hex) return null;
+  const age = Math.max(0, (now - feedAt) / 1000);
+  if (age >= LIVE_FRESH_S) {
+    const wait = JOIN.back.fails && !JOIN.busy ? JOIN.back.waitS(now) : 0;
+    return { lost: true, text: `Signal lost, holding last ${age >= EXTRAP_MAX ? 'position' : 'course'}, reconnecting… ${Math.round(age)} s since last fix` + (wait > 2 ? ` · next try in ${wait} s` : '') };
+  }
+  if (JOIN.backAt && now - JOIN.backAt < 4000) return { lost: false, text: 'Signal back: catching up smoothly' };
+  return null;
+}
+function sigNote(now) {
+  const t = sigText(now), el = $('sigNote');
+  if (!t) { if (!el.hidden) el.hidden = true; return; }
+  if (el.textContent !== t.text) el.textContent = t.text;
+  el.classList.toggle('back', !t.lost); el.hidden = false;
 }
 function joinPlace(st) {
   if (JOIN.placeBusy || (JOIN.placeAt && Date.now() - JOIN.placeAt < 60000)) return;
@@ -1368,8 +1403,9 @@ function joinPlace(st) {
   nearestAirport(st.lat, st.lon).then((a) => { if (a && a.distNm < 60) JOIN.place = a; }).catch(() => {}).finally(() => { JOIN.placeBusy = false; });
 }
 function joinStep(dt) {
-  if ((JOIN.pollT += dt) > 2) { JOIN.pollT = 0; pollLive(); }   // about every 2 s (feeds allow ~1 request/s)
-  const now = Date.now(), st = JOIN.tracker.state(now); if (!st) return;
+  const now = Date.now();
+  if (!JOIN.busy && JOIN.back.due(now)) pollLive();   // about every 2 s (feeds allow ~1 request/s); backs off while the feed is down
+  const st = JOIN.tracker && JOIN.tracker.state(now); if (!st || !airport) return;
   // keep the scene origin near the aircraft (flat local frame); the airport stays where it really is
   let p = toLocal([ORG.lat, ORG.lon], st.lat, st.lon);
   if (Math.hypot(p[0], p[1]) > 30000) {
@@ -1409,7 +1445,7 @@ const COCKPIT_URL = 'https://sketchfab.com/3d-models/boeing-737-800-cockpit-d463
 let todName = 'day';
 function refreshMark() {
   if (!MARK) return;
-  const liveNow = live && Date.now() - feedAt < 10000;   // LIVE only while an external feed is actually sending
+  const liveNow = live && Date.now() - feedAt < LIVE_FRESH_S * 1000;   // LIVE only while an external feed is actually sending
   const d = airport && airport.data;
   const fix = live ? (liveNow ? fmtSince(feedAt) : 'feed quiet ' + fmtSince(feedAt)) : '';
   const items = [];
@@ -1461,7 +1497,8 @@ function refreshMark() {
   const reg = JOIN.hex && JOIN.info && JOIN.info.reg ? JOIN.info.reg : '';
   const line2 = !live ? (mode === 'cruise' ? 'Demo cruise' : d ? 'Demo approach · ' + apt + ' ' + AP.rwy : 'Demo flight')
     : [m ? 'Flight ' + m[2] : cs, reg && reg !== cs ? reg : ''].filter(Boolean).join(' · ') || 'Live flight';
-  MARK.update({ context: '', line1: airline + ' · ' + typ, line2, line2small: '', loc,
+  const lost = JOIN.hex && !liveNow ? sigText() : null;   // also on the VR label (the on-screen note is not drawn in a headset)
+  MARK.update({ context: '', line1: airline + ' · ' + typ, line2, line2small: lost && lost.lost ? 'Signal lost · reconnecting' : '', loc,
     signal: JOIN.hex ? { source: JOIN.src || 'ADS-B', time: feedAt } : live ? { source: 'External feed', time: feedAt } : { text: 'Demo data' },
     view: tiles && realNow > 0.01 ? 'Google 3D + render' : '3D render',
     stats: [['Alt', Math.round(F.altitude).toLocaleString('en-US') + ' ft'], ['GS', Math.round(F.groundSpeed) + ' kt'],
@@ -1850,12 +1887,28 @@ let viewHdg = null;   // comfort-smoothed heading used for the view (see the loo
 let last = performance.now(), dispClock = 1, uiClock = 1, efbClock = 1;
 setTOD('day'); setSeat('captain');
 if (params.get('flight')) autoJoin(params.get('flight').trim()); else loadAirport(params.get('apt') || 'KBNA', params.get('rwy'));
+// One failing step (a live-feed edge case, a view switch mid-update) must never stop the picture: each part of a frame is
+// guarded on its own and the frame is always drawn. Errors are counted for tests (window.__737.frameErrors), logged once.
+const LOOP = { frames: 0, frameErrors: 0, seen: new Set() };
+window.__737 = LOOP;
+function guard(name, fn) {
+  try { fn(); } catch (e) {
+    LOOP.frameErrors++; const k = name + ': ' + (e && e.message);
+    if (!LOOP.seen.has(k)) { LOOP.seen.add(k); console.warn('[737] ' + k, e); }
+  }
+}
+let markClock = 0;
 renderer.setAnimationLoop((now) => {
   // XR frames use the headset's clock: never let dt go negative or huge (that froze the flight and displays in VR)
-  const dt = Math.max(0, Math.min((now - last) / 1000, 0.1)); last = now;
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.1)) || 0; last = now;
+  guard('step', () => frameStep(dt, now));
+  guard('controls', () => { if (!renderer.xr.isPresenting) controls.update(); });
+  renderer.render(scene, camera); LOOP.frames++;
+});
+function frameStep(dt, now) {
   const flying = demo && mode === 'approach' && airport;
   if (demo && !paused) { if (flying) approachStep(dt); else if (mode === 'cruise') demoStep(dt); }
-  if (JOIN.hex) joinStep(dt);   // a real flight drives position and flight data
+  if (JOIN.hex) guard('live flight', () => joinStep(dt));   // a real flight drives position and flight data
   else if (!paused && !flying) {   // move over the ground along the heading
     const gs = F.groundSpeed * 0.5144, h = F.heading * D2R;
     pos.x += -Math.sin(h) * gs * dt; pos.z += Math.cos(h) * gs * dt;
@@ -1889,11 +1942,10 @@ renderer.setAnimationLoop((now) => {
   const vr = renderer.xr.isPresenting;
   if ((dispClock += dt) > (vr ? 1 / [12, 6, 3][xrLevel] : 1 / 24)) { dispClock = 0; redrawDisplays(); }   // ~24 Hz live displays (12 Hz in VR)
   if (scenery && scenery.tiles) scenery.tiles.errorTarget = vr ? [16, 32, 64][xrLevel] : 12;   // coarser tiles in a headset
-  if ((uiClock += dt) > 0.25) { uiClock = 0;
+  if ((uiClock += dt) > 0.25) { uiClock = 0; sigNote();
     $('readout').innerHTML = `<b>${r0(F.altitude).toLocaleString()}</b> ft · <b>${r0(F.airspeed)}</b> kt<br>HDG ${pad3(F.heading)}° · ${F.verticalSpeed >= 0 ? '+' : ''}${r0(F.verticalSpeed)} fpm<br>${F.phase}`; }
-  if (!renderer.xr.isPresenting) controls.update();
-  renderer.render(scene, camera);
-});
+  if (live && (markClock += dt) > 1) { markClock = 0; refreshMark(); }   // SIGNAL drops "live" as soon as the feed goes quiet
+}
 </script>
 </body>
 </html>

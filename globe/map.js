@@ -10,8 +10,9 @@ export function yToLat(y, z) { const n = Math.PI - 2 * Math.PI * y / (TILE * 2 *
 
 export class TinyMap {
   // layers: [{ url: 'https://.../{z}/{y}/{x}', maxZoom }]; draw(ctx, map) is called after the tiles each frame.
-  constructor(canvas, { layers, minZoom = 2, maxZoom = 17, lat = 36.12, lon = -86.68, zoom = 7, draw, onChange, onTap }) {
-    Object.assign(this, { canvas, layers, minZoom, maxZoom, lat, lon, zoom, draw, onChange, onTap });
+  // onTap(x, y, e) on a tap/click; onHover(x, y, e) on pointer moves with nothing pressed (x = null when it leaves).
+  constructor(canvas, { layers, minZoom = 2, maxZoom = 17, lat = 36.12, lon = -86.68, zoom = 7, draw, onChange, onTap, onHover }) {
+    Object.assign(this, { canvas, layers, minZoom, maxZoom, lat, lon, zoom, draw, onChange, onTap, onHover });
     this.ctx = canvas.getContext('2d');
     this.cache = new Map(); this.pending = 0; this.frameQueued = false; this.w = 0; this.h = 0;
     this.pointers = new Map(); this.anim = null;
@@ -118,7 +119,9 @@ export class TinyMap {
       if (this.pointers.size === 2) { const [a, b] = [...this.pointers.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: this.zoom }; down = null; }
     });
     c.addEventListener('pointermove', (e) => {
-      const prev = this.pointers.get(e.pointerId); if (!prev) return;
+      const prev = this.pointers.get(e.pointerId);
+      // hover (mouse, pen, or the Quest browser's controller ray): nothing pressed; touch has no hover (tap instead)
+      if (!prev) { if (e.pointerType !== 'touch' && this.onHover) this.onHover(e.offsetX, e.offsetY, e); return; }
       this.pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
       if (this.pointers.size === 2 && pinch) {
         const [a, b] = [...this.pointers.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -140,6 +143,7 @@ export class TinyMap {
       down = null;
     };
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+    c.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch' && !this.pointers.size && this.onHover) this.onHover(null, null, e); });
     c.addEventListener('wheel', (e) => { e.preventDefault(); this.anim = null; this.zoomAround(e.offsetX, e.offsetY, Math.max(-1, Math.min(1, -e.deltaY / (e.deltaMode ? 3 : 240)))); }, { passive: false });
     c.addEventListener('dblclick', (e) => { e.preventDefault(); this.zoomAround(e.offsetX, e.offsetY, 1); });
     addEventListener('resize', () => this.resize());

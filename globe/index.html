@@ -39,24 +39,42 @@
   .shelf a { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; margin: 5px 0; border-radius: 9px; background: rgba(255,255,255,.06); text-decoration: none; min-height: 44px; }
   .shelf a small { color: var(--dim); font-size: 12px; }
   #panelToggle { display: none; }
-  #card { position: fixed; right: 12px; bottom: 46px; width: 340px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 16px; z-index: 11; backdrop-filter: blur(6px); }
+  /* the card sits above the item it belongs to (placed by app.js) and always inside the screen */
+  #card { position: fixed; left: 0; top: 0; width: min(310px, calc(100vw - 16px)); max-height: calc(100% - 16px); overflow: auto; overscroll-behavior: contain;
+    background: rgba(10,18,32,.93); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 14px; z-index: 11; backdrop-filter: blur(6px);
+    box-shadow: 0 6px 24px rgba(0,0,0,.45); will-change: transform; }
   #card[hidden] { display: none; }
+  #card .route { font-size: 18px; font-weight: 600; margin-top: 3px; letter-spacing: .02em; }
+  #card .route small { font-size: 12px; font-weight: 400; color: var(--dim); letter-spacing: 0; margin-left: 4px; }
+  #card .route .dim, #card .dim { font-size: 13px; font-weight: 400; color: var(--dim); }
+  #card .ph { display: flex; align-items: center; justify-content: center; margin: 10px 0 0; height: 96px; border-radius: 8px; overflow: hidden; background: rgba(255,255,255,.05); }
+  #card .ph img { display: block; max-width: 100%; max-height: 96px; width: auto; height: auto; object-fit: contain; }
+  #card .ph.wait { font-size: 12px; color: var(--dim); }
+  #card .phnone { margin-top: 8px; font-size: 11.5px; color: var(--dim); }
+  #card .credit { font-size: 11px; color: var(--dim); margin-top: 3px; }
+  #card .credit a { color: #cfe0f2; }
+  #card .credit b { color: var(--ink); font-weight: 600; }
   #card .x { position: absolute; right: 8px; top: 6px; border: 0; background: none; font-size: 22px; color: var(--dim); cursor: pointer; padding: 6px 10px; }
   #card .kind { font-size: 11px; letter-spacing: .16em; color: var(--dim); text-transform: uppercase; }
-  #card .title { font-size: 24px; font-weight: 600; margin: 2px 0 0; padding-right: 30px; }
-  #card .sub { color: var(--dim); font-size: 13px; }
-  #card dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 10px 0; font-size: 14px; }
+  #card .title { font-size: 21px; font-weight: 600; margin: 2px 0 0; padding-right: 30px; line-height: 1.2; }
+  #card .sub { color: var(--dim); font-size: 12.5px; }
+  #card dl { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 10px; margin: 8px 0 6px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  #card dl.one { grid-template-columns: auto 1fr; }
   #card dt { color: var(--dim); }
   #card dd { margin: 0; }
   #card .age { font-size: 13px; color: var(--dim); }
   #card .age .live { color: var(--green); font-weight: 600; }
   #card .note { font-size: 12.5px; color: #d5dde7; background: rgba(255,194,74,.12); border-left: 3px solid var(--gold); padding: 6px 8px; border-radius: 4px; margin: 8px 0 0; }
-  #card .go { display: block; text-align: center; margin-top: 12px; padding: 15px; font-size: 20px; font-weight: 700; letter-spacing: .02em; border-radius: 12px; background: #2f9e78; color: #fff; text-decoration: none; }
+  #card .go { display: block; text-align: center; margin-top: 10px; padding: 12px; font-size: 19px; font-weight: 700; letter-spacing: .02em; border-radius: 12px; background: #2f9e78; color: #fff; text-decoration: none; }
   #card .go:hover { background: #36b388; }
   .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 9px; background: rgba(255,194,74,.2); color: var(--gold); margin-left: 6px; vertical-align: middle; }
   #hint { position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 9; padding: 12px 18px; border-radius: 24px; border: 1px solid rgba(79,209,232,.6);
     background: rgba(10,18,32,.88); color: var(--ink); text-decoration: none; font-size: 15px; }
   #hint[hidden] { display: none; }
+  #sig { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 12; max-width: min(520px, calc(100% - 140px)); padding: 7px 14px; border-radius: 16px;
+    background: rgba(10,18,32,.92); border: 1px solid rgba(255,156,122,.65); color: #ffe1d6; font-size: 13px; text-align: center; pointer-events: none; font-variant-numeric: tabular-nums; }
+  #sig.back { border-color: rgba(93,202,165,.7); color: #d4f5e8; }
+  #sig[hidden] { display: none; }
   #zoom { position: fixed; right: 12px; top: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 9; }
   #zoom button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 22px; cursor: pointer; }
   #credits { position: fixed; right: 0; bottom: 0; z-index: 9; font-size: 11px; color: #cfd8e3; background: rgba(10,18,32,.7); padding: 3px 8px; border-top-left-radius: 6px; max-width: 100%; }
@@ -66,7 +84,8 @@
     #panel .more { display: none; }
     #panel.open .more { display: block; }
     #panelToggle { display: block; width: 100%; margin-top: 8px; padding: 9px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255,255,255,.06); cursor: pointer; }
-    #card { left: 8px; right: 8px; width: auto; bottom: 30px; }
+    #sig { top: auto; bottom: 30px; max-width: calc(100% - 16px); font-size: 12px; }
+    #hint { bottom: 70px; }
     #zoom { top: auto; bottom: 120px; }
     #credits { font-size: 10px; }
   }
@@ -85,7 +104,7 @@
   <div class="more">
     <h2>Layers</h2>
     <div class="layers">
-      <button class="layer" data-layer="flights" style="--c:var(--gold)"><i></i><span><b>Flights</b><small id="nFlights">live</small></span></button>
+      <button class="layer" data-layer="flights" style="--c:#fff"><i></i><span><b>Flights</b><small id="nFlights">live</small></span></button>
       <button class="layer" data-layer="ships" style="--c:var(--ship)"><i></i><span><b>Ships</b><small id="nShips">live</small></span></button>
       <button class="layer" data-layer="space" style="--c:#fff"><i></i><span><b>Space</b><small id="nSpace">ISS</small></span></button>
       <button class="layer" data-layer="wildlife" style="--c:var(--wild)"><i></i><span><b>Wildlife</b><small>sample tracks</small></span></button>
@@ -106,6 +125,7 @@
 <div id="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button></div>
 <a id="hint" hidden href="../boats/">Live ships aren't on this map yet: open live ships</a>
 <section id="card" hidden aria-live="polite"></section>
+<div id="sig" hidden role="status" aria-live="polite"></div>
 <div id="credits">Imagery &copy; <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics, and the GIS User Community · Labels &copy; Esri · <span id="dataCredit"></span></div>
 
 <!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
