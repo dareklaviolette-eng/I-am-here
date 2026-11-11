@@ -61,6 +61,257 @@
 </div>
 <div id="err">This view needs WebGL. Try a recent version of Chrome, Safari or Firefox.</div>
 
+<!-- IMHERE-XR:BEGIN (generated from shared/xr-safety.js; edit there, then run shared/sync-xr.mjs) -->
+<script id="imhere-xr">
+// I'M HERE: guaranteed ways out of VR, a crash-proof frame loop, and a frame-cost watchdog. Plain script, no imports.
+// window.ImHereXR.install({ THREE, renderer, scene, camera, rays, scale, place: { right, down, ahead }, onQuality(level), onExit })
+// Call it right after the renderer and camera exist, before renderer.setAnimationLoop and before entering VR.
+//  - Exit VR: a big red button that stays in view (it follows your head lazily, low and to the right). Point a controller
+//    at it and pull the trigger, or point a hand and pinch, or poke it with a fingertip. B or Y (xr-standard
+//    gamepad buttons 4 and 5) exit at once. Every exit calls session.end() inside try/catch (retried once if the
+//    session lingers). Nothing here calls preventDefault or captures any system input.
+//  - The page's frame callback is wrapped in try/catch: an error is logged (rate-limited) and the next frame still comes.
+//    If every frame errors for 2 s in VR, the session ends with a plain message on the page.
+//  - Cost caps for Quest: framebuffer scale <= 1 (0.9 default), fixed foveation 1, no shadow maps while in VR.
+//  - Watchdog: frames over 50 ms for most of 2 s -> onQuality(1), then 2.5 s later onQuality(2) (the page lightens its scene).
+//    Frames over 1 s (twice within 10 s), or no frame at all for 2.5 s -> the session ends and the page says why.
+//  - No allocations per frame (beyond what WebXR itself returns for poses).
+(function () {
+  'use strict';
+  if (window.ImHereXR) return;
+  var MSG_ID = 'imhere-xr-msg';
+  function showMsg(text) {
+    try {
+      var d = document.getElementById(MSG_ID);
+      if (!d) {
+        d = document.createElement('div'); d.id = MSG_ID; d.setAttribute('role', 'alert');
+        d.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:99999;max-width:min(560px,92vw);' +
+          'background:rgba(30,10,12,.94);color:#fff;font:15px/1.4 system-ui,sans-serif;padding:12px 40px 12px 16px;border-radius:12px;' +
+          'box-shadow:0 4px 18px rgba(0,0,0,.4);border:1px solid rgba(255,120,125,.6)';
+        var x = document.createElement('button'); x.textContent = '×'; x.setAttribute('aria-label', 'Close');
+        x.style.cssText = 'position:absolute;right:6px;top:4px;background:none;border:0;color:#fff;font-size:22px;cursor:pointer';
+        x.onclick = function () { d.remove(); };
+        d.appendChild(document.createElement('span')); d.appendChild(x); document.body.appendChild(d);
+      }
+      d.firstChild.textContent = text;
+    } catch (e) { /* ignore */ }
+  }
+  var nErr = 0;
+  function logErr(where, e) {
+    nErr++;
+    if (nErr <= 5 || nErr % 300 === 0) { try { console.error('[I\'M HERE VR] ' + where + ' (#' + nErr + '):', e); } catch (e2) { /* ignore */ } }
+  }
+
+  function install(o) {   // never breaks the page: if anything here fails, the page runs as before (without these extras)
+    try { return setup(o); } catch (e) { logErr('install', e); return null; }
+  }
+  function setup(o) {
+    var THREE = o.THREE, renderer = o.renderer, xr = renderer.xr;
+    var api = { level: 0, errors: function () { return nErr; }, lastExit: '' };
+    try { xr.setFramebufferScaleFactor(Math.min(1, o.scale || 0.9)); } catch (e) { /* ignore */ }
+    try { xr.setFoveation(1); } catch (e) { /* ignore */ }
+
+    // ---- the Exit VR button (canvas drawn once; hover only tints the material)
+    var c = document.createElement('canvas'); c.width = 512; c.height = 200;
+    var g = c.getContext('2d');
+    g.fillStyle = '#c8202a'; g.beginPath(); if (g.roundRect) g.roundRect(4, 4, 504, 192, 36); else g.rect(4, 4, 504, 192); g.fill();
+    g.lineWidth = 8; g.strokeStyle = '#fff'; g.stroke();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '800 88px system-ui, sans-serif'; g.fillText('Exit VR', 256, 84);
+    g.font = '600 32px system-ui, sans-serif'; g.fillText('or press B / Y', 256, 158);
+    var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    var BW = 0.26, BH = BW * 200 / 512;   // 26 x 10 cm, about 60 cm away
+    var btn = new THREE.Mesh(new THREE.PlaneGeometry(BW, BH), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+    btn.name = 'imhere-exit-vr'; btn.renderOrder = 99999; btn.frustumCulled = false; btn.visible = false; btn.matrixAutoUpdate = false;
+    var rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthTest: false, fog: false, toneMapped: false });
+    var rays = [0, 1].map(function () {
+      var l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]), rayMat);
+      l.visible = false; l.frustumCulled = false; l.renderOrder = 99998; l.matrixAutoUpdate = false; return l;
+    });
+    var holder = null;   // the camera's parent (the rig / dolly): WebXR poses are in its space
+    function attach() {
+      var p = (o.camera && o.camera.parent) || o.scene;
+      if (!p || holder === p) return; holder = p;
+      p.add(btn); if (o.rays) rays.forEach(function (l) { p.add(l); });
+    }
+
+    // ---- exit
+    var ending = 0;
+    function exit(reason) {
+      var s = null; try { s = xr.getSession && xr.getSession(); } catch (e) { /* ignore */ }
+      if (!s) return;
+      api.lastExit = reason;
+      try { console.warn('[I\'M HERE VR] exit: ' + reason); } catch (e) { /* ignore */ }
+      if (o.onExit) try { o.onExit(reason); } catch (e) { logErr('onExit', e); }
+      try { var p = s.end(); if (p && p.catch) p.catch(function (e) { logErr('session.end', e); }); } catch (e) { logErr('session.end', e); }
+      clearTimeout(ending);
+      ending = setTimeout(function () {   // still in the same session? try once more
+        var s2 = null; try { s2 = xr.getSession && xr.getSession(); } catch (e) { /* ignore */ }
+        if (s2 === s) { try { var p2 = s.end(); if (p2 && p2.catch) p2.catch(function () {}); } catch (e) { logErr('session.end retry', e); } }
+      }, 1200);
+    }
+    api.exit = exit;
+
+    // ---- per-frame: button placement, input, hit testing (all in the rig's local space; preallocated temporaries)
+    var Minv = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), d = new THREE.Vector3(),
+      lo = new THREE.Vector3(), ld = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), sc = new THREE.Vector3(), e3 = new THREE.Euler();
+    var PL = { right: 0.24, down: 0.24, ahead: 0.6 }; if (o.place) for (var k in o.place) PL[k] = o.place[k];
+    var anchorYaw = null, prevDown = [false, false, false, false], hovered = false, invOk = false;
+    function refSpace() { try { return xr.getReferenceSpace(); } catch (e) { return null; } }
+    function inv() { if (!invOk) { Minv.copy(btn.matrix).invert(); invOk = true; } return Minv; }
+    function rayHit(frame, src, ref) {   // distance along the pointing ray to the Exit button, or -1
+      var pose = frame.getPose(src.targetRaySpace, ref); if (!pose) return -1;
+      var p = pose.transform.position, r = pose.transform.orientation;
+      q.set(r.x, r.y, r.z, r.w);
+      lo.set(p.x, p.y, p.z).applyMatrix4(inv());
+      ld.set(0, 0, -1).applyQuaternion(q).transformDirection(Minv);
+      if (Math.abs(ld.z) < 1e-6) return -1;
+      var t = -lo.z / ld.z; if (t <= 0 || t > 6) return -1;
+      var x = lo.x + ld.x * t, y = lo.y + ld.y * t;
+      return Math.abs(x) <= BW / 2 + 0.01 && Math.abs(y) <= BH / 2 + 0.01 ? t : -1;
+    }
+    function poke(frame, src, ref) {   // index fingertip pressed into the button (hand tracking)
+      if (!src.hand || !frame.getJointPose) return false;
+      var j = src.hand.get && src.hand.get('index-finger-tip'); if (!j) return false;
+      var jp = frame.getJointPose(j, ref); if (!jp) return false;
+      var p = jp.transform.position; lo.set(p.x, p.y, p.z).applyMatrix4(inv());
+      return Math.abs(lo.x) <= BW / 2 && Math.abs(lo.y) <= BH / 2 && lo.z < 0.015 && lo.z > -0.04;
+    }
+    function placeButton(frame, ref) {   // follows the head's yaw lazily: about 0.6 m ahead, low and to the right
+      var vp = frame.getViewerPose(ref); if (!vp) return;
+      var tp = vp.transform.position, to = vp.transform.orientation;
+      e3.setFromQuaternion(q.set(to.x, to.y, to.z, to.w), 'YXZ');
+      var yaw = e3.y;
+      if (anchorYaw === null) anchorYaw = yaw;
+      var dy = Math.atan2(Math.sin(yaw - anchorYaw), Math.cos(yaw - anchorYaw));
+      if (Math.abs(dy) > 0.45) anchorYaw += dy - (dy > 0 ? 0.45 : -0.45);   // never more than ~26 deg from where you look
+      else anchorYaw += dy * 0.02;
+      var cy = Math.cos(anchorYaw), sy = Math.sin(anchorYaw);
+      v.set(tp.x - sy * PL.ahead + cy * PL.right, tp.y - PL.down, tp.z - cy * PL.ahead - sy * PL.right);
+      q.setFromEuler(e3.set(-0.35, anchorYaw, 0, 'YXZ'));
+      btn.matrix.compose(v, q, one); btn.matrixWorldNeedsUpdate = true; invOk = false;
+      btn.visible = true;
+    }
+    function inputStep(frame) {
+      var s = frame.session, ref = refSpace(); if (!ref) return;
+      attach();
+      placeButton(frame, ref);
+      var hov = false, ri = 0, srcs = s.inputSources;
+      for (var i = 0; i < srcs.length; i++) {
+        var src = srcs[i];
+        // B / Y on xr-standard controllers (gamepad buttons 4 and 5): exit on press
+        var gp = src.gamepad, down = false;
+        if (gp && !src.hand && gp.buttons) down = !!((gp.buttons[4] && gp.buttons[4].pressed) || (gp.buttons[5] && gp.buttons[5].pressed));
+        var was = i < 4 ? prevDown[i] : false; if (i < 4) prevDown[i] = down;
+        if (down && !was) { exit('B/Y button'); return; }
+        if (btn.visible && poke(frame, src, ref)) { exit('fingertip on Exit VR'); return; }
+        var t = btn.visible ? rayHit(frame, src, ref) : -1;
+        if (t > 0) hov = true;
+        if (o.rays && ri < 2) {
+          var l = rays[ri++], pose = frame.getPose(src.targetRaySpace, ref);
+          if (pose) {
+            var p = pose.transform.position, r = pose.transform.orientation, len = t > 0 ? t : 1.5;
+            l.matrix.compose(v.set(p.x, p.y, p.z), q.set(r.x, r.y, r.z, r.w), sc.set(1, 1, len));
+            l.matrixWorldNeedsUpdate = true; l.visible = true;
+          } else l.visible = false;
+        }
+      }
+      for (; ri < 2; ri++) rays[ri].visible = false;
+      if (hov !== hovered) { hovered = hov; btn.material.color.setHex(hov ? 0xffd0d0 : 0xffffff); }
+    }
+    function onSelectStart(ev) {   // trigger or pinch while pointing at Exit VR
+      try {
+        var ref = refSpace(); if (!ref || !ev.frame || !btn.visible) return;
+        if (rayHit(ev.frame, ev.inputSource, ref) > 0) exit('Exit VR pressed');
+      } catch (e) { logErr('selectstart', e); }
+    }
+
+    // ---- watchdog (ring buffer of the last 2 s of frames; no allocations)
+    var RING = 256, ringT = new Float64Array(RING), ringDt = new Float32Array(RING);
+    var W = { start: 0, last: 0, head: 0, n: 0, levelAt: 0, big0: 0, big1: 0, timer: 0, errRun: 0, errSince: 0 };
+    function resetHist() { W.head = 0; W.n = 0; W.last = 0; }
+    function setLevel(n, why) {
+      if (n <= api.level) return;
+      api.level = n; W.levelAt = performance.now(); resetHist();
+      try { console.warn('[I\'M HERE VR] quality level ' + n + ': ' + why); } catch (e) { /* ignore */ }
+      if (o.onQuality) try { o.onQuality(n); } catch (e) { logErr('onQuality', e); }
+    }
+    function stopVR(why) {
+      showMsg('VR was closed to keep your headset responsive (' + why + '). You can press Enter VR to go back in.');
+      exit('watchdog: ' + why);
+    }
+    function watch(now) {
+      if (!W.last) { W.last = now; return; }
+      var dt = now - W.last; W.last = now;
+      if (now - W.start < 4000) return;   // grace: shader compiles and loading right after entering VR
+      if (dt > 1000) {
+        if (now - W.big1 < 10000) { stopVR('frames took over 1 second'); return; }
+        W.big0 = W.big1; W.big1 = now;
+      }
+      ringT[W.head] = now; ringDt[W.head] = dt; W.head = (W.head + 1) % RING; if (W.n < RING) W.n++;
+      if (now - W.levelAt < 2500 || api.level >= 2) return;
+      // share of the last 2 s spent in frames over 50 ms (time-weighted, so it also works at a few frames per second)
+      var n = 0, all = 0, slow = 0;
+      for (var i = 1; i <= W.n; i++) { var j = (W.head - i + RING) % RING; if (now - ringT[j] > 2000) break; n++; all += ringDt[j]; if (ringDt[j] > 50) slow += ringDt[j]; }
+      if (n >= 3 && all > 1500 && slow / all > 0.6) setLevel(api.level + 1, 'frames over 50 ms');
+    }
+
+    // ---- the frame loop wrapper
+    var orig = renderer.setAnimationLoop.bind(renderer);
+    renderer.setAnimationLoop = function (cb) {
+      if (!cb) return orig(null);
+      return orig(function (time, frame) {
+        var presenting = xr.isPresenting;
+        if (presenting && frame) {
+          try { if (frame.session.visibilityState === 'visible') watch(performance.now()); else W.last = 0; } catch (e) { logErr('watchdog', e); }
+          try { inputStep(frame); } catch (e) { logErr('exit controls', e); }
+        }
+        try { cb(time, frame); W.errRun = 0; }
+        catch (e) {
+          logErr('frame', e);
+          if (presenting) {
+            var now = performance.now();
+            if (!W.errRun++) W.errSince = now;
+            else if (now - W.errSince > 2000) { W.errRun = 0; stopVR('the page kept failing to draw'); }
+            if (o.scene && o.camera) { try { renderer.render(o.scene, o.camera); } catch (e2) { /* ignore */ } }
+          }
+        }
+      });
+    };
+
+    function onVis() { resetHist(); W.big1 = 0; }
+    xr.addEventListener('sessionstart', function () {
+      var s = xr.getSession();
+      api.level = 0; anchorYaw = null; hovered = false; prevDown[0] = prevDown[1] = prevDown[2] = prevDown[3] = false;
+      W.start = performance.now(); resetHist(); W.big0 = W.big1 = 0; W.levelAt = 0; W.errRun = 0;
+      try { xr.setFoveation(1); } catch (e) { /* ignore */ }
+      api.shadow = renderer.shadowMap.enabled; renderer.shadowMap.enabled = false;
+      if (s) { s.addEventListener('selectstart', onSelectStart); s.addEventListener('visibilitychange', onVis); }
+      attach();
+      clearInterval(W.timer);
+      W.timer = setInterval(function () {   // the loop stopped delivering frames altogether
+        var s1 = null; try { s1 = xr.getSession && xr.getSession(); } catch (e) { /* ignore */ }
+        if (!xr.isPresenting || !s1 || s1.visibilityState !== 'visible') { W.last = 0; return; }   // system menu open / headset off
+        var now = performance.now();
+        if (W.last && now - W.last > 2500 && now - W.start > 6000) stopVR('no frames for 2.5 seconds');
+      }, 500);
+    });
+    xr.addEventListener('sessionend', function () {
+      clearInterval(W.timer); clearTimeout(ending);
+      btn.visible = false; rays.forEach(function (l) { l.visible = false; });
+      if (api.shadow) renderer.shadowMap.enabled = true;
+      if (api.level && o.onQuality) try { o.onQuality(0); } catch (e) { logErr('onQuality', e); }
+      api.level = 0;
+    });
+    api.button = btn; api.renderer = renderer;
+    api.sessionInit = { optionalFeatures: ['hand-tracking'] };
+    window.ImHereXR.current = api;   // for tests and the console
+    return api;
+  }
+  window.ImHereXR = { install: install, showMessage: showMsg };
+})();
+</script>
+<!-- IMHERE-XR:END -->
 <!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
 <script id="imhere-mark">
 /* I'M HERE experience label, v4 (founder-approved final design). SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
@@ -606,6 +857,9 @@ const rig = new THREE.Group(); rig.add(camera);
 const poser = new THREE.PerspectiveCamera(); // pose helper: rig follows it (in XR the headset moves inside the rig)
 earthScene.add(rig);
 const KM = 1 / 6371; // scene unit = 1 Earth radius
+// VR safety (shared/xr-safety.js): Exit VR button, B / Y to exit, crash-proof frame loop, frame-cost watchdog.
+// Watchdog level 1: lighter Earth and cloud spheres; level 2: clouds off as well.
+const XRS = window.ImHereXR ? window.ImHereXR.install({ THREE, renderer, scene: earthScene, camera, scale: 0.9, onQuality: (n) => xrQuality(n) }) : null;
 
 const latLonVec = (latDeg, lonDeg, r = 1, v = new THREE.Vector3()) => {
   const la = latDeg * D2R, lo = lonDeg * D2R;
@@ -755,6 +1009,12 @@ const cloudMat = new THREE.ShaderMaterial({
 });
 const clouds = new THREE.Mesh(new THREE.SphereGeometry(1 + 6 * KM, 256, 128), cloudMat);
 earthScene.add(clouds);
+const sphereHi = { earth: earth.geometry, clouds: clouds.geometry }, sphereLo = {};
+function xrQuality(n) {   // 0 = full detail (and always on screens)
+  if (n && !sphereLo.earth) { sphereLo.earth = new THREE.SphereGeometry(1, 128, 64); sphereLo.clouds = new THREE.SphereGeometry(1 + 6 * KM, 96, 48); }
+  earth.geometry = n ? sphereLo.earth : sphereHi.earth; clouds.geometry = n ? sphereLo.clouds : sphereHi.clouds;
+  clouds.visible = n < 2;
+}
 
 const atmoMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending,
@@ -1201,7 +1461,7 @@ renderer.setAnimationLoop(frame);
   try {
     if (!navigator.xr || !(await navigator.xr.isSessionSupported('immersive-vr'))) return;
     const { VRButton } = await import('three/addons/webxr/VRButton.js');
-    const b = VRButton.createButton(renderer); document.getElementById('vrslot').appendChild(b);
+    const b = VRButton.createButton(renderer, XRS ? XRS.sessionInit : {}); document.getElementById('vrslot').appendChild(b);
     renderer.xr.addEventListener('sessionstart', () => { if (view === 'earth') setView('chase'); });
     setupVRMenu();
   } catch { /* VR is optional */ }
@@ -1210,13 +1470,14 @@ renderer.setAnimationLoop(frame);
 // In-headset controls: a small console at waist height in front of you (it travels with you, not with your head).
 // Point a controller (or pinch with hand tracking) at a button: views (Ride the ISS, Chase, Earth, Planets) and time speeds.
 function setupVRMenu() {
-  const W = 1024, H = 300, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const W = 1024, H = 435, c = document.createElement('canvas'); c.width = W; c.height = H;
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const rows = [
     [['Ride the ISS', () => setView('ride'), () => view === 'ride'], ['Chase', () => setView('chase'), () => view === 'chase'],
      ['Earth', () => setView('earth'), () => view === 'earth'], ['Planets', () => setView('planets'), () => view === 'planets']],
     [['Real time', () => setSpeed(1), () => speed === 1], ['60×', () => setSpeed(60), () => speed === 60], ['600×', () => setSpeed(600), () => speed === 600],
      ['1 day/s', () => setSpeed(86400), () => speed === 86400], ['Now', () => document.getElementById('nowBtn').click(), () => false]],
+    [['Exit VR', () => { if (XRS) XRS.exit('console Exit VR'); else { const s = renderer.xr.getSession(); if (s) try { s.end().catch(() => {}); } catch (e) { console.warn(e); } } }, () => false]],   // always there
   ];
   let hover = null, sig = '';
   function draw() {
@@ -1225,9 +1486,10 @@ function setupVRMenu() {
     g.fillStyle = 'rgba(8,12,22,0.82)'; g.beginPath(); g.roundRect ? g.roundRect(0, 0, W, H, 28) : g.rect(0, 0, W, H); g.fill();
     rows.forEach((r, ri) => r.forEach((b, bi) => {
       const bw = (W - 40) / r.length, x = 20 + bi * bw, y = 20 + ri * 135, on = b[2](), hv = hover && hover[0] === ri && hover[1] === bi;
-      g.fillStyle = on ? 'rgba(124,196,255,0.35)' : hv ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)';
+      const ex = ri === 2;
+      g.fillStyle = ex ? (hv ? '#ff4a52' : '#c8202a') : on ? 'rgba(124,196,255,0.35)' : hv ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)';
       g.beginPath(); g.roundRect ? g.roundRect(x + 6, y, bw - 12, 120, 18) : g.rect(x + 6, y, bw - 12, 120); g.fill();
-      g.fillStyle = '#fff'; g.font = '600 ' + (ri ? 34 : 38) + 'px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = '#fff'; g.font = (ex ? '800 56' : '600 ' + (ri ? 34 : 38)) + 'px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(b[0], x + bw / 2, y + 60);
     }));
     tex.needsUpdate = true;
@@ -1241,7 +1503,7 @@ function setupVRMenu() {
     m4.identity().extractRotation(ctrl.matrixWorld);
     ray.ray.origin.setFromMatrixPosition(ctrl.matrixWorld); ray.ray.direction.set(0, 0, -1).applyMatrix4(m4);
     const h = ray.intersectObject(panel)[0]; if (!h || !h.uv) return null;
-    const px = h.uv.x * W, py = (1 - h.uv.y) * H, ri = py < 155 ? 0 : 1, r = rows[ri], bi = Math.floor((px - 20) / ((W - 40) / r.length));
+    const px = h.uv.x * W, py = (1 - h.uv.y) * H, ri = py < 155 ? 0 : py < 290 ? 1 : 2, r = rows[ri], bi = Math.floor((px - 20) / ((W - 40) / r.length));
     return bi >= 0 && bi < r.length ? [ri, bi] : null;
   };
   const ctrls = [0, 1].map((i) => {
