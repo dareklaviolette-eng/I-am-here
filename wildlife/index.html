@@ -52,6 +52,39 @@ footer{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:c
 #toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:#16212af0;border:1px solid var(--line);padding:10px 14px;border-radius:10px;z-index:9;max-width:90vw;display:none}
 #fatal{position:fixed;inset:0;display:none;place-items:center;text-align:center;padding:30px;z-index:20;background:#0b141b}
 #dropzone{position:fixed;inset:0;border:3px dashed var(--acc);z-index:30;display:none;place-items:center;font-size:20px;background:#0b141bcc}
+/* animal card (also drawn on a panel in VR) */
+.card{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:2px 0 8px;background:rgba(0,0,0,.2)}
+.card .ph{position:relative;aspect-ratio:16/10;background:radial-gradient(120% 90% at 30% 20%,#2a4655,#0f1d26)}
+.card .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.card .ph img[hidden],.card .phph[hidden],.card .cap:empty{display:none}
+.card .phph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#b9c8d2;font-size:12px;text-align:center;padding:10px}
+.card .phph svg{width:46px;height:46px;opacity:.55}
+.card .cap{position:absolute;left:0;right:0;bottom:0;padding:10px 8px 4px;font-size:11px;font-weight:600;background:linear-gradient(#0000,#000c);color:#fff}
+.card .cb{padding:8px 10px 9px}
+.card .l1{font-weight:700;font-size:15px;line-height:1.25}
+.card .l2{font-size:13px;margin-top:2px}
+.card dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:7px 0 0;font-size:12px}
+.card dt{color:var(--dim)} .card dd{margin:0}
+.card canvas{width:100%;height:92px;border-radius:8px;display:block;margin-top:7px;background:#0b141b}
+.card .credit{font-size:10.5px;color:var(--dim);margin-top:5px} .card .credit a{color:var(--dim)}
+/* camera distance, captions and the guide's one-time notice: bottom centre, above the footer */
+#bottom{position:fixed;left:0;right:0;bottom:calc(62px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:8px;padding:0 10px;pointer-events:none;z-index:5}
+#bottom>*{pointer-events:auto}
+.dist{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.dist[hidden]{display:none}
+.dist button{border:0;border-radius:0;background:transparent;padding:6px 11px;min-height:34px;font-size:13px}
+.dist button.on{background:#eef3f6;color:#0b141b;font-weight:600}
+#cc{max-width:min(720px,100%);text-align:center;pointer-events:none!important}
+#cc span{display:inline;padding:3px 10px;line-height:1.55;font-size:17px;font-weight:500;color:#fff;background:rgba(0,0,0,.72);border-radius:6px;-webkit-box-decoration-break:clone;box-decoration-break:clone;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+#cc[hidden],#cc span:empty{display:none}
+#vnote{font:600 12.5px system-ui,sans-serif;color:#fff;background:rgba(14,20,26,.9);border:1px solid var(--line);border-radius:999px;padding:5px 12px;pointer-events:none!important}
+#vnote[hidden]{display:none}
+#guideBtn{display:inline-flex;align-items:center;gap:6px}
+#guideBtn svg{width:16px;height:16px}
+#guideBtn.on{background:var(--acc);color:#1b1205;font-weight:600;border-color:var(--acc)}
+.gx{font-size:12.5px;font-weight:700;letter-spacing:.04em;padding:8px 10px}
+.gx[hidden]{display:none}
+.gx.on{background:rgba(255,255,255,.22)}
 #menuBtn{display:none}
 @media (max-width:760px){
   #menuBtn{display:inline-block}
@@ -59,6 +92,8 @@ footer{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:c
   aside.open{display:block}
   #mini{display:none}
   .brand span{display:none}
+  .dist button{padding:6px 8px;font-size:12px}
+  #cc span{font-size:15.5px}
   .views button{padding:8px 11px}
 }
 </style>
@@ -72,6 +107,9 @@ footer{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:c
     <button data-view="ride" class="on">Ride</button><button data-view="chase">Chase</button><button data-view="map">Map</button>
   </div>
   <div id="vrslot"></div>
+  <button id="guideBtn" aria-pressed="false" title="Naturalist Guide (off): a narrator speaks at moments of the ride, with captions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z" fill="currentColor"/></svg>Guide</button>
+  <button id="mute" class="gx" hidden aria-pressed="false" title="Mute the guide's voice (captions keep going)">Mute</button>
+  <button id="ccBtn" class="gx on" hidden aria-pressed="true" title="Captions (on)">CC</button>
   <button id="menuBtn">Tracks</button>
 </header>
 <aside id="panel">
@@ -83,6 +121,16 @@ footer{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:c
   <div class="row"><label for="worldSel">Landscape</label>
     <select id="worldSel"><option value="auto">Auto (from species)</option><option value="land">Land, lake &amp; river</option><option value="ocean">Ocean coast</option></select></div>
   <h3>Now riding</h3>
+  <section class="card" id="card" aria-label="Animal card">
+    <div class="ph"><img id="cardImg" alt="" hidden referrerpolicy="no-referrer"><div class="phph" id="cardPh"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 36l11-13 8 9 6-7 11 11z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="33" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="2"/></svg><span id="cardPhTxt">Photo loading</span></div><div class="cap" id="cardCap"></div></div>
+    <div class="cb">
+      <div class="l1" id="cardL1"></div>
+      <div class="l2" id="cardL2"></div>
+      <dl><dt>Tracked by</dt><dd id="cardOrg"></dd><dt>Named by</dt><dd id="cardNamed"></dd><dt>Last seen</dt><dd id="cardSeen"></dd></dl>
+      <canvas id="cardMap" aria-label="Map of the whole path"></canvas>
+      <div class="credit" id="cardCredit"></div>
+    </div>
+  </section>
   <div id="info"></div>
 </aside>
 <canvas id="mini" title="Open map" hidden></canvas>
@@ -92,6 +140,11 @@ footer{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:c
   <select id="speed" aria-label="Playback speed"><option value="1">x1</option><option value="10">x10</option><option value="100">x100</option><option value="1000">x1000</option></select>
   <div id="clock"></div>
 </footer>
+<div id="bottom">
+  <div id="cc" hidden aria-live="polite"><span id="ccText"></span></div>
+  <div id="vnote" hidden></div>
+  <div class="dist" id="dist" role="group" aria-label="Camera distance"><button data-dist="wide">Wide</button><button data-dist="alongside">Alongside</button><button data-dist="close">Close</button><button data-dist="eye" id="distEye">Eagle's-eye</button></div>
+</div>
 <div id="toast"></div>
 <div id="gcredit" hidden><span id="glogo">Google</span><span id="gattr"></span></div>
 <div id="dropzone">Drop a Movebank CSV or GPX file to ride it</div>
@@ -817,6 +870,7 @@ function parseMovebankCSV(text) {
   const iO1 = col(['manually-marked-outlier']), iO2 = col(['algorithm-marked-outlier']);
   const iNick = col(['individual-nick-name', 'nick-name', 'nickname', 'animal-name']), iTag = col(['tag-local-identifier', 'tag-id']);
   const iOrg = col(['tracking-organization', 'tracking-organisation', 'organization', 'organisation']), iNamedBy = col(['named-by']);
+  const iPhoto = col(['photo-url', 'animal-photo-url', 'photo']), iPhotoCr = col(['photo-credit']), iPhotoInd = col(['photo-is-individual', 'photo-of-individual']);
   if (iLon < 0 || iLat < 0) throw new Error('Could not find location-long / location-lat columns. Columns found: ' + header.slice(0, 12).join(', '));
   const byId = new Map(); let rows = 0, skipped = 0, hidden = 0;
   for (let li = hi + 1; li < lines.length; li++) {
@@ -833,7 +887,8 @@ function parseMovebankCSV(text) {
     else if (iDep >= 0) { const d = parseFloat(get(iDep)); if (isFinite(d)) alt = -Math.abs(d); }
     const id = (iId >= 0 && get(iId)) || 'track 1';
     let tr = byId.get(id);
-    if (!tr) { tr = { id, taxon: get(iTax), nick: get(iNick), tagId: get(iTag), org: get(iOrg), namedBy: get(iNamedBy), points: [] }; byId.set(id, tr); }
+    if (!tr) { tr = { id, taxon: get(iTax), nick: get(iNick), tagId: get(iTag), org: get(iOrg), namedBy: get(iNamedBy),
+      photoUrl: get(iPhoto), photoCredit: get(iPhotoCr), photoIsIndividual: /^(true|yes|1)$/i.test(get(iPhotoInd)), points: [] }; byId.set(id, tr); }
     if (!tr.taxon && iTax >= 0) tr.taxon = get(iTax);
     tr.points.push({ t, lat, lon, alt });
   }
@@ -915,7 +970,9 @@ function buildTrack(raw, opts = {}) {
   return {
     id: raw.id, taxon: raw.taxon || '', name: opts.name || raw.id, isSample: !!opts.isSample, source: opts.source || '',
     // identity for the I'M HERE label: tag id, the animal's name (if it has one), who tracks it and who named it
-    tagId: opts.tagId || raw.tagId || raw.id, animalName: opts.animalName || raw.nick || '', org: opts.org || raw.org || '', namedBy: opts.namedBy || raw.namedBy || '',
+    tagId: opts.tagId || raw.tagId || raw.id, animalName: opts.animalName || opts.nameOfAnimal || raw.nick || '', org: opts.org || raw.org || '', namedBy: opts.namedBy || raw.namedBy || '',
+    // the animal card: a photo only if it is http(s) (or a data: image); photoIsIndividual = the photo shows this very animal
+    photoUrl: safePhotoUrl(opts.photoUrl || raw.photoUrl), photoCredit: opts.photoCredit || raw.photoCredit || '', photoIsIndividual: !!(opts.photoIsIndividual ?? raw.photoIsIndividual),
     n, t: T, lat, lon, alt: hasAlt ? alt : null, x, z, seg, cum,
     mx: tang(x), mz: tang(z), ma: hasAlt ? tang(alt) : null,
     lat0, lon0, t0: T[0], t1: T[n - 1], totalDist: cum[n - 1], medianDt: dts[dts.length >> 1],
@@ -1101,6 +1158,44 @@ function genSharkCSV() {
   }
   return rows.join('\n');
 }
+// ---------- animal card + Naturalist Guide (pure) ----------
+const safePhotoUrl = (u) => (u = String(u || '').trim(), /^(https:\/\/|http:\/\/|data:image\/)/i.test(u) ? u : '');
+function formatAgo(ms) {   // "just now", "14 min ago", "3 hrs ago", "12 days ago", "2 yrs ago"
+  if (!isFinite(ms)) return 'time unknown';
+  if (ms < 0) return 'in the future';
+  const m = ms / 60000, h = m / 60, d = h / 24, y = d / 365.25, pl = (n, w) => n + ' ' + w + (n === 1 ? '' : 's') + ' ago';
+  if (m < 1) return 'just now'; if (h < 1) return Math.floor(m) + ' min ago'; if (d < 1) return pl(Math.floor(h), 'hr');
+  if (d < 60) return pl(Math.floor(d), 'day'); if (y < 1) return pl(Math.floor(d / 30.44), 'month'); return pl(Math.floor(y), 'yr');
+}
+// The guide speaks only at moments: the start of a ride, dives and big climbs or descents, crossing into a named
+// place, and records on this ride (deepest, highest). Never more than one line every GUIDE_GAP seconds of real time.
+// o = { now: s, ocean, h: depth below the surface (ocean) or height above ground (land) in m, vh: m/s (+ up),
+//       place, named (place is a named place, not a region), busy (the narrator is still talking) }
+const GUIDE_GAP = 30;
+function guideNew(info) { return { info: info || {}, started: false, last: -1e9, ref: null, place: '', bestSaid: 0, diving: false, said: {} }; }
+function guideReset(G) { G.ref = null; G.diving = false; }   // after a seek or a loop: a jump in time is not a dive
+function guideStep(G, o) {
+  if (o.busy) return '';
+  const I = G.info, once = (k) => { if (G.said[k] || !I.facts || !I.facts[k]) return ''; G.said[k] = true; return ' ' + I.facts[k]; };
+  const say = (t) => { G.last = o.now; return t; };
+  if (!G.started) { G.started = true; G.ref = o.h; G.place = o.place; G.bestSaid = o.h; return say(I.intro || ''); }
+  if (G.ref == null) { G.ref = o.h; G.place = o.place; G.bestSaid = Math.max(G.bestSaid, o.h); return ''; }
+  if (o.now - G.last < GUIDE_GAP) return '';
+  const m = Math.round(o.h);
+  if (o.ocean) {
+    if (o.h > G.bestSaid + 10 && o.h > 15) { G.bestSaid = o.h; G.ref = o.h; return say(`Deepest point of this ride so far: ${m} metres.` + once('deep')); }
+    if (o.h - G.ref >= 15) { G.ref = o.h; return say(`Diving, now ${m} metres down.` + once('dive')); }
+    if (G.ref - o.h >= 15) { G.ref = o.h; return say(`Rising, ${m} metres below the surface.` + once('rise')); }
+  } else {
+    if (o.vh < -5 && !G.diving) { G.diving = true; G.ref = o.h; return say('Diving!' + once('dive')); }
+    if (o.vh > -2) G.diving = false;
+    if (o.h > G.bestSaid + 120 && o.h > 250) { G.bestSaid = o.h; G.ref = o.h; return say(`Highest of this ride so far: ${m} metres above the ground.` + once('high')); }
+    if (o.h - G.ref >= 150) { G.ref = o.h; return say(`Climbing, now ${m} metres up.` + once('climb')); }
+    if (G.ref - o.h >= 150) { G.ref = o.h; return say(`Gliding down, ${m} metres above the ground.` + once('glide')); }
+  }
+  if (o.named && o.place && o.place !== G.place) { G.place = o.place; return say(`Now ${o.ocean ? 'in' : 'over'} ${o.place}.`); }
+  return '';
+}
 /* CORE-END */
 
 // ======================= UI + rendering (needs three.js) =======================
@@ -1142,13 +1237,50 @@ const PAL = {
   under: C('#0c4d68'),
 };
 const fogAbove = new THREE.Fog(PAL.land.horizon.clone(), 1500, 12000);
-const fogUnder = new THREE.Fog(PAL.under.clone(), 0.5, 85);
+// Underwater: FogExp2 drives a per-channel absorption (below): reds go within ~4-6 m, green/blue reach 20-30 m and the
+// distance fades to blue-green. The above-water linear fog is unchanged.
+const UW = { density: 0.075, base: C('#1b7480'), deepTint: C('#0a2f4a'), eyeDepth: 0, k: 1 };
+const fogUnder = new THREE.FogExp2(UW.base.clone(), UW.density);
+THREE.ShaderChunk.fog_fragment = `#ifdef USE_FOG
+  #ifdef FOG_EXP2
+    vec3 fogT = exp(-fogDensity * vec3(3.4, 1.0, 1.35) * vFogDepth);
+    gl_FragColor.rgb = gl_FragColor.rgb * fogT + fogColor * (1.0 - fogT);
+  #else
+    float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+  #endif
+#endif`;
+// Animated caustics (tileable, 4 cheap iterations) on the seabed and the animal, underwater only.
+const CAUS = { t: { value: 0 }, on: { value: 0 }, off: { value: new THREE.Vector2() } };
+const CAUSTIC_GLSL = `uniform float uCausT; uniform float uCausOn; uniform vec2 uCausOff; varying vec3 vCausW;
+  float causticPat(vec2 uv, float t) {
+    vec2 p = mod(uv * 0.21, 6.2831853) - 250.0, i = p; float c = 1.0;
+    for (int n = 0; n < 4; n++) { float tt = t * (1.0 - 3.5 / float(n + 1));
+      i = p + vec2(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
+      c += 1.0 / length(vec2(p.x / (sin(i.x + tt) / 0.005), p.y / (cos(i.y + tt) / 0.005))); }
+    c = 1.17 - pow(c / 4.0, 1.4); return clamp(pow(abs(c), 8.0), 0.0, 1.5);
+  }`;
+function addCaustics(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uCausT = CAUS.t; sh.uniforms.uCausOn = CAUS.on; sh.uniforms.uCausOff = CAUS.off;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCausW;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvCausW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + CAUSTIC_GLSL)
+      .replace('#include <opaque_fragment>', `if (uCausOn > 0.5 && vCausW.y < 0.0) {
+        float up = clamp((vec4(normal, 0.0) * viewMatrix).y, 0.0, 1.0);
+        outgoingLight += diffuseColor.rgb * vec3(0.55, 0.95, 1.0) * causticPat(vCausW.xz + uCausOff, uCausT) * up * exp(vCausW.y / 22.0) * 1.3;
+      }
+      #include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'caustics';
+}
 scene.fog = fogAbove; scene.background = PAL.land.horizon.clone();
 
 // ---- sky dome ----
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
-  uniforms: { uZenith: { value: PAL.land.zenith.clone() }, uHorizon: { value: PAL.land.horizon.clone() }, uSun: { value: SUN_DIR } },
+  uniforms: { uZenith: { value: PAL.land.zenith.clone() }, uHorizon: { value: PAL.land.horizon.clone() }, uSun: { value: SUN_DIR },
+    uUnder: { value: 0 }, uUp: { value: new THREE.Color() }, uDown: { value: new THREE.Color() }, uFogC: { value: new THREE.Color() } },
   vertexShader: `#include <common>
     #include <logdepthbuf_pars_vertex>
     varying vec3 vDir;
@@ -1157,7 +1289,7 @@ const skyMat = new THREE.ShaderMaterial({
     }`,
   fragmentShader: `#include <common>
     #include <logdepthbuf_pars_fragment>
-    uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uSun; varying vec3 vDir;
+    uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uSun; uniform float uUnder; uniform vec3 uUp; uniform vec3 uDown; uniform vec3 uFogC; varying vec3 vDir;
     void main(){
       #include <logdepthbuf_fragment>
       vec3 d = normalize(vDir); float h = d.y;
@@ -1165,9 +1297,12 @@ const skyMat = new THREE.ShaderMaterial({
       if (h < 0.0) col = uHorizon * (1.0 + h*0.25);
       float sd = max(dot(d, uSun), 0.0);
       col += vec3(1.0,0.92,0.75) * (pow(sd, 900.0)*25.0 + pow(sd, 12.0)*0.25);
+
       gl_FragColor = vec4(col, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
+      // underwater: light from above, dark below, exactly the fog colour at the horizon (not tone mapped, like three's fog)
+      if (uUnder > 0.5) gl_FragColor = linearToOutputTexel(vec4(h < 0.0 ? mix(uFogC, uDown, 1.0 - smoothstep(-0.7, 0.0, h)) : mix(uFogC, uUp, smoothstep(0.0, 0.9, h)), 1.0));
     }`,
 });
 const sky = new THREE.Mesh(new THREE.SphereGeometry(70000, 32, 16), skyMat); sky.renderOrder = -10; sky.frustumCulled = false; scene.add(sky);
@@ -1176,6 +1311,7 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(70000, 32, 16), skyMat); sky
 const waterMat = new THREE.ShaderMaterial({
   fog: true, side: THREE.DoubleSide,
   uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+    uSunUnder: { value: new THREE.Vector3(0, 1, 0) }, uDepthK: { value: 1 },
     uTime: { value: 0 }, uOffset: { value: new THREE.Vector2() }, uDeep: { value: PAL.land.deep.clone() }, uShallow: { value: PAL.land.shallow.clone() },
     uSky: { value: PAL.land.zenith.clone() }, uHorizon: { value: PAL.land.horizon.clone() }, uSunDir: { value: SUN_DIR.clone() }, uUnder: { value: PAL.under.clone() },
   }]),
@@ -1191,7 +1327,7 @@ const waterMat = new THREE.ShaderMaterial({
   fragmentShader: `#include <common>
     #include <fog_pars_fragment>
     #include <logdepthbuf_pars_fragment>
-    uniform float uTime; uniform vec2 uOffset; uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uHorizon; uniform vec3 uSunDir; uniform vec3 uUnder;
+    uniform float uTime; uniform vec2 uOffset; uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uHorizon; uniform vec3 uSunDir; uniform vec3 uUnder; uniform vec3 uSunUnder; uniform float uDepthK;
     varying vec3 vWorld;
     vec2 wv(vec2 p, vec2 d, float f, float sp){ return d * cos(dot(p,d)*f + uTime*sp) * f; }
     void main(){
@@ -1213,28 +1349,95 @@ const waterMat = new THREE.ShaderMaterial({
         vec3 body = mix(uDeep, uShallow, 0.25 + 0.25*g.x);
         col = mix(body, skyc, fres) + vec3(1.0,0.95,0.85)*(pow(sd,500.0)*8.0 + pow(sd,40.0)*0.25);
       } else {
-        float c = max(-V.y, 0.0);
-        col = mix(uUnder*0.7, uShallow*2.2 + vec3(0.25), smoothstep(0.62, 0.95, c + g.x*0.05));
+        // seen from below: the sky squeezed into Snell's window (half-angle 48.6 deg, cos 0.66), a bright rim, and outside
+        // it total internal reflection of the dark water; the ripples bend the window edge and brighten in bands
+        vec3 L = -V;                                   // from the eye up to the surface
+        float c = L.y + dot(n.xz, L.xz) * 0.9;         // cos(angle from vertical), bent by the ripples
+        float win = smoothstep(0.63, 0.69, c);
+        float rip = 0.7 + 0.6 * abs(g.x - g.y) / (abs(g.x) + abs(g.y) + 0.05);
+        vec3 skyc = mix(uHorizon, uSky, smoothstep(0.66, 1.0, c)) * 1.7 * rip;
+        float sd = max(dot(normalize(L + vec3(n.x, 0.0, n.z) * 0.5), uSunUnder), 0.0);
+        skyc += vec3(1.0, 0.97, 0.88) * (pow(sd, 90.0) * 6.0 + pow(sd, 8.0) * 0.5);
+        vec3 tir = uUnder * (0.55 + 0.35 * rip);
+        col = mix(tir, skyc * uDepthK, win) + vec3(0.85, 1.0, 1.0) * exp(-pow((c - 0.66) / 0.025, 2.0)) * 0.6 * uDepthK;
       }
       gl_FragColor = vec4(col, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
-      #include <fog_fragment>
+      #ifdef USE_FOG
+        #ifdef FOG_EXP2
+          vec3 fogT = exp(-fogDensity * vec3(3.4, 1.0, 1.35) * vFogDepth * 0.35);   // the ceiling is lit from above: absorbs less
+          gl_FragColor.rgb = gl_FragColor.rgb * fogT + fogColor * (1.0 - fogT);
+        #else
+          #include <fog_fragment>
+        #endif
+      #endif
     }`,
 });
 const water = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), waterMat); scene.add(water);
 
 // ---- marine snow (underwater motion cue) ----
-const SNOW_N = 900, SNOW_BOX = 70;
+const SNOW_N = 1400, SNOW_BOX = 40;
 const snowGeo = new THREE.BufferGeometry(); const snowBase = new Float32Array(SNOW_N * 3);
 for (let i = 0; i < SNOW_N * 3; i++) snowBase[i] = Math.random() * SNOW_BOX;
 snowGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SNOW_N * 3), 3));
-const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({ color: 0xcfe9f0, size: 0.09, transparent: true, opacity: 0.7, depthWrite: false }));
+const snowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d');
+  const r = g.createRadialGradient(16, 16, 0, 16, 16, 16); r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.45, 'rgba(255,255,255,0.55)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
+const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({ color: 0xd8eee8, size: 0.11, map: snowTex, transparent: true, opacity: 0.75, depthWrite: false }));
 snow.frustumCulled = false; snow.visible = false; scene.add(snow);
+
+// ---- light shafts from the surface (camera-facing additive strips, world-anchored and wrapped around the eye) ----
+const SHAFT_N = 36, SHAFT_BOX = 70, SHAFT_LEN = 42;
+const shaftU = { uTime: { value: 0 }, uStrength: { value: 0 }, uEye: { value: new THREE.Vector3() }, uSlant: { value: new THREE.Vector2() } };
+const shafts = (() => {
+  const corner = [], off = [], idx = [];
+  for (let i = 0; i < SHAFT_N; i++) {
+    const ox = Math.random() * SHAFT_BOX, oz = Math.random() * SHAFT_BOX, w = 0.8 + Math.random() * 2.6, ph = Math.random() * 6.283;
+    for (const [cx, cy] of [[-0.5, 0], [0.5, 0], [0.5, 1], [-0.5, 1]]) { corner.push(cx, cy); off.push(ox, oz, w, ph); }
+    const b = i * 4; idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(SHAFT_N * 12), 3));
+  geo.setAttribute('aCorner', new THREE.Float32BufferAttribute(corner, 2)); geo.setAttribute('aOff', new THREE.Float32BufferAttribute(off, 4)); geo.setIndex(idx);
+  const mat = new THREE.ShaderMaterial({ uniforms: shaftU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    vertexShader: `#include <common>
+      #include <logdepthbuf_pars_vertex>
+      attribute vec2 aCorner; attribute vec4 aOff; uniform vec3 uEye; uniform vec2 uSlant; uniform float uTime; varying vec2 vC; varying float vFade; varying float vPh;
+      void main(){
+        float B = ${SHAFT_BOX.toFixed(1)};
+        vec2 base = uEye.xz + mod(aOff.xy - uEye.xz + B * 0.5, B) - B * 0.5;   // world-anchored, wrapped around the eye
+        float d = aCorner.y * ${SHAFT_LEN.toFixed(1)};
+        vec3 top = vec3(base.x, 0.0, base.y), p = top + vec3(uSlant.x * d, -d, uSlant.y * d);
+        vec3 toEye = uEye - p; vec3 right = normalize(cross(vec3(uSlant.x, -1.0, uSlant.y), toEye));
+        p += right * aCorner.x * aOff.z * (1.0 + 0.15 * sin(uTime * 0.6 + aOff.w));
+        vC = aCorner; vPh = aOff.w;
+        float dist = length(uEye - p); vFade = exp(-dist * 0.07) * smoothstep(1.5, 6.0, dist) * (1.0 - smoothstep(B * 0.3, B * 0.5, length(base - uEye.xz)));
+        gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: `#include <common>
+      #include <logdepthbuf_pars_fragment>
+      uniform float uStrength; uniform float uTime; varying vec2 vC; varying float vFade; varying float vPh;
+      void main(){
+        #include <logdepthbuf_fragment>
+        float edge = 1.0 - pow(abs(vC.x) * 2.0, 2.0);
+        float a = edge * exp(-vC.y * 2.4) * (0.55 + 0.45 * sin(uTime * 0.7 + vPh)) * vFade * uStrength;
+        gl_FragColor = vec4(vec3(0.62, 0.92, 0.95) * a, 1.0);
+      }`,
+  });
+  const m = new THREE.Mesh(geo, mat); m.frustumCulled = false; m.visible = false; m.renderOrder = 5; return m;
+})();
+scene.add(shafts);
+// refracted sun under the surface (Snell): steeper than the sun in the air
+const SUN_UNDER = (() => { const h = Math.hypot(SUN_DIR.x, SUN_DIR.z), sinT = h / 1.333, cosT = Math.sqrt(1 - sinT * sinT);
+  return new THREE.Vector3(SUN_DIR.x / h * sinT, cosT, SUN_DIR.z / h * sinT); })();
+waterMat.uniforms.uSunUnder.value.copy(SUN_UNDER);
+shaftU.uSlant.value.set(-SUN_UNDER.x / SUN_UNDER.y, -SUN_UNDER.z / SUN_UNDER.y);
 
 // ---- terrain tile that follows the animal (floating origin) ----
 const ORIGIN = { x: 0, z: 0 };
-const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }); addCaustics(terrainMat);
 const TC = { mud: C('#5e523a'), bank: C('#9c8b62'), grass: C('#6b8b3e'), pasture: C('#93a957'), forest: C('#32502a'), rock: C('#8f8b7d'),
   sand: C('#d6c596'), seabedS: C('#b9a77c'), seabedD: C('#2f4650'), dry: C('#a8995c'), scrub: C('#5c683b'), cliff: C('#7b6d5a') };
 const tmpC = new THREE.Color();
@@ -1334,7 +1537,8 @@ function buildEagle() {
     shoulders.push(sh); elbows.push(el);
   }
   g.scale.setScalar(0.92);
-  return { group: g, shoulders, elbows, tail, eye: new THREE.Vector3(0, 0.24, 0.22), chase: { back: 5.5, up: 1.4 }, phase: 0, flap: 0, fold: 0, burst: 0 };
+  return { group: g, shoulders, elbows, tail, eye: new THREE.Vector3(0, 0.24, 0.22), phase: 0, flap: 0, fold: 0, burst: 0,
+    booms: { wide: { back: 22, up: 5, side: 7 }, alongside: { back: 1.2, up: 0.5, side: 3.4 }, close: { back: 4.5, up: 1.2, side: 0 } } };
 }
 function buildShark() {
   const prof = [[0, 2.25], [0.12, 2.15], [0.26, 1.95], [0.42, 1.5], [0.53, 0.8], [0.55, 0.3], [0.48, -0.4], [0.34, -1.1], [0.2, -1.7], [0.11, -2.1], [0.09, -2.3], [0, -2.32]]
@@ -1363,9 +1567,10 @@ function buildShark() {
   });
   const geo = mergeGeometries(geos, false);
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side: THREE.DoubleSide }));
-  mesh.frustumCulled = false;
+  mesh.frustumCulled = false; addCaustics(mesh.material);
   const g = new THREE.Group(); g.add(mesh);
-  return { group: g, mesh, base: geo.attributes.position.array.slice(), eye: new THREE.Vector3(0, 0.62, 1.25), chase: { back: 9, up: 2.2 }, phase: 0 };
+  return { group: g, mesh, base: geo.attributes.position.array.slice(), eye: new THREE.Vector3(0, 0.62, 1.25), phase: 0,
+    booms: { wide: { back: 14, up: 3.5, side: 5 }, alongside: { back: 1.6, up: 0.7, side: 4.6 }, close: { back: 7, up: 1.7, side: 0 } } };   // wide stays inside the ~20 m underwater visibility
 }
 const eagle = buildEagle(), shark = buildShark();
 scene.add(eagle.group, shark.group);
@@ -1404,6 +1609,11 @@ const st = { yaw: 0, pitch: 0, bank: 0, y: 0, hspeed: 0, valt: 0, agl: 0, ground
 const S = {};
 const camPos = new THREE.Vector3();
 const look = { yaw: 0, pitch: 0, drag: false, px: 0, py: 0 };
+// camera distance per view (the user's choice, remembered): wide, alongside, close, eye
+const DISTS = ['wide', 'alongside', 'close', 'eye'];
+const camDist = { ride: 'eye', chase: 'close' }; let camMode = 'eye';
+try { const p = JSON.parse(localStorage.getItem('imhere.wildlife.dist') || '{}');
+  for (const v of ['ride', 'chase']) if (DISTS.includes(p[v])) camDist[v] = p[v]; } catch (e) { /* private mode */ }
 // VR comfort camera: level horizon (no roll), yaw follows the low-passed direction of travel, capped at 30 deg/s,
 // and holds its heading while the animal circles tightly (thermalling), so the view never spins with it.
 const COMFORT = { maxYawRate: 30 * DEG, tau: 3, circleRate: 20 * DEG };
@@ -1436,6 +1646,7 @@ function selectTrack(tr) {
   st.yaw = Math.atan2(S.vx, S.vz) || 0; st.pitch = 0; st.bank = 0; snap = true; look.yaw = look.pitch = 0;
   mapCache.key = ''; miniCache.key = '';
   renderTrackList(); renderInfoStatic(); refreshMark(); if (typeof placeTiles === 'function') placeTiles();
+  renderCard(true); renderDistBar(); guideTrackChanged();
 }
 // ---- I'M HERE label (shared/imhere-mark.js, inlined above). Nothing here is live. ----
 // Common names for the label (Latin stays in the (i) details) and a small gazetteer so Location is a place, not coordinates.
@@ -1448,7 +1659,7 @@ const COMMON = { 'haliaeetus leucocephalus': 'Bald eagle', 'carcharodon carchari
 const commonName = (tr, fallback) => COMMON[String(tr.taxon || '').trim().toLowerCase()] || (tr.taxon ? tr.taxon : fallback);
 const PLACES = [   // [name, lat, lon]; extend as real tracks arrive
   ['Old Hickory Lake, TN', 36.30, -86.60], ['Percy Priest Lake, TN', 36.10, -86.52], ['Cumberland River, Nashville, TN', 36.17, -86.78],
-  ['Kentucky Lake, TN', 36.60, -88.05], ['Center Hill Lake, TN', 36.05, -85.80], ['Chickamauga Lake, TN', 35.25, -85.10],
+  ['Kentucky Lake, TN', 36.60, -88.05], ['Bowling Green, KY', 36.99, -86.44], ['Franklin, KY', 36.72, -86.58], ['Center Hill Lake, TN', 36.05, -85.80], ['Chickamauga Lake, TN', 35.25, -85.10],
   ['Monterey Bay, CA', 36.80, -121.95], ['Big Sur coast, CA', 36.25, -121.80], ['Farallon Islands, CA', 37.70, -123.00], ['San Francisco Bay, CA', 37.75, -122.35],
   ['Cape Cod, MA', 41.70, -70.10], ['Chesapeake Bay, VA', 37.80, -76.10], ['Lake Constance, Germany', 47.63, 9.37], ['Strait of Gibraltar', 35.95, -5.60],
   ['Puget Sound, WA', 47.60, -122.45], ['Salish Sea, WA', 48.60, -123.20], ['Gulf of Maine', 43.00, -69.00], ['Everglades, FL', 25.60, -80.90] ];
@@ -1591,6 +1802,379 @@ function refreshMark() {
     items });
   MARK.setLive(false);   // tracks are files (sample or recorded), never live
 }
+// ================= animal card (page + VR panel) =================
+// Species photos come from Wikimedia Commons and load at runtime as a plain img element (no fetch, nothing stored). They are
+// always captioned "Species photo, not this individual". A real track can carry its own photo (photoUrl, photoCredit,
+// photoIsIndividual); only a photo marked as this very animal loses the caption. If a photo cannot load: a quiet placeholder.
+const SPECIES_PHOTO = {
+  'haliaeetus leucocephalus': { url: 'https://commons.wikimedia.org/wiki/Special:FilePath/Haliaeetus_leucocephalus_in_flight_over_KSC.jpg?width=640',
+    credit: 'NASA / Gary Rothstein, public domain', href: 'https://commons.wikimedia.org/wiki/File:Haliaeetus_leucocephalus_in_flight_over_KSC.jpg' },
+  'carcharodon carcharias': { url: 'https://commons.wikimedia.org/wiki/Special:FilePath/White_shark.jpg?width=640',
+    credit: 'Terry Goss, CC BY-SA 3.0', href: 'https://commons.wikimedia.org/wiki/File:White_shark.jpg' },
+};
+const SPECIES_CAPTION = 'Species photo, not this individual';
+function cardData(tr) {
+  const ocean = (world && world.mode === 'ocean'), cn = COMMON[String(tr.taxon || '').trim().toLowerCase()];
+  const species = cn || (tr.taxon ? tr.taxon : (ocean ? 'Shark' : 'Eagle'));
+  const sp = SPECIES_PHOTO[String(tr.taxon || '').trim().toLowerCase()];
+  const photo = tr.photoUrl ? { url: tr.photoUrl, credit: tr.photoCredit || 'Photo credit not given', href: '', individual: tr.photoIsIndividual }
+    : sp ? { url: sp.url, credit: sp.credit + ', via Wikimedia Commons', href: sp.href, individual: false } : null;
+  const li = tr.n - 1, lon = ((tr.lon[li] + 540) % 360) - 180;
+  return {
+    line1: (tr.isSample ? 'Sample track' : tr.org || 'Your data') + ' · ' + species,
+    line2: 'Tag ' + tr.tagId + (tr.animalName ? ' · ' + tr.animalName : ''),
+    org: tr.org || (tr.isSample ? 'Nobody: a made-up sample track' : 'Not given in the file'),
+    namedBy: tr.animalName ? (tr.namedBy || 'Not given') : 'Not named',
+    seenPlace: placeFor(tr.lat[li], lon, ocean), seenAgo: formatAgo(Date.now() - tr.t1) + (tr.isSample ? ' (sample data)' : ''),
+    photo, caption: photo && !photo.individual ? SPECIES_CAPTION : '', species,
+  };
+}
+const card = { el: $('#card'), img: $('#cardImg'), ph: $('#cardPh'), phTxt: $('#cardPhTxt'), map: $('#cardMap'), url: '', ok: false, data: null, mapT: 0,
+  xrImg: null, xrOk: false, sig: '' };
+function renderCard(force) {
+  if (!cur) return;
+  const d = cardData(cur); card.data = d;
+  $('#cardL1').textContent = d.line1; $('#cardL2').textContent = d.line2;
+  $('#cardOrg').textContent = d.org; $('#cardNamed').textContent = d.namedBy; $('#cardSeen').textContent = d.seenPlace + ' · ' + d.seenAgo;
+  const url = d.photo ? d.photo.url : '';
+  if (force || url !== card.url) {
+    card.url = url; card.ok = false; card.img.hidden = true; card.ph.hidden = false;
+    card.phTxt.textContent = url ? 'Photo loading' : 'No photo for this animal';
+    card.img.alt = d.photo ? (d.caption ? d.species + ' (' + d.caption.toLowerCase() + ')' : 'Photo of ' + d.line2) : '';
+    if (url) { card.img.removeAttribute('src'); card.img.src = url; } else card.img.removeAttribute('src');
+    loadXRPhoto(url);
+  }
+  $('#cardCap').textContent = card.ok || !url ? (url ? d.caption : '') : '';
+  const cr = $('#cardCredit'); cr.textContent = '';
+  if (d.photo && card.ok) {
+    cr.append('Photo: ');
+    if (d.photo.href) { const a = document.createElement('a'); a.href = d.photo.href; a.target = '_blank'; a.rel = 'noopener'; a.textContent = d.photo.credit; cr.append(a); }
+    else cr.append(d.photo.credit);
+  }
+  drawCardMap(); card.sig = '';
+}
+card.img.addEventListener('load', () => { if (!card.img.src) return; card.ok = true; card.img.hidden = false; card.ph.hidden = true; renderCard(false); });
+card.img.addEventListener('error', () => { if (!card.url) return; card.ok = false; card.img.hidden = true; card.ph.hidden = false; card.phTxt.textContent = 'Photo unavailable right now';
+  $('#cardCap').textContent = ''; $('#cardCredit').textContent = ''; });
+function loadXRPhoto(url) {   // a CORS copy for the VR panel's canvas; if the host refuses CORS, the panel shows the placeholder
+  card.xrOk = false; card.xrImg = null; card.sig = '';
+  if (!url) return;
+  const im = document.createElement('img'); im.crossOrigin = 'anonymous'; im.referrerPolicy = 'no-referrer';
+  im.onload = () => { if (card.url === url) { card.xrImg = im; card.xrOk = true; card.sig = ''; } };
+  im.src = url;
+}
+// the path, whole: dashed ahead, amber behind, a green start dot and a plain dot for "now" (no heading arrow: no guidance)
+function drawPathMap(g, x, y, w, h, dpr) {
+  g.fillStyle = '#0e1a22'; g.fillRect(x, y, w, h);
+  if (!cur) return;
+  const f = mapFit(cur, w, h, 10 * dpr), st = Math.max(1, Math.floor(cur.n / 1500));
+  const P = (i) => [x + f.sx(cur.x[i]), y + f.sy(cur.z[i])];
+  g.lineJoin = g.lineCap = 'round';
+  g.beginPath(); for (let i = 0; i < cur.n; i += st) { const [a, b] = P(i); i ? g.lineTo(a, b) : g.moveTo(a, b); }
+  g.strokeStyle = 'rgba(255,255,255,.45)'; g.lineWidth = 1.5 * dpr; g.setLineDash([4 * dpr, 4 * dpr]); g.stroke(); g.setLineDash([]);
+  g.beginPath(); for (let i = 0; i <= S.i; i += st) { const [a, b] = P(i); i ? g.lineTo(a, b) : g.moveTo(a, b); }
+  g.lineTo(x + f.sx(S.x), y + f.sy(S.z)); g.strokeStyle = '#ffb547'; g.lineWidth = 2.5 * dpr; g.stroke();
+  const [sx, sy] = P(0); g.fillStyle = '#7fd6a4'; g.beginPath(); g.arc(sx, sy, 3.5 * dpr, 0, 7); g.fill();
+  g.fillStyle = '#fff'; g.strokeStyle = '#1b1205'; g.lineWidth = 1.5 * dpr; g.beginPath(); g.arc(x + f.sx(S.x), y + f.sy(S.z), 4.5 * dpr, 0, 7); g.fill(); g.stroke();
+}
+function drawCardMap() {
+  const c = card.map; if (!c || !c.clientWidth || !cur) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), W = Math.round(c.clientWidth * dpr), H = Math.round(c.clientHeight * dpr);
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  drawPathMap(c.getContext('2d'), 0, 0, W, H, dpr);
+}
+// VR: the same card on a small panel low to the left, fixed to your body (not your head). Repainted only when its
+// text changes or at most every 5 s for the path (one 1024x512 texture upload), never every frame.
+const cardXR = (() => {
+  const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 512;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.25), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+  m.renderOrder = 1002; m.visible = false; m.frustumCulled = false; rig.add(m);
+  return { cv, tex, m, on: true, t: 0 };
+})();
+function paintCardXR() {
+  const d = card.data; if (!d) return;
+  const g = cardXR.cv.getContext('2d'), W = 1024, H = 512;
+  g.clearRect(0, 0, W, H); g.fillStyle = 'rgba(14,20,26,0.92)'; g.beginPath(); g.roundRect ? g.roundRect(0, 0, W, H, 28) : g.rect(0, 0, W, H); g.fill();
+  const px = 24, py = 24, pw = 420, ph = 300;
+  if (card.xrOk && card.xrImg) {
+    const im = card.xrImg, s = Math.max(pw / im.naturalWidth, ph / im.naturalHeight), sw = pw / s, sh = ph / s;
+    g.save(); g.beginPath(); g.rect(px, py, pw, ph); g.clip(); g.drawImage(im, (im.naturalWidth - sw) / 2, (im.naturalHeight - sh) / 2, sw, sh, px, py, pw, ph); g.restore();
+    if (d.caption) { g.fillStyle = 'rgba(0,0,0,0.7)'; g.fillRect(px, py + ph - 40, pw, 40); g.fillStyle = '#fff'; g.font = '600 22px system-ui,sans-serif'; g.textBaseline = 'middle'; g.fillText(d.caption, px + 12, py + ph - 20); }
+  } else {
+    g.fillStyle = '#1d3440'; g.fillRect(px, py, pw, ph); g.fillStyle = '#b9c8d2'; g.font = '500 24px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(card.url ? 'Photo: see the page' : 'No photo', px + pw / 2, py + ph / 2); g.textAlign = 'left';
+  }
+  if (d.photo && card.xrOk) { g.fillStyle = '#9fb0bc'; g.font = '18px system-ui,sans-serif'; g.textBaseline = 'top'; g.fillText(fitText(g, 'Photo: ' + d.photo.credit, pw), px, py + ph + 10); }
+  const tx = px + pw + 28, tw = W - tx - 24; g.textBaseline = 'top';
+  g.fillStyle = '#eef3f6'; g.font = '700 36px system-ui,sans-serif'; g.fillText(fitText(g, d.line1, tw), tx, 28);
+  g.font = '500 30px system-ui,sans-serif'; g.fillText(fitText(g, d.line2, tw), tx, 76);
+  const rowsXR = [['Tracked by', d.org], ['Named by', d.namedBy], ['Last seen', d.seenPlace], ['', d.seenAgo]];
+  rowsXR.forEach(([k, v], i) => { g.fillStyle = '#9fb0bc'; g.font = '22px system-ui,sans-serif'; g.fillText(k, tx, 128 + i * 34);
+    g.fillStyle = '#eef3f6'; g.fillText(fitText(g, v, tw - 140), tx + 140, 128 + i * 34); });
+  drawPathMap(g, tx, 280, tw, 200, 2);
+  cardXR.tex.needsUpdate = true;
+}
+function fitText(g, t, w) { t = String(t); if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+function cardXRStep(dt, xr) {
+  cardXR.m.visible = xr && cardXR.on && !!cur;
+  if (!cardXR.m.visible) return;
+  cardXR.m.position.set(-0.52, camera.position.y - 0.42, -0.95 + camera.position.z); cardXR.m.rotation.set(-0.35, 0.5, 0, 'YXZ');
+  const sig = card.url + card.xrOk + (card.data ? card.data.line1 + card.data.line2 + card.data.seenAgo : '');
+  cardXR.t += dt;
+  if (sig !== card.sig || cardXR.t > 5) { card.sig = sig; cardXR.t = 0; paintCardXR(); }
+}
+
+// ================= Naturalist Guide: narrator + closed captions =================
+// OFF by default. The Guide button turns it on (and is remembered). Speaks only at moments (see guideStep). Uses the
+// browser's own speech when it has a voice; otherwise (Meta Quest Browser has none) the captions carry it, with one small
+// notice. No network speech service. Mute silences the voice (captions keep going); CC turns the captions on or off.
+const SPECIES_FACTS = {
+  'haliaeetus leucocephalus': {
+    climb: 'Bald eagles ride thermals, columns of rising warm air, to gain height with hardly a wingbeat.',
+    glide: 'Between thermals it glides, trading height for distance.',
+    dive: 'Bald eagles take fish from just below the surface, swinging their talons forward at the last moment.',
+    high: 'From up here an eagle can spot a fish near the surface from far away.' },
+  'carcharodon carcharias': {
+    dive: 'Tagged white sharks move up and down through the water all day, and in many places they spend more of the daytime deeper down.',
+    rise: 'Near the surface the light is brighter. White sharks often hunt seals from below, against the bright surface.',
+    deep: 'Water soaks up red light within a few metres, which is why everything down here looks blue-green.' },
+};
+const CPS = 14.5;   // caption reading pace
+const NARR = { ok: 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function', voice: null, on: false, voiceOn: true, cc: true,
+  sents: [], si: 0, li: 0, gen: 0, mode: 'idle', t0: 0, bnd: false, gotStart: false, reqAt: 0, reqGest: false, holdUntil: 0, shown: null,
+  gestured: false, started: false, noVoice: false, noticed: false, lines: 0 };
+try { const p = JSON.parse(localStorage.getItem('imhere.wildlife.guide') || '{}');
+  NARR.on = p.on === true; if (p.voiceOn === false) NARR.voiceOn = false; if (p.cc === false) NARR.cc = false; } catch (e) { /* private mode */ }
+const saveGuide = () => { try { localStorage.setItem('imhere.wildlife.guide', JSON.stringify({ on: NARR.on, voiceOn: NARR.voiceOn, cc: NARR.cc })); } catch (e) { /* private mode */ } };
+function pickVoice() {
+  if (!NARR.ok) return null;
+  let vs = []; try { vs = speechSynthesis.getVoices().filter((v) => /^en([-_]|$)/i.test(v.lang)); } catch (e) { return null; }
+  const score = (v) => (/natural|neural|premium|enhanced|online/i.test(v.name) ? 6 : 0) + (/Google UK English Male|Daniel|Arthur|Guy|Ryan|Aaron|Oliver|Alex/i.test(v.name) ? 3 : 0) +
+    (/en[-_]GB/i.test(v.lang) ? 2 : /en[-_]US/i.test(v.lang) ? 1 : 0) + (/novelty|whisper|bells|bubbles|zarvox|trinoids|bad news|good news|jester|organ|cellos|boing|albert/i.test(v.name) ? -10 : 0);
+  return vs.sort((x, y) => score(y) - score(x))[0] || null;
+}
+if (NARR.ok) { NARR.voice = pickVoice(); try { speechSynthesis.addEventListener('voiceschanged', () => { NARR.voice = pickVoice(); }); } catch (e) { /* old API */ } }
+const lineMax = () => Math.max(32, Math.min(62, Math.floor((Math.min(innerWidth, 720) - 44) / 8.7)));
+function captionLines(sent) {
+  const LM = lineMax(), words = sent.split(' '), out = []; let line = '', from = 0, pos = 0;
+  for (const w of words) {
+    if (line && (line.length + 1 + w.length > LM || (/[,;:]$/.test(line) && line.length > LM * 0.55))) { out.push({ text: line, a: from, b: pos - 1 }); line = ''; from = pos; }
+    line = line ? line + ' ' + w : w; pos += w.length + 1;
+  }
+  if (line) out.push({ text: line, a: from, b: sent.length });
+  if (out.length > 1 && out[out.length - 1].text.split(' ').length === 1) { const l = out.pop(), q = out[out.length - 1]; q.text += ' ' + l.text; q.b = l.b; }
+  return out.map((l) => ({ ...l, dur: Math.max(1.3, l.text.length / CPS) }));
+}
+const splitSentences = (text) => (text.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [text]).map((x) => x.trim()).filter(Boolean).map((t) => ({ text: t, lines: captionLines(t) }));
+const nowS = () => performance.now() / 1000;
+const sentDur = (i) => NARR.sents[i].lines.reduce((a, l) => a + l.dur, 0);
+function narrate(text) {
+  if (!text) return;
+  NARR.lines++; NARR.sents = splitSentences(text); NARR.si = 0; NARR.li = 0; NARR.started = false;
+  if (!NARR.ok && NARR.voiceOn) voiceNotice();
+  if (NARR.ok && NARR.voiceOn && !NARR.noVoice) speakFrom(0); else timerFrom(0, 0);
+}
+let noteTimer = 0, vrNoteUntil = 0;
+function voiceNotice() {   // once: this browser has no voice, the captions carry the guide
+  if (NARR.noticed) return; NARR.noticed = true;
+  const msg = 'Voice not supported in this browser, captions on', el = $('#vnote'); el.textContent = msg; el.hidden = false;
+  drawVRText(noteXR, msg, 'rgba(14,20,26,0.92)', 34); vrNoteUntil = nowS() + 9;
+  if (!NARR.cc) setCC(true);
+  clearTimeout(noteTimer); noteTimer = setTimeout(() => { el.hidden = true; }, 9000);
+}
+function noVoiceHere() {
+  try { speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+  let n = 0; try { n = speechSynthesis.getVoices().length; } catch (e) { /* ignore */ }
+  if (!n) NARR.noVoice = true;
+  voiceNotice();
+}
+function stopNarration() {
+  NARR.gen++; NARR.mode = 'idle'; NARR.holdUntil = 0;
+  if (NARR.ok) try { speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+  showCaption();
+}
+function finish() { NARR.mode = 'idle'; NARR.holdUntil = nowS() + 1.6; NARR.gen++; showCaption(); }
+function timerFrom(si, li) {
+  NARR.gen++; NARR.mode = 'timer'; NARR.si = si; NARR.li = li; NARR.t0 = nowS();
+  if (si >= NARR.sents.length) finish(); else showCaption();
+}
+function speakFrom(si) {
+  if (si >= NARR.sents.length) { finish(); return; }
+  const g = ++NARR.gen;
+  NARR.mode = 'speech'; NARR.si = si; NARR.li = 0; NARR.t0 = nowS(); NARR.bnd = false; NARR.gotStart = false; NARR.reqAt = nowS(); NARR.reqGest = NARR.gestured;
+  try {
+    speechSynthesis.cancel();
+    for (let i = si; i < NARR.sents.length; i++) {
+      const u = new SpeechSynthesisUtterance(NARR.sents[i].text);
+      if (NARR.voice) { u.voice = NARR.voice; u.lang = NARR.voice.lang; } else u.lang = 'en-GB';
+      u.rate = 0.92; u.pitch = 0.95;
+      u.onstart = () => { if (g !== NARR.gen) return; NARR.si = i; NARR.li = 0; NARR.t0 = nowS(); NARR.bnd = false; NARR.gotStart = true; NARR.started = true; showCaption(); };
+      u.onboundary = (e) => {
+        if (g !== NARR.gen || e.charIndex == null || i !== NARR.si) return;
+        NARR.bnd = true; const L = NARR.sents[i].lines; let k = 0;
+        while (k < L.length - 1 && e.charIndex >= L[k + 1].a) k++;
+        if (k > NARR.li) { NARR.li = k; showCaption(); }
+      };
+      u.onend = () => { if (g !== NARR.gen) return; if (i === NARR.sents.length - 1) finish(); };
+      u.onerror = (e) => {
+        if (g !== NARR.gen || (e && (e.error === 'interrupted' || e.error === 'canceled'))) return;
+        if (NARR.reqGest) noVoiceHere();
+        timerFrom(NARR.si, NARR.li);
+      };
+      speechSynthesis.speak(u);
+    }
+  } catch (e) { NARR.ok = false; timerFrom(si, 0); }
+}
+function narrTick() {
+  const t = nowS();
+  if (NARR.mode === 'timer') {
+    let changed = false;
+    while (NARR.mode === 'timer') {
+      const L = NARR.sents[NARR.si].lines, d = L[NARR.li].dur + (NARR.li === L.length - 1 ? 0.35 : 0);
+      if (t - NARR.t0 < d) break;
+      NARR.t0 += d; changed = true; NARR.li++;
+      if (NARR.li >= L.length) { NARR.li = 0; NARR.si++; if (NARR.si >= NARR.sents.length) { finish(); return; } }
+    }
+    if (changed) showCaption();
+  } else if (NARR.mode === 'speech') {
+    if (!NARR.gotStart && t - NARR.reqAt > (NARR.reqGest ? 1.5 : 2.5)) { if (NARR.reqGest) noVoiceHere(); timerFrom(NARR.si, 0); return; }
+    if (NARR.gotStart && !NARR.bnd) {   // no word events from this voice: split the sentence by line length
+      const L = NARR.sents[NARR.si].lines; let e = (t - NARR.t0) / 1.03, j = 0;
+      while (j < L.length - 1 && e >= L[j].dur) { e -= L[j].dur; j++; }
+      if (j > NARR.li) { NARR.li = j; showCaption(); }
+    }
+    if (NARR.gotStart && t - NARR.t0 > sentDur(NARR.si) * 2.5 + 5) timerFrom(NARR.si + 1, 0);   // engine stalled
+  } else if (NARR.holdUntil && t > NARR.holdUntil) { NARR.holdUntil = 0; showCaption(); }
+}
+const narrBusy = () => NARR.mode !== 'idle';
+function captionText() {
+  if (NARR.mode !== 'idle') { const s0 = NARR.sents[NARR.si]; return s0 ? s0.lines[Math.min(NARR.li, s0.lines.length - 1)].text : ''; }
+  return NARR.holdUntil ? NARR.shown || '' : '';
+}
+function showCaption() {
+  const txt = NARR.on && NARR.cc ? captionText() : '';
+  const hide = !(NARR.on && NARR.cc);
+  if (txt === NARR.shown && $('#cc').hidden === hide) return;
+  NARR.shown = txt; $('#ccText').textContent = txt; $('#cc').hidden = hide;
+  drawVRText(capXR, txt, 'rgba(0,0,0,0.78)', 44);
+}
+// VR copies (the page strip is invisible in a headset): low and centred, fixed to your body, repainted only on change
+function vrTextPlane(w, h, cw, ch, order) {
+  const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+  m.renderOrder = order; m.visible = false; m.frustumCulled = false; rig.add(m); return { cv, tex, m, txt: '' };
+}
+const capXR = vrTextPlane(1.1, 1.1 * 160 / 1024, 1024, 160, 1003), noteXR = vrTextPlane(0.8, 0.8 * 96 / 1024, 1024, 96, 1004);
+function drawVRText(P, txt, bg, px) {
+  P.txt = txt || ''; const g = P.cv.getContext('2d'), W = P.cv.width, H = P.cv.height;
+  g.clearRect(0, 0, W, H);
+  if (txt) {
+    g.font = `500 ${px}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const words = txt.split(' '), lines = []; let line = '';
+    for (const w of words) { if (line && g.measureText(line + ' ' + w).width > W - 80) { lines.push(line); line = w; } else line = line ? line + ' ' + w : w; }
+    lines.push(line);
+    const lh = px * 1.27, bw = Math.min(W - 8, Math.max(...lines.map((l) => g.measureText(l).width)) + 56), bh = Math.min(H - 4, lines.length * lh + 24);
+    g.fillStyle = bg; g.beginPath(); g.roundRect ? g.roundRect((W - bw) / 2, (H - bh) / 2, bw, bh, 14) : g.rect((W - bw) / 2, (H - bh) / 2, bw, bh); g.fill();
+    g.fillStyle = '#fff'; lines.forEach((l, i) => g.fillText(l, W / 2, H / 2 + (i - (lines.length - 1) / 2) * lh));
+  }
+  P.tex.needsUpdate = true;
+}
+function guideXRStep(xr) {
+  const y = camera.position.y;
+  capXR.m.visible = xr && NARR.on && NARR.cc && !!capXR.txt; capXR.m.position.set(0, y - 0.45, -1.35);
+  noteXR.m.visible = xr && NARR.noticed && nowS() < vrNoteUntil; noteXR.m.position.set(0, y - 0.33, -1.35);
+}
+// browsers allow speech only after a tap or key: pick the voice up on the first gesture
+let unlocked = false;
+function unlock() {
+  NARR.gestured = true;
+  if (unlocked) return; unlocked = true;
+  if (NARR.on && NARR.ok && NARR.voiceOn && !NARR.noVoice && !NARR.started && NARR.mode !== 'idle') speakFrom(NARR.si);
+  setTimeout(checkVoices, 1500);   // voices load asynchronously
+}
+addEventListener('pointerdown', unlock); addEventListener('keydown', unlock);
+function checkVoices() {
+  if (!NARR.on || !NARR.voiceOn || NARR.noVoice) return;
+  let n = 0; try { n = NARR.ok ? speechSynthesis.getVoices().length : 0; } catch (e) { /* ignore */ }
+  if (n) return;
+  NARR.noVoice = true;
+  if (NARR.mode === 'speech') { try { speechSynthesis.cancel(); } catch (e) { /* ignore */ } timerFrom(NARR.si, NARR.li); }
+  voiceNotice();
+}
+function setCC(on) { NARR.cc = on; const b = $('#ccBtn'); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); b.title = 'Captions (' + (on ? 'on' : 'off') + ')'; saveGuide(); NARR.shown = null; showCaption(); }
+function setVoice(on) {
+  NARR.voiceOn = on; const b = $('#mute'); b.classList.toggle('on', !on); b.setAttribute('aria-pressed', String(!on)); b.textContent = on ? 'Mute' : 'Unmute'; saveGuide();
+  if (!on) { if (NARR.mode === 'speech') { try { speechSynthesis.cancel(); } catch (e) { /* ignore */ } timerFrom(NARR.si, NARR.li); } }
+  else if (NARR.on && NARR.ok && !NARR.noVoice && NARR.mode === 'timer') speakFrom(NARR.si);
+  else if (NARR.on && !NARR.ok) voiceNotice();
+}
+let GS = guideNew({});
+function guideInfo(tr, first) {
+  const d = cardData(tr), cn = COMMON[String(tr.taxon || '').trim().toLowerCase()];
+  const sp = cn ? cn.toLowerCase() : tr.taxon ? tr.taxon : 'tagged animal', art = /^[aeiou]/i.test(sp) ? 'an ' : 'a ';
+  const who = art + sp + ', tag ' + tr.tagId + (tr.animalName ? ', named ' + tr.animalName : '');
+  const intro = (first ? 'Guide on. You are with ' : 'Now riding with ') + who + '. ' + (tr.isSample
+    ? 'This is a sample track made up for the demo, so it shows typical behaviour, not a real animal\'s journey.'
+    : (tr.org ? 'Tracked by ' + tr.org + '. ' : '') + 'Last seen ' + d.seenPlace + ', ' + formatAgo(Date.now() - tr.t1) + '.');
+  return { intro, facts: SPECIES_FACTS[String(tr.taxon || '').trim().toLowerCase()] || null };
+}
+function guideTrackChanged() { if (!NARR.on || !cur) return; stopNarration(); GS = guideNew(guideInfo(cur, false)); }
+function setGuide(on, user) {
+  NARR.on = on; saveGuide();
+  const b = $('#guideBtn'); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+  b.title = 'Naturalist Guide (' + (on ? 'on' : 'off') + '): a narrator speaks at moments of the ride, with captions';
+  $('#mute').hidden = $('#ccBtn').hidden = !on;
+  if (on && cur) { GS = guideNew(guideInfo(cur, true)); if (user) unlock(); }
+  else stopNarration();
+  NARR.shown = null; showCaption();
+}
+let guideT = 0;
+function guideFrame(nowMs) {   // every 0.5 s: does this moment deserve a line?
+  if (!NARR.on || !cur || nowMs - guideT < 500) return;
+  guideT = nowMs;
+  const ocean = world.mode === 'ocean', place = placeFor(S.lat, ((S.lon + 540) % 360) - 180, ocean);
+  const line = guideStep(GS, { now: nowMs / 1000, ocean, h: ocean ? Math.max(0, -st.y) : st.agl, vh: cur.hasAlt ? S.valt : 0,
+    place, named: PLACES.some((p) => p[0] === place), busy: narrBusy() });
+  if (line) narrate(line);
+}
+$('#guideBtn').onclick = () => setGuide(!NARR.on, true);
+$('#mute').onclick = () => setVoice(!NARR.voiceOn);
+$('#ccBtn').onclick = () => setCC(!NARR.cc);
+setCC(NARR.cc); setVoice(NARR.voiceOn);
+
+// ================= camera distance control (Ride and Chase) =================
+function renderDistBar() {
+  const bar = $('#dist'); bar.hidden = view === 'map';
+  const eagleLike = !world || world.mode !== 'ocean';
+  $('#distEye').textContent = eagleLike ? 'Eagle\'s-eye' : 'Shark\'s-eye';
+  const d = view === 'map' ? '' : camDist[view];
+  bar.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.dist === d); b.setAttribute('aria-pressed', String(b.dataset.dist === d)); });
+}
+function setDist(d) {
+  if (view === 'map' || !DISTS.includes(d)) return;
+  camDist[view] = d; distJump = true; look.yaw = look.pitch = 0;
+  try { localStorage.setItem('imhere.wildlife.dist', JSON.stringify(camDist)); } catch (e) { /* private mode */ }
+  renderDistBar();
+}
+const stepDist = (k) => { if (view === 'map') return; const i = DISTS.indexOf(camDist[view]); setDist(DISTS[clamp(i + k, 0, DISTS.length - 1)]); };
+$('#dist').querySelectorAll('button').forEach((b) => b.onclick = () => setDist(b.dataset.dist));
+// VR: thumbstick forward = closer, back = wider; thumbstick click shows or hides the animal card. Read-only polling:
+// nothing is captured or prevented, so the system buttons and the Exit VR controls work as before.
+const xrPad = { armed: true, press: false };
+function xrPadStep() {
+  const ses = renderer.xr.getSession && renderer.xr.getSession(); if (!ses || !ses.inputSources) return;
+  let y = 0, press = false;
+  for (const src of ses.inputSources) { const gp = src && src.gamepad; if (!gp) continue;
+    const ay = gp.axes && gp.axes.length > 3 ? gp.axes[3] : 0; if (Math.abs(ay) > Math.abs(y)) y = ay;
+    if (gp.buttons && gp.buttons[3] && gp.buttons[3].pressed) press = true; }
+  if (xrPad.armed && Math.abs(y) > 0.7) { xrPad.armed = false; stepDist(y < 0 ? 1 : -1); }
+  else if (Math.abs(y) < 0.3) xrPad.armed = true;
+  if (press && !xrPad.press) cardXR.on = !cardXR.on;
+  xrPad.press = press;
+}
+
 function renderTrackList() {
   const ul = $('#tracklist'); ul.innerHTML = '';
   tracks.forEach(tr => {
@@ -1698,11 +2282,11 @@ mapCanvas.addEventListener('pointerdown', mapPick);
 miniCanvas.addEventListener('click', () => setView('map'));
 
 // ================= controls =================
-function seek(t) { simT = clamp(t, cur.t0, cur.t1); snap = true; }
+function seek(t) { simT = clamp(t, cur.t0, cur.t1); snap = true; guideReset(GS); }
 function setView(v) {
   view = v; document.querySelectorAll('.views button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
   mapCanvas.hidden = v !== 'map';   // no corner mini-map in Ride / Chase ("don't give the eagle a flight director"); the map is under Map
-  look.yaw = look.pitch = 0; snap = true;
+  look.yaw = look.pitch = 0; snap = true; renderDistBar();
 }
 document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
 const ICON_PLAY = '<svg width="18" height="18" viewBox="0 0 18 18"><path d="M4 2l12 7-12 7z" fill="currentColor"/></svg>';
@@ -1719,6 +2303,7 @@ addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   if (e.key === ' ') { setPlay(!playing); e.preventDefault(); }
   else if (e.key === '1') setView('ride'); else if (e.key === '2') setView('chase'); else if (e.key === '3') setView('map');
+  else if (e.key === '[') stepDist(-1); else if (e.key === ']') stepDist(1);
   else if (e.key === 'ArrowRight') seek(simT + (cur.t1 - cur.t0) * 0.02); else if (e.key === 'ArrowLeft') seek(simT - (cur.t1 - cur.t0) * 0.02);
 });
 const cv = renderer.domElement;
@@ -1763,14 +2348,14 @@ addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; cam
 if (innerWidth > 760) $('#panel').classList.add('open');
 
 // ================= frame loop =================
-const clock = new THREE.Clock(); let infoT = 0, miniT = 0, markT = 0, errShown = false;
+const clock = new THREE.Clock(); let infoT = 0, miniT = 0, markT = 0, cardT = 0, cardN = 0, errShown = false;
 const mLook = new THREE.Matrix4(), vTarget = new THREE.Vector3(), vDesired = new THREE.Vector3(), chaseOff = new THREE.Vector3();
-let xrHeadY = 0;
+let xrHeadY = 0, camAim = 0, distJump = false;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   try {
     if (!cur) return;
-    if (playing) { simT += dt * 1000 * speed; if (simT >= cur.t1) { simT = cur.t0; snap = true; } }
+    if (playing) { simT += dt * 1000 * speed; if (simT >= cur.t1) { simT = cur.t0; snap = true; guideReset(GS); } }
     sampleTrack(cur, simT, S);
     const tileHalf = terrain.size * 0.25;
     const vrNow = renderer.xr.isPresenting;
@@ -1795,52 +2380,84 @@ function frame() {
 
     const xr = renderer.xr.isPresenting;
     comfortStep(dt, snap);
-    if (view === 'ride' || (view === 'map' && xr)) {
-      if (!look.drag) { look.yaw *= Math.exp(-dt * 0.8); look.pitch *= Math.exp(-dt * 0.8); }
+    // Camera distance, chosen by the user in Ride and Chase: wide -> alongside -> close -> eye. Comfort rules hold at every
+    // distance: the heading is the low-passed, 30 deg/s capped comfort yaw, the horizon stays level (no roll), the boom's
+    // angle is smoothed (never its world position), and the aim offset of a boom is a constant (it adds no turning).
+    camMode = view === 'map' ? 'eye' : camDist[view];
+    if (!look.drag && (view !== 'chase' || camMode === 'eye')) { look.yaw *= Math.exp(-dt * 0.8); look.pitch *= Math.exp(-dt * 0.8); }
+    if (camMode === 'eye') {
       vTarget.copy(model.eye).applyMatrix4(g.matrixWorld); rig.position.copy(vTarget);
       if (xr) rig.rotation.set(0, cam.yaw + Math.PI, 0, 'YXZ');                                   // level, rate-capped
       else rig.rotation.set(cam.pitch + look.pitch, cam.yaw + Math.PI + look.yaw, 0, 'YXZ');      // no roll
       camPos.copy(rig.position);
-    } else if (view === 'chase') {
-      // The camera rides a boom fixed to the animal, behind and above it. Only the boom's angle is smoothed (it follows
-      // the comfort heading: low-passed, 30 deg/s cap, no roll), never its world position: a position lag left the
-      // camera v/4 behind (300+ m for the shark at x1000), lost in the 85 m underwater fog, so Chase showed nothing.
-      const yc = cam.yaw + look.yaw, ch = model.chase;
-      vDesired.set(-Math.sin(yc) * ch.back, ch.up - look.pitch * ch.back, -Math.cos(yc) * ch.back);
-      if (snap) chaseOff.copy(vDesired); else chaseOff.lerp(vDesired, 1 - Math.exp(-dt * 4));
+    } else {
+      // The camera rides a boom fixed to the animal (behind, above, and for "alongside" off to its right). A position lag
+      // left the camera v/4 behind (300+ m for the shark at x1000), lost in the underwater haze, so only the angle lags.
+      const isChase = view === 'chase', b = model.booms[camMode];
+      const yc = cam.yaw + (isChase ? look.yaw : 0), aim = Math.atan2(b.side, b.back);
+      const jump = snap || (xr && distJump);   // in a headset a new distance is a cut, not a glide
+      camAim = jump ? aim : camAim + wrapAngle(aim - camAim) * (1 - Math.exp(-dt * 2.5));
+      vDesired.set(-Math.sin(yc) * b.back - Math.cos(yc) * b.side, b.up - (isChase ? look.pitch * Math.min(b.back, 8) : 0), -Math.cos(yc) * b.back + Math.sin(yc) * b.side);
+      if (jump) chaseOff.copy(vDesired); else chaseOff.lerp(vDesired, 1 - Math.exp(-dt * 4));
       camPos.copy(g.position).add(chaseOff);
       const gh = terrainHeight(world, camPos.x + ORIGIN.x, camPos.z + ORIGIN.z);
       if (g.position.y < 0) camPos.y = Math.min(Math.max(camPos.y, gh + 1), -0.4);   // stay under the surface, off the seabed
       else camPos.y = Math.max(camPos.y, Math.max(gh, 0) + 1);
       rig.position.copy(camPos);
       // WebXR uses a local-floor space: the head sits ~1.6 m above the rig, which put the eye above the water while the
-      // shark swam below. Lower the rig by the (slowly smoothed) head height so the eye itself is at the chase point.
+      // shark swam below. Lower the rig by the (slowly smoothed) head height so the eye itself is at the boom point.
       if (xr) { xrHeadY += (camera.position.y - xrHeadY) * (1 - Math.exp(-dt * 3)); rig.position.y -= xrHeadY; }
-      vTarget.copy(g.position); vTarget.y += 0.3;
-      // look along the comfort heading (never chase the animal round a tight circle); tilt only on screens
-      const tilt = xr ? 0 : clamp(Math.atan2(vTarget.y - camPos.y, Math.hypot(vTarget.x - camPos.x, vTarget.z - camPos.z)), -0.6, 0.6);
-      rig.rotation.set(tilt, yc + Math.PI, 0, 'YXZ');
+      const yaw = yc + camAim + Math.PI;
+      if (isChase) {   // frame the animal: tilt toward it on screens only (never in a headset)
+        vTarget.copy(g.position); vTarget.y += 0.3;
+        const tilt = xr ? 0 : clamp(Math.atan2(vTarget.y - camPos.y, Math.hypot(vTarget.x - camPos.x, vTarget.z - camPos.z)), -0.6, 0.6);
+        rig.rotation.set(tilt, yaw, 0, 'YXZ');
+      } else if (xr) rig.rotation.set(0, yaw, 0, 'YXZ');
+      else rig.rotation.set(cam.pitch + look.pitch, yaw + look.yaw, 0, 'YXZ');
     }
+    distJump = false;
     snap = false;
 
-    const under = (view === 'chase' ? camPos.y : rig.position.y) < 0;   // in Chase camPos is the eye (also in WebXR)
-    scene.fog = under ? fogUnder : fogAbove; scene.background = under ? PAL.under : fogAbove.color;
-    sky.visible = !under; snow.visible = under && !(vrNow && xrLevel >= 2); sky.position.copy(rig.position);
-    snowGeo.setDrawRange(0, vrNow && xrLevel >= 1 ? Math.floor(SNOW_N / 3) : SNOW_N);
-    hemi.intensity = under ? 0.8 : 1.15; sun.intensity = under ? 1.2 : 2.4;
-    waterMat.uniforms.uTime.value = performance.now() / 1000;
+    const eyeY = camPos.y, under = eyeY < 0;   // camPos is the eye in every view and distance (also in WebXR)
+    const tNow = performance.now() / 1000;
+    // depth: darker and bluer the deeper the eye (about 1/e every 40 m, never black)
+    UW.eyeDepth = Math.max(0, -eyeY); UW.k = Math.max(0.1, Math.exp(-UW.eyeDepth / 40));
     if (under) {
+      fogUnder.color.copy(UW.deepTint).lerp(UW.base, UW.k).multiplyScalar(0.35 + 0.65 * UW.k);
+      skyMat.uniforms.uUp.value.copy(fogUnder.color).multiplyScalar(1.8).add(tmpC.setRGB(0.05, 0.09, 0.09).multiplyScalar(UW.k));
+      skyMat.uniforms.uDown.value.copy(fogUnder.color).multiplyScalar(0.35); skyMat.uniforms.uFogC.value.copy(fogUnder.color);
+      waterMat.uniforms.uUnder.value.copy(fogUnder.color).multiplyScalar(1.1);
+    }
+    scene.fog = under ? fogUnder : fogAbove; scene.background = under ? fogUnder.color : fogAbove.color;
+    skyMat.uniforms.uUnder.value = under ? 1 : 0; sky.position.copy(rig.position);
+    // Quest cost caps (xr-safety watchdog levels): VR 0 = 2/3 shafts, all snow; 1 = 1/3 shafts, 1/3 snow; 2 = no shafts, snow or caustics
+    const lvl = vrNow ? xrLevel : -1;
+    const snowN = lvl >= 1 ? Math.floor(SNOW_N / 3) : SNOW_N, shaftN = lvl < 0 ? SHAFT_N : lvl === 0 ? 24 : lvl === 1 ? 12 : 0;
+    snow.visible = under && lvl < 2; snowGeo.setDrawRange(0, snowN);
+    shafts.visible = under && shaftN > 0; shafts.geometry.setDrawRange(0, shaftN * 6);
+    hemi.intensity = under ? 0.15 + 0.75 * UW.k : 1.15; sun.intensity = under ? 1.4 * UW.k : 2.4;
+    waterMat.uniforms.uTime.value = tNow; waterMat.uniforms.uDepthK.value = under ? 0.45 + 0.55 * UW.k : 1;
+    const oceanW = world.mode === 'ocean' || g.position.y < 0;
+    CAUS.on.value = oceanW && lvl < 2 ? 1 : 0; CAUS.t.value = tNow * 0.9;
+    CAUS.off.value.set(ORIGIN.x % 2992.0, ORIGIN.z % 2992.0);   // a multiple of the pattern's tile (2*pi/0.21), so tile rebuilds do not jump
+    shaftU.uTime.value = tNow; shaftU.uStrength.value = 0.32 * Math.exp(-UW.eyeDepth / 30);
+    if (under) {
+      shaftU.uEye.value.set(rig.position.x, eyeY, rig.position.z);
       const a = snowGeo.attributes.position.array, H = SNOW_BOX, md = v => ((v % H) + H) % H;
-      const lx = rig.position.x - H / 2, ly = rig.position.y - H / 2, lz = rig.position.z - H / 2;
-      for (let i = 0; i < SNOW_N; i++) { // world-anchored particles wrapped into a box around the camera
-        a[i * 3] = lx + md(snowBase[i * 3] - ORIGIN.x - lx);
-        a[i * 3 + 1] = ly + md(snowBase[i * 3 + 1] - ly);
-        a[i * 3 + 2] = lz + md(snowBase[i * 3 + 2] - ORIGIN.z - lz);
+      const lx = rig.position.x - H / 2, ly = eyeY - H / 2, lz = rig.position.z - H / 2;
+      for (let i = 0; i < snowN; i++) { // world-anchored particles wrapped into a box around the eye; they sink slowly and sway
+        const ph = snowBase[i * 3] * 0.37;
+        a[i * 3] = lx + md(snowBase[i * 3] - ORIGIN.x - lx + Math.sin(tNow * 0.23 + ph) * 0.4);
+        a[i * 3 + 1] = ly + md(snowBase[i * 3 + 1] - tNow * 0.04 - ly);
+        a[i * 3 + 2] = lz + md(snowBase[i * 3 + 2] - ORIGIN.z - lz + Math.cos(tNow * 0.19 + ph) * 0.4);
       }
       snowGeo.attributes.position.needsUpdate = true;
     }
 
     const now = performance.now();
+    if (xr) xrPadStep();
+    narrTick(); guideFrame(now); guideXRStep(xr); cardXRStep(dt, xr);
+    if (now - cardT > 1000) { cardT = now; drawCardMap(); if (++cardN % 30 === 0) renderCard(false); }
     if (now - markT > 1000) { markT = now; refreshMark(); }
     if (now - infoT > 250) { infoT = now; updateInfo(); if (!sliding) slider.value = String(Math.round((simT - cur.t0) / Math.max(1, cur.t1 - cur.t0) * 10000)); }
     if (view === 'map') drawMap(mapCanvas, mapCache, true);
@@ -1856,6 +2473,7 @@ function parseSample(csv, name, opts) { const raw = parseMovebankCSV(csv).tracks
 const eagleTrack = addTrack(parseSample(genEagleCSV(), 'Bald eagle, lake & river soar (SAMPLE)', { altBase: EAGLE_ALT_BASE, tagId: '4417' }));
 addTrack(parseSample(genSharkCSV(), 'White shark, coastal migration (SAMPLE)', { altBase: 0, tagId: '2208' }));
 selectTrack(eagleTrack);
+setGuide(NARR.on, false);   // remembered choice (off unless the user turned it on before)
 renderer.setAnimationLoop(frame);
 </script>
 </body>
