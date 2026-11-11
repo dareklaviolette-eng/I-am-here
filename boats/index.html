@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>I'M HERE - Boats (ride a real ship)</title>
 <link rel="icon" href="data:,">
+<!-- cache busting: phones must not keep an old copy of this page; script URLs carry ?v=<build> -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="imhere-build" content="fccf2745">
 <style>
   :root { --bg:#0e1a24; --panel:rgba(12,22,34,.86); --line:rgba(255,255,255,.16); --text:#e8f1f7; --muted:#9db3c4; --live:#5DCAA5; --err:#ff9d92; }
   * { box-sizing: border-box; }
@@ -49,6 +54,20 @@
   #aboardInfo { flex:1 1 220px; min-width:0; font-size:14px; }
   #aboard .cams { display:flex; gap:6px; }
   #aboard .cams button { padding:8px 10px; }
+  #vrBtn { position:fixed; top:calc(10px + env(safe-area-inset-top)); right:calc(104px + env(safe-area-inset-right)); z-index:1600; background:var(--panel); font-weight:600; }
+  /* desktop: a band across the top (like an aviation instrument strip), clear of the console screens below the window */
+  #helm { position:fixed; z-index:1390; left:calc(230px + env(safe-area-inset-left)); right:calc(230px + env(safe-area-inset-right)); top:calc(10px + env(safe-area-inset-top));
+          display:flex; gap:8px; align-items:center; padding:6px 8px; background:rgba(6,16,26,.82); border:1px solid var(--line); border-radius:12px;
+          -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); font-variant-numeric:tabular-nums; }
+  #helmCompass { width:56px; height:56px; flex:none; }
+  #helmCells { display:flex; flex-wrap:wrap; gap:2px 14px; margin:0; min-width:0; flex:1; }
+  #helmCells div { min-width:0; }
+  #helmCells dt { font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  #helmCells dd { margin:0; font-size:13px; font-weight:600; white-space:nowrap; }
+  #helmCells .wide dd { white-space:normal; font-weight:500; font-size:12px; color:#cfe0ec; }
+  /* narrower screens: under the Menu button, over the sky, so the console screens stay visible low in the view */
+  @media (max-width:900px) { #helm { top:calc(60px + env(safe-area-inset-top)); left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right)); } }
+  @media (max-width:640px) { #helm { max-height:30dvh; overflow:auto; padding:4px 6px; } #helmCompass { width:44px; height:44px; } #helmCells { gap:2px 10px; } #helmCells dd { font-size:12px; } }
   #aboardInfo b { display:block; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* menu + about */
   .overlay { position:fixed; inset:0; background:rgba(4,10,16,.7); display:flex; align-items:center; justify-content:center; padding:14px; z-index:2000; }
@@ -124,7 +143,7 @@
 </style>
 <script type="importmap">
 { "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js?v=fccf2745",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
 } }
 </script>
@@ -137,6 +156,12 @@
 <div class="credit" id="credit3d">Imagery &copy; <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics &middot; AIS: <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a></div>
 
 <button id="menuBtn" type="button" aria-haspopup="dialog" aria-controls="menu">&#9776; Menu</button>
+<button id="vrBtn" type="button" hidden>Enter VR</button>
+<!-- bridge instruments (Captain view on phone and desktop; in VR they are the console screens in front of the helm) -->
+<div id="helm" hidden aria-label="Bridge instruments">
+  <canvas id="helmCompass" width="112" height="112" aria-hidden="true"></canvas>
+  <dl id="helmCells"></dl>
+</div>
 <div id="feedMsg" role="status" aria-live="polite" hidden></div>
 
 <section id="ships" aria-labelledby="shipsTitle">
@@ -150,8 +175,8 @@
   <button id="backBtn" type="button">&larr; Ships</button>
   <div id="aboardInfo"></div>
   <div class="cams" role="group" aria-label="View">
-    <button id="camDeck" type="button" aria-pressed="true">On deck</button>
-    <button id="camCaptain" type="button" aria-pressed="false">Captain</button>
+    <button id="camCaptain" type="button" aria-pressed="true">Captain</button>
+    <button id="camDeck" type="button" aria-pressed="false">On deck</button>
     <button id="camChase" type="button" aria-pressed="false">Chase</button>
   </div>
 </div>
@@ -184,7 +209,9 @@
 <div id="info" class="overlay" hidden>
   <div class="card" role="dialog" aria-labelledby="infoTitle">
     <h2 id="infoTitle">About this prototype</h2>
-    <p>Real ships report their position by radio (AIS). This page shows those reports live from <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>, relayed by the I'M HERE server. Pick a ship from the list to go aboard: stand on its deck, take the captain's view from the bridge, or follow it with the chase cam.</p>
+    <p>Real ships report their position by radio (AIS). This page shows those reports live from <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>, relayed by the I'M HERE server. Pick a ship from the list to go aboard. You start at the helm (Captain): the bridge windows ahead, and two screens on the console in front of you, a chart and the instruments (heading, course, speed, rate of turn, status, draft, destination and ETA, position). You can also stand on deck or follow the ship with the chase cam. In VR: A changes seat, the right thumbstick click goes to the next ship, X moves the I'M HERE label, B or Y (or the label's Exit VR row) leaves VR.</p>
+    <h3>Depth, wind and tide</h3>
+    <p>AIS does not report water depth, so the screens say "charted depth coming soon" instead of a number. Charted depth and wind / tide will come from NOAA in a later version. The bridge screens are not for navigation.</p>
     <h3>Old Hickory Lake &amp; small boats</h3>
     <p>Most small pleasure boats &ndash; bass boats, pontoons, jet skis &ndash; do <b>not</b> carry AIS, so they never show up. On the Cumberland River / Old Hickory you will mostly see commercial barge tows and workboats, and sometimes nothing for a while. Busy ports (Los Angeles, New York, Houston, Gibraltar) show far more traffic.</p>
     <h3>Simulated sample</h3>
@@ -198,7 +225,324 @@
   </div>
 </div>
 
-<!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
+<!-- IMHERE-XR (inlined from /home/claude/shared/xr-safety.js) -->
+<script id="imhere-xr">
+// I'M HERE: guaranteed ways out of VR, a crash-proof frame loop, and a frame-cost watchdog. Plain script, no imports.
+// window.ImHereXR.install({ THREE, renderer, scene, camera, rays, scale, place: { right, down, ahead }, onQuality(level), onExit })
+// Call it right after the renderer and camera exist, before renderer.setAnimationLoop and before entering VR.
+//  - Exit VR: a big red button that stays in view (it follows your head lazily, low and to the right). Point a controller
+//    at it and pull the trigger, or point a hand and pinch, or poke it with a fingertip. B or Y (xr-standard
+//    gamepad buttons 4 and 5) exit at once. Every exit calls session.end() inside try/catch (retried once if the
+//    session lingers). Nothing here calls preventDefault or captures any system input.
+//  - The page's frame callback is wrapped in try/catch: an error is logged (rate-limited) and the next frame still comes.
+//    If every frame errors for 2 s in VR, the session ends with a plain message on the page.
+//  - Cost caps for Quest: framebuffer scale <= 1 (0.9 default), fixed foveation 1, no shadow maps while in VR.
+//  - Watchdog: frames over 50 ms for most of 2 s -> onQuality(1), then 2.5 s later onQuality(2) (the page lightens its scene).
+//    Frames over 1 s (twice within 10 s), or no frame at all for 2.5 s -> the session ends and the page says why.
+//  - No allocations per frame (beyond what WebXR itself returns for poses).
+//  Per-page options (all optional; leaving them out keeps the behaviour above):
+//    panel: false        no big red Exit VR panel (the page offers its own exit target instead; B / Y still exit)
+//    exitTargets: [obj]  page meshes that exit like the panel (ray + trigger / pinch, fingertip poke). Each one's
+//                        obj.userData.exitRect = { cx, cy, w, h } is the hot area in the mesh's local plane (facing +z);
+//                        obj.userData.exitIgnore = 'left' ignores that hand (a wrist panel on that hand); hover calls
+//                        obj.userData.onExitHover(bool). Only counted while the object and its parents are visible.
+//                        api.exitTargets is the live array (push more later).
+//    exitButtons: [5]    gamepad buttons that exit (default [4, 5] = A/X and B/Y; [5] = B and Y only, so A/X stay free)
+//    hint: 'text'        a small hint shown ahead of you for ~4 s each time VR starts (fades out)
+(function () {
+  'use strict';
+  if (window.ImHereXR) return;
+  var MSG_ID = 'imhere-xr-msg';
+  function showMsg(text) {
+    try {
+      var d = document.getElementById(MSG_ID);
+      if (!d) {
+        d = document.createElement('div'); d.id = MSG_ID; d.setAttribute('role', 'alert');
+        d.style.cssText = 'position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:99999;max-width:min(560px,92vw);' +
+          'background:rgba(30,10,12,.94);color:#fff;font:15px/1.4 system-ui,sans-serif;padding:12px 40px 12px 16px;border-radius:12px;' +
+          'box-shadow:0 4px 18px rgba(0,0,0,.4);border:1px solid rgba(255,120,125,.6)';
+        var x = document.createElement('button'); x.textContent = '×'; x.setAttribute('aria-label', 'Close');
+        x.style.cssText = 'position:absolute;right:6px;top:4px;background:none;border:0;color:#fff;font-size:22px;cursor:pointer';
+        x.onclick = function () { d.remove(); };
+        d.appendChild(document.createElement('span')); d.appendChild(x); document.body.appendChild(d);
+      }
+      d.firstChild.textContent = text;
+    } catch (e) { /* ignore */ }
+  }
+  var nErr = 0;
+  function logErr(where, e) {
+    nErr++;
+    if (nErr <= 5 || nErr % 300 === 0) { try { console.error('[I\'M HERE VR] ' + where + ' (#' + nErr + '):', e); } catch (e2) { /* ignore */ } }
+  }
+
+  function install(o) {   // never breaks the page: if anything here fails, the page runs as before (without these extras)
+    try { return setup(o); } catch (e) { logErr('install', e); return null; }
+  }
+  function setup(o) {
+    var THREE = o.THREE, renderer = o.renderer, xr = renderer.xr;
+    var api = { level: 0, errors: function () { return nErr; }, lastExit: '' };
+    try { xr.setFramebufferScaleFactor(Math.min(1, o.scale || 0.9)); } catch (e) { /* ignore */ }
+    try { xr.setFoveation(1); } catch (e) { /* ignore */ }
+
+    // ---- the Exit VR button (canvas drawn once; hover only tints the material)
+    var c = document.createElement('canvas'); c.width = 512; c.height = 200;
+    var g = c.getContext('2d');
+    g.fillStyle = '#c8202a'; g.beginPath(); if (g.roundRect) g.roundRect(4, 4, 504, 192, 36); else g.rect(4, 4, 504, 192); g.fill();
+    g.lineWidth = 8; g.strokeStyle = '#fff'; g.stroke();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '800 88px system-ui, sans-serif'; g.fillText('Exit VR', 256, 84);
+    g.font = '600 32px system-ui, sans-serif'; g.fillText('or press B / Y', 256, 158);
+    var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    var BW = 0.26, BH = BW * 200 / 512;   // 26 x 10 cm, about 60 cm away
+    var btn = new THREE.Mesh(new THREE.PlaneGeometry(BW, BH), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+    btn.name = 'imhere-exit-vr'; btn.renderOrder = 99999; btn.frustumCulled = false; btn.visible = false; btn.matrixAutoUpdate = false;
+    var rayMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthTest: false, fog: false, toneMapped: false });
+    var rays = [0, 1].map(function () {
+      var l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]), rayMat);
+      l.visible = false; l.frustumCulled = false; l.renderOrder = 99998; l.matrixAutoUpdate = false; return l;
+    });
+    var usePanel = o.panel !== false;
+    var exitBtns = o.exitButtons || [4, 5];
+    api.exitTargets = (o.exitTargets || []).slice();
+    // ---- optional entry hint (canvas drawn once; opacity fades)
+    var hint = null, hintAt = 0, hintPlaced = false;
+    if (o.hint) {
+      var hc = document.createElement('canvas'); hc.width = 512; hc.height = 72;
+      var hg = hc.getContext('2d');
+      hg.fillStyle = 'rgba(10,18,32,0.78)'; hg.beginPath(); if (hg.roundRect) hg.roundRect(2, 2, 508, 68, 34); else hg.rect(2, 2, 508, 68); hg.fill();
+      hg.fillStyle = '#fff'; hg.textAlign = 'center'; hg.textBaseline = 'middle'; hg.font = '500 30px system-ui, sans-serif';
+      hg.fillText(String(o.hint), 256, 37);
+      var htex = new THREE.CanvasTexture(hc); if (THREE.SRGBColorSpace) htex.colorSpace = THREE.SRGBColorSpace;
+      hint = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3 * 72 / 512), new THREE.MeshBasicMaterial({ map: htex, transparent: true, opacity: 1, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+      hint.name = 'imhere-exit-hint'; hint.renderOrder = 99997; hint.frustumCulled = false; hint.visible = false; hint.matrixAutoUpdate = false;
+      api.hint = hint;
+    }
+    var holder = null;   // the camera's parent (the rig / dolly): WebXR poses are in its space
+    function attach() {
+      var p = (o.camera && o.camera.parent) || o.scene;
+      if (!p || holder === p) return; holder = p;
+      p.add(btn); if (hint) p.add(hint); if (o.rays) rays.forEach(function (l) { p.add(l); });
+    }
+
+    // ---- exit
+    var ending = 0;
+    function exit(reason) {
+      var s = null; try { s = xr.getSession && xr.getSession(); } catch (e) { /* ignore */ }
+      if (!s) return;
+      api.lastExit = reason;
+      try { console.warn('[I\'M HERE VR] exit: ' + reason); } catch (e) { /* ignore */ }
+      if (o.onExit) try { o.onExit(reason); } catch (e) { logErr('onExit', e); }
+      try { var p = s.end(); if (p && p.catch) p.catch(function (e) { logErr('session.end', e); }); } catch (e) { logErr('session.end', e); }
+      clearTimeout(ending);
+      ending = setTimeout(function () {   // still in the same session? try once more
+        var s2 = null; try { s2 = xr.getSession && xr.getSession(); } catch (e) { /* ignore */ }
+        if (s2 === s) { try { var p2 = s.end(); if (p2 && p2.catch) p2.catch(function () {}); } catch (e) { logErr('session.end retry', e); } }
+      }, 1200);
+    }
+    api.exit = exit;
+
+    // ---- per-frame: button placement, input, hit testing (all in the rig's local space; preallocated temporaries)
+    var Minv = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(),
+      lo = new THREE.Vector3(), ld = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), sc = new THREE.Vector3(), e3 = new THREE.Euler();
+    var TM = new THREE.Matrix4(), TMinv = new THREE.Matrix4();
+    var PL = { right: 0.24, down: 0.24, ahead: 0.6 }; if (o.place) for (var k in o.place) PL[k] = o.place[k];
+    var anchorYaw = null, prevDown = [false, false, false, false], hovered = false, invOk = false;
+    function refSpace() { try { return xr.getReferenceSpace(); } catch (e) { return null; } }
+    function inv() { if (!invOk) { Minv.copy(btn.matrix).invert(); invOk = true; } return Minv; }
+    function shown(obj) { for (var x = obj; x; x = x.parent) { if (!x.visible) return false; if (x === holder) return true; } return true; }
+    function targetInv(obj) {   // a page target's matrix in the rig's space (from its last rendered matrixWorld), inverted
+      TM.copy(holder.matrixWorld).invert().multiply(obj.matrixWorld); return TMinv.copy(TM).invert();
+    }
+    // distance (rig units) along the pointing ray to the rectangle (cx, cy, hw, hh) in the plane of Mi's space, or -1
+    function rayHitIn(frame, src, ref, Mi, cx, cy, hw, hh) {
+      var pose = frame.getPose(src.targetRaySpace, ref); if (!pose) return -1;
+      var p = pose.transform.position, r = pose.transform.orientation;
+      q.set(r.x, r.y, r.z, r.w);
+      lo.set(p.x, p.y, p.z); ld.set(0, 0, -1).applyQuaternion(q).add(lo);
+      lo.applyMatrix4(Mi); ld.applyMatrix4(Mi).sub(lo);   // unnormalised: t stays in rig units
+      if (Math.abs(ld.z) < 1e-9) return -1;
+      var t = -lo.z / ld.z; if (t <= 0 || t > 6) return -1;
+      var x = lo.x + ld.x * t - cx, y = lo.y + ld.y * t - cy;
+      return Math.abs(x) <= hw + 0.01 && Math.abs(y) <= hh + 0.01 ? t : -1;
+    }
+    function pokeIn(frame, src, ref, Mi, cx, cy, hw, hh) {   // index fingertip pressed into the rectangle (hand tracking)
+      if (!src.hand || !frame.getJointPose) return false;
+      var j = src.hand.get && src.hand.get('index-finger-tip'); if (!j) return false;
+      var jp = frame.getJointPose(j, ref); if (!jp) return false;
+      var p = jp.transform.position; lo.set(p.x, p.y, p.z).applyMatrix4(Mi);
+      return Math.abs(lo.x - cx) <= hw && Math.abs(lo.y - cy) <= hh && lo.z < 0.015 && lo.z > -0.04;
+    }
+    // what this input source points at / pokes: { t, obj } (obj null = the big panel); hit.t = -1 when nothing
+    var hit = { t: -1, obj: null, poke: false };
+    function probe(frame, src, ref) {
+      hit.t = -1; hit.obj = null; hit.poke = false;
+      if (usePanel && btn.visible) {
+        if (pokeIn(frame, src, ref, inv(), 0, 0, BW / 2, BH / 2)) { hit.poke = true; hit.t = 0.01; return hit; }
+        var t0 = rayHitIn(frame, src, ref, inv(), 0, 0, BW / 2, BH / 2); if (t0 > 0) { hit.t = t0; }
+      }
+      for (var i = 0; i < api.exitTargets.length && holder; i++) {
+        var ob = api.exitTargets[i], R = ob && ob.userData && ob.userData.exitRect;
+        if (!R || !shown(ob) || (ob.userData.exitIgnore && ob.userData.exitIgnore === src.handedness)) continue;
+        var Mi = targetInv(ob);
+        if (pokeIn(frame, src, ref, Mi, R.cx, R.cy, R.w / 2, R.h / 2)) { hit.poke = true; hit.t = 0.01; hit.obj = ob; return hit; }
+        var t1 = rayHitIn(frame, src, ref, Mi, R.cx, R.cy, R.w / 2, R.h / 2);
+        if (t1 > 0 && (hit.t < 0 || t1 < hit.t)) { hit.t = t1; hit.obj = ob; }
+      }
+      return hit;
+    }
+    function setTargetHover(ob, on) {
+      if (!!ob.userData._exitHov === on) return; ob.userData._exitHov = on;
+      if (ob.userData.onExitHover) try { ob.userData.onExitHover(on); } catch (e) { logErr('onExitHover', e); }
+    }
+    function placeButton(frame, ref) {   // follows the head's yaw lazily: about 0.6 m ahead, low and to the right
+      var vp = frame.getViewerPose(ref); if (!vp) return;
+      var tp = vp.transform.position, to = vp.transform.orientation;
+      e3.setFromQuaternion(q.set(to.x, to.y, to.z, to.w), 'YXZ');
+      var yaw = e3.y;
+      if (hint && !hintPlaced) {   // the entry hint: fixed in the rig, ahead of where you look when VR starts
+        hintPlaced = true; hintAt = performance.now();
+        v.set(tp.x - Math.sin(yaw) * 0.8, tp.y - 0.12, tp.z - Math.cos(yaw) * 0.8);
+        hint.matrix.compose(v, q.setFromEuler(e3.set(0.15, yaw, 0, 'YXZ')), one); hint.matrixWorldNeedsUpdate = true;
+        hint.material.opacity = 1; hint.visible = true;
+      }
+      if (hint && hint.visible) {
+        var age = performance.now() - hintAt;
+        if (age > 4000) hint.visible = false; else hint.material.opacity = age < 3000 ? 1 : 1 - (age - 3000) / 1000;
+      }
+      if (!usePanel) return;
+      if (anchorYaw === null) anchorYaw = yaw;
+      var dy = Math.atan2(Math.sin(yaw - anchorYaw), Math.cos(yaw - anchorYaw));
+      if (Math.abs(dy) > 0.45) anchorYaw += dy - (dy > 0 ? 0.45 : -0.45);   // never more than ~26 deg from where you look
+      else anchorYaw += dy * 0.02;
+      var cy = Math.cos(anchorYaw), sy = Math.sin(anchorYaw);
+      v.set(tp.x - sy * PL.ahead + cy * PL.right, tp.y - PL.down, tp.z - cy * PL.ahead - sy * PL.right);
+      q.setFromEuler(e3.set(-0.35, anchorYaw, 0, 'YXZ'));
+      btn.matrix.compose(v, q, one); btn.matrixWorldNeedsUpdate = true; invOk = false;
+      btn.visible = true;
+    }
+    function inputStep(frame) {
+      var s = frame.session, ref = refSpace(); if (!ref) return;
+      attach();
+      placeButton(frame, ref);
+      var hov = false, ri = 0, srcs = s.inputSources, hovObj = null;
+      for (var i = 0; i < srcs.length; i++) {
+        var src = srcs[i];
+        // B / Y on xr-standard controllers (gamepad buttons 5, and 4 = A / X unless the page chose exitButtons): exit on press
+        var gp = src.gamepad, down = false;
+        if (gp && !src.hand && gp.buttons) for (var b = 0; b < exitBtns.length; b++) { var gb = gp.buttons[exitBtns[b]]; if (gb && gb.pressed) down = true; }
+        var was = i < 4 ? prevDown[i] : false; if (i < 4) prevDown[i] = down;
+        if (down && !was) { exit('B/Y button'); return; }
+        var h = probe(frame, src, ref);
+        if (h.poke) { exit('fingertip on Exit VR'); return; }
+        var t = h.t;
+        if (t > 0) { if (h.obj) hovObj = h.obj; else hov = true; }
+        if (o.rays && ri < 2) {
+          var l = rays[ri++], pose = frame.getPose(src.targetRaySpace, ref);
+          if (pose) {
+            var p = pose.transform.position, r = pose.transform.orientation, len = t > 0 ? t : 1.5;
+            l.matrix.compose(v.set(p.x, p.y, p.z), q.set(r.x, r.y, r.z, r.w), sc.set(1, 1, len));
+            l.matrixWorldNeedsUpdate = true; l.visible = true;
+          } else l.visible = false;
+        }
+      }
+      for (; ri < 2; ri++) rays[ri].visible = false;
+      if (hov !== hovered) { hovered = hov; btn.material.color.setHex(hov ? 0xffd0d0 : 0xffffff); }
+      for (var k2 = 0; k2 < api.exitTargets.length; k2++) if (api.exitTargets[k2]) setTargetHover(api.exitTargets[k2], api.exitTargets[k2] === hovObj);
+    }
+    function onSelectStart(ev) {   // trigger or pinch while pointing at Exit VR (the panel or a page exit target)
+      try {
+        var ref = refSpace(); if (!ref || !ev.frame) return;
+        if (probe(ev.frame, ev.inputSource, ref).t > 0) exit('Exit VR pressed');
+      } catch (e) { logErr('selectstart', e); }
+    }
+
+    // ---- watchdog (ring buffer of the last 2 s of frames; no allocations)
+    var RING = 256, ringT = new Float64Array(RING), ringDt = new Float32Array(RING);
+    var W = { start: 0, last: 0, head: 0, n: 0, levelAt: 0, big0: 0, big1: 0, timer: 0, errRun: 0, errSince: 0 };
+    function resetHist() { W.head = 0; W.n = 0; W.last = 0; }
+    function setLevel(n, why) {
+      if (n <= api.level) return;
+      api.level = n; W.levelAt = performance.now(); resetHist();
+      try { console.warn('[I\'M HERE VR] quality level ' + n + ': ' + why); } catch (e) { /* ignore */ }
+      if (o.onQuality) try { o.onQuality(n); } catch (e) { logErr('onQuality', e); }
+    }
+    function stopVR(why) {
+      showMsg('VR was closed to keep your headset responsive (' + why + '). You can press Enter VR to go back in.');
+      exit('watchdog: ' + why);
+    }
+    function watch(now) {
+      if (!W.last) { W.last = now; return; }
+      var dt = now - W.last; W.last = now;
+      if (now - W.start < 4000) return;   // grace: shader compiles and loading right after entering VR
+      if (dt > 1000) {
+        if (now - W.big1 < 10000) { stopVR('frames took over 1 second'); return; }
+        W.big0 = W.big1; W.big1 = now;
+      }
+      ringT[W.head] = now; ringDt[W.head] = dt; W.head = (W.head + 1) % RING; if (W.n < RING) W.n++;
+      if (now - W.levelAt < 2500 || api.level >= 2) return;
+      // share of the last 2 s spent in frames over 50 ms (time-weighted, so it also works at a few frames per second)
+      var n = 0, all = 0, slow = 0;
+      for (var i = 1; i <= W.n; i++) { var j = (W.head - i + RING) % RING; if (now - ringT[j] > 2000) break; n++; all += ringDt[j]; if (ringDt[j] > 50) slow += ringDt[j]; }
+      if (n >= 3 && all > 1500 && slow / all > 0.6) setLevel(api.level + 1, 'frames over 50 ms');
+    }
+
+    // ---- the frame loop wrapper
+    var orig = renderer.setAnimationLoop.bind(renderer);
+    renderer.setAnimationLoop = function (cb) {
+      if (!cb) return orig(null);
+      return orig(function (time, frame) {
+        var presenting = xr.isPresenting;
+        if (presenting && frame) {
+          try { if (frame.session.visibilityState === 'visible') watch(performance.now()); else W.last = 0; } catch (e) { logErr('watchdog', e); }
+          try { inputStep(frame); } catch (e) { logErr('exit controls', e); }
+        }
+        try { cb(time, frame); W.errRun = 0; }
+        catch (e) {
+          logErr('frame', e);
+          if (presenting) {
+            var now = performance.now();
+            if (!W.errRun++) W.errSince = now;
+            else if (now - W.errSince > 2000) { W.errRun = 0; stopVR('the page kept failing to draw'); }
+            if (o.scene && o.camera) { try { renderer.render(o.scene, o.camera); } catch (e2) { /* ignore */ } }
+          }
+        }
+      });
+    };
+
+    function onVis() { resetHist(); W.big1 = 0; }
+    xr.addEventListener('sessionstart', function () {
+      var s = xr.getSession();
+      api.level = 0; anchorYaw = null; hovered = false; hintPlaced = false; prevDown[0] = prevDown[1] = prevDown[2] = prevDown[3] = false;
+      W.start = performance.now(); resetHist(); W.big0 = W.big1 = 0; W.levelAt = 0; W.errRun = 0;
+      try { xr.setFoveation(1); } catch (e) { /* ignore */ }
+      api.shadow = renderer.shadowMap.enabled; renderer.shadowMap.enabled = false;
+      if (s) { s.addEventListener('selectstart', onSelectStart); s.addEventListener('visibilitychange', onVis); }
+      attach();
+      clearInterval(W.timer);
+      W.timer = setInterval(function () {   // the loop stopped delivering frames altogether
+        var s1 = null; try { s1 = xr.getSession && xr.getSession(); } catch (e) { /* ignore */ }
+        if (!xr.isPresenting || !s1 || s1.visibilityState !== 'visible') { W.last = 0; return; }   // system menu open / headset off
+        var now = performance.now();
+        if (W.last && now - W.last > 2500 && now - W.start > 6000) stopVR('no frames for 2.5 seconds');
+      }, 500);
+    });
+    xr.addEventListener('sessionend', function () {
+      clearInterval(W.timer); clearTimeout(ending);
+      btn.visible = false; if (hint) hint.visible = false; rays.forEach(function (l) { l.visible = false; });
+      api.exitTargets.forEach(function (t) { if (t) setTargetHover(t, false); });
+      if (api.shadow) renderer.shadowMap.enabled = true;
+      if (api.level && o.onQuality) try { o.onQuality(0); } catch (e) { logErr('onQuality', e); }
+      api.level = 0;
+    });
+    api.button = btn; api.renderer = renderer;
+    api.sessionInit = { optionalFeatures: ['hand-tracking'] };
+    window.ImHereXR.current = api;   // for tests and the console
+    return api;
+  }
+  window.ImHereXR = { install: install, showMessage: showMsg };
+})();
+</script>
+<!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; this copy adds an optional ROUTE row: update({ route })) -->
 <script id="imhere-mark">
 /* I'M HERE experience label, v4 (founder-approved final design). SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
    Pasted inline into every prototype page between the IMHERE-MARK markers by
@@ -243,7 +587,10 @@
                   kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
         below     CSS selector(s): the label sits just under the lowest visible one (e.g. the page header)
      ImHereMark.setLive(true|false)   "live" (green) in SIGNAL. Only while the data is really fresh.
-     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh panel, kept up to date
+     ImHereMark.xrPanel(THREE, { width, x, y, z, exitRow })  -> small THREE.Mesh panel, kept up to date
+        exitRow: true adds a last row "Exit VR" under LOC / SIGNAL / VIEW (opt-in; default off). Its hot area is
+        mesh.userData.exitRect = { cx, cy, w, h } (mesh-local metres) for the VR safety layer's exitTargets;
+        ImHereMark.xrExitHover(bool) highlights it.
      ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
    CSS variable --imh-h on <html>: height taken by the label (or the corner mark) + gap, so a page can push its
    own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
@@ -304,7 +651,7 @@
     '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
     '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
 
-  var S = { context: '', line1: '', line2: '', line2small: '', about: null, loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
+  var S = { context: '', route: '', line1: '', line2: '', line2small: '', about: null, loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
     sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
   var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
   var box, mini, miniLive, r2, id2, id3, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
@@ -338,7 +685,8 @@
     if (g.source && g.date) return [g.source + ', ' + fmtDay(g.date), false];
     return [g.text || g.source || 'None', false];
   }
-  function rows() { var sp = signalParts(); return [['LOC', S.loc || 'None'], ['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]; }
+  function rows() { var sp = signalParts(), R = [['LOC', S.loc || 'None']]; if (S.route) R.push(['ROUTE', S.route]);   // ROUTE: boats page extension
+    return R.concat([['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]); }
   function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
   function label() {
     var L = idLines(), id = L[0] + '. ' + (L[1] ? L[1] + (L[2] ? ' (' + L[2] + ')' : '') + '. ' : '');
@@ -502,7 +850,7 @@
   function apply(o) {
     if (!o) return;
     if (o.about !== undefined) S.about = o.about && typeof o.about === 'object' ? { title: String(o.about.title || ''), text: String(o.about.text || '') } : null;
-    ['context', 'line1', 'line2', 'line2small', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    ['context', 'line1', 'line2', 'line2small', 'loc', 'route', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
     if (o.signal !== undefined) S.signal = o.signal;
     if (o.stats) S.stats = [].concat(o.stats);
     if (o.tag !== undefined) S.tag = o.tag;
@@ -515,13 +863,18 @@
   // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
   function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
-  function xrHeight() { var L = idLines(); return 262 + (L[1] ? 42 : 0) + (L[2] ? 30 : 0); }
+  var XR_EXIT_H = 58;
+  function xrHeight() { var L = idLines(); return 262 + (rows().length - 3) * 46 + (L[1] ? 42 : 0) + (L[2] ? 30 : 0) + (xr && xr.exitRow ? XR_EXIT_H : 0); }
+  function exitRect(m) {   // the Exit VR row's hot area in the mesh's plane (metres), from the canvas layout
+    var w = m.userData.imhW, H = xr.canvas.height, s = w / 512, top = H - 6 - XR_EXIT_H, bot = H - 6;
+    m.userData.exitRect = xr.exitRow ? { cx: 0, cy: (H / 2 - (top + bot) / 2) * s, w: (512 - 12) * s, h: XR_EXIT_H * s } : null;
+  }
   function xrResize(H) {   // two-line identity makes the panel taller: new canvas texture (GPU storage is fixed-size) + geometry
     var T = xr.THREE, c = xr.canvas; c.height = H;
     var tex = new T.CanvasTexture(c); if (T.SRGBColorSpace) tex.colorSpace = T.SRGBColorSpace;
     xr.meshes.forEach(function (m) {
       m.material.map = tex; m.material.needsUpdate = true;
-      var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / 512);
+      var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / 512); exitRect(m);
     });
     xr.tex.dispose(); xr.tex = tex;
   }
@@ -552,6 +905,15 @@
       else g.fillText(fit(g, r[1], W - 28 - vx), vx, y);
       y += 46;
     });
+    if (xr.exitRow) {   // last row: Exit VR (small, under the data rows; brighter while a ray points at it)
+      var ty = H - 6 - XR_EXIT_H;
+      g.save(); rr(g, 3, ty, W - 6, XR_EXIT_H + 3, 16); g.clip();
+      g.fillStyle = xr.exitHover ? 'rgba(200,32,42,0.75)' : 'rgba(200,32,42,0.22)'; g.fillRect(0, ty, W, XR_EXIT_H + 6); g.restore();
+      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(3, ty, W - 6, 2);
+      if ('letterSpacing' in g) g.letterSpacing = '0px';
+      g.fillStyle = xr.exitHover ? '#fff' : '#ffb3b6'; g.font = '600 28px ' + FONT; g.fillText('Exit VR', lx, ty + 39);
+      g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + FONT; g.textAlign = 'right'; g.fillText('or press B / Y', W - 28, ty + 38); g.textAlign = 'left';
+    }
     xr.tex.needsUpdate = true;
   }
   function xrPanel(THREE, o) {
@@ -559,15 +921,16 @@
     if (!xr) {
       var c = document.createElement('canvas'); c.width = 512; c.height = xrHeight();
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [] };
+      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [], exitRow: false, exitHover: false };
     }
+    if (o.exitRow && !xr.exitRow) { xr.exitRow = true; xrResize(xrHeight()); }
     var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
     var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * xr.canvas.height / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     m.userData.imhW = w; xr.meshes.push(m);
     m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
     m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
     m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
-    drawXR(); return m;
+    exitRect(m); drawXR(); return m;
   }
 
   window.ImHereMark = {
@@ -580,6 +943,7 @@
     dismiss: function () { if (S.mounted) setDismissed(true, false); },
     expand: function () { if (S.mounted) expand(); },
     label: label, xrPanel: xrPanel,
+    xrExitHover: function (on) { on = !!on; if (xr && xr.exitRow && on !== xr.exitHover) { xr.exitHover = on; drawXR(); } },
     items: function () { return S.items.slice(); }
   };
 })();
@@ -680,6 +1044,8 @@
       out.cog = (cog === null || cog >= 360 || cog < 0) ? null : cog;   // 3600 raw = n/a
       out.heading = (hdg === null || hdg >= 360 || hdg < 0) ? null : hdg; // 511 = n/a
       out.navStatus = num(p.NavigationalStatus);
+      var rot = decodeRot(p.RateOfTurn);
+      out.rot = rot ? rot.value : null; out.rotFast = rot ? rot.fast : false;
     } else if (type === 'ShipStaticData' && body.ShipStaticData) {
       var s = body.ShipStaticData, d = s.Dimension || {};
       if (mmsi === null) mmsi = out.mmsi = num(s.UserID);
@@ -690,6 +1056,11 @@
       out.dims = { A: A, B: B, C: C, D: D, length: A + B, beam: C + D };
       out.destination = cleanText(s.Destination);
       out.callSign = cleanText(s.CallSign);
+      var imo = num(s.ImoNumber); out.imo = (imo !== null && imo >= 1000000 && imo <= 9999999) ? imo : null;
+      var dr = num(s.MaximumStaticDraught); out.draught = (dr !== null && dr > 0 && dr <= 25.5) ? dr : null;   // metres; 0 = not available
+      var e = s.Eta || {};
+      var em = num(e.Month), ed = num(e.Day);
+      out.eta = (em >= 1 && em <= 12 && ed >= 1 && ed <= 31) ? { month: em, day: ed, hour: num(e.Hour), minute: num(e.Minute) } : null;
     } else {
       return null;
     }
@@ -707,11 +1078,16 @@
     var t = u.time != null ? u.time : receivedAt;
     if (u.kind === 'position') {
       if (v.fix && t < v.fix.time) return v;   // ignore out-of-order reports
-      v.fix = { lat: u.lat, lon: u.lon, sog: u.sog, cog: u.cog, heading: u.heading, navStatus: u.navStatus == null ? null : u.navStatus, time: t };
+      v.fix = { lat: u.lat, lon: u.lon, sog: u.sog, cog: u.cog, heading: u.heading, navStatus: u.navStatus == null ? null : u.navStatus,
+        rot: u.rot == null ? null : u.rot, rotFast: !!u.rotFast, time: t };
     } else if (u.kind === 'static') {
       if (u.shipType != null) v.shipType = u.shipType;
       if (u.dims && u.dims.length > 0) v.dims = u.dims;
       if (u.destination) v.destination = u.destination;
+      if (u.imo != null) v.imo = u.imo;
+      if (u.draught != null) v.draught = u.draught;
+      if (u.eta) v.eta = u.eta;
+      if (u.callSign) v.callSign = u.callSign;
     }
     v.updatedAt = Math.max(v.updatedAt || 0, t || 0);
     return v;
@@ -976,15 +1352,15 @@
     525: 'Indonesia', 533: 'Malaysia', 538: 'Marshall Islands', 548: 'Philippines', 563: 'Singapore', 564: 'Singapore', 565: 'Singapore',
     566: 'Singapore', 567: 'Thailand', 574: 'Vietnam', 576: 'Vanuatu', 577: 'Vanuatu', 636: 'Liberia', 637: 'Liberia', 710: 'Brazil', 725: 'Chile' };
   function flagOf(mmsi) { var s = String(mmsi == null ? '' : mmsi); return /^[2-7]\d{8}$/.test(s) ? MID[+s.slice(0, 3)] || '' : ''; }
-  // Two-line identity for the I'M HERE label. line1: flag (or the ship's category) · type; line2: name · MMSI.
-  // AIS carries no operator, so the flag is the "provider" when the MMSI says it.
+  // Two-line identity for the I'M HERE label. line1: operator (from a known name prefix), else the flag from the MMSI's MID,
+  // else the ship's category · type; line2: name · IMO (when sent) or MMSI.
   function shipIdentity(v, simulated) {
     var code = v ? v.shipType : null, t = decodeShipType(code), cat = SHORT_CAT[t.category] || shortType(code);
-    var flag = simulated ? '' : flagOf(v && v.mmsi), type = code == null ? 'Type not sent yet' : shortType(code);
-    var who = simulated ? 'Simulated sample' : flag ? flag + ' flag' : cat;
+    var flag = simulated ? '' : flagOf(v && v.mmsi), type = displayType(v), op = simulated ? '' : operatorOf(v && v.name);
+    var who = simulated ? 'Simulated sample' : op || flag || cat;
     var line1 = who === type ? type : who + ' · ' + type;
-    var line2 = (v && v.name ? v.name + ' · ' : '') + 'MMSI ' + (v ? v.mmsi : '?');
-    return { line1: line1, line2: line2, flag: flag };
+    var line2 = (v && v.name ? v.name + ' · ' : '') + (v && v.imo ? 'IMO ' + v.imo : 'MMSI ' + (v ? v.mmsi : '?'));
+    return { line1: line1, line2: line2, flag: flag, operator: op };
   }
   // Plain-words status from the last report (AIS navigational status + speed)
   function shipStatus(v) {
@@ -1014,6 +1390,171 @@
     return base.replace(/^http/, 'ws').replace(/\/$/, '') + '/ais?box=' + [box[0][0], box[0][1], box[1][0], box[1][1]].map(r).join(',');
   }
 
+
+  /* ---------- bridge data: rate of turn, nav status, ETA, destination, place names ---------- */
+  // AIS rate of turn: raw ROT_AIS (-126..126) -> deg/min = sign * (raw / 4.733)^2; +-127 = turning faster than 5 deg / 30 s
+  // (no turn indicator); -128 = not available. Values already in deg/min are not sent by aisstream.
+  function decodeRot(raw) {
+    var r = num(raw);
+    if (r === null || r === -128 || r < -128 || r > 127) return null;
+    if (r === 127 || r === -127) return { value: r > 0 ? 10 : -10, fast: true };
+    var v = Math.pow(Math.abs(r) / 4.733, 2) * (r < 0 ? -1 : 1);
+    return { value: Math.round(v * 10) / 10, fast: false };
+  }
+  function rotText(f) {
+    if (!f || f.rot == null) return '—';
+    if (f.rotFast) return 'Turning ' + (f.rot > 0 ? 'right' : 'left') + ' fast';
+    if (Math.abs(f.rot) < 0.5) return 'Steady';
+    return Math.abs(f.rot).toFixed(Math.abs(f.rot) < 10 ? 1 : 0) + '°/min ' + (f.rot > 0 ? 'right' : 'left');
+  }
+  var NAV_STATUS = { 0: 'Underway (engine)', 1: 'At anchor', 2: 'Not under command', 3: 'Restricted manoeuvrability', 4: 'Constrained by draught',
+    5: 'Moored', 6: 'Aground', 7: 'Fishing', 8: 'Underway (sailing)', 11: 'Towing astern', 12: 'Pushing ahead / towing alongside', 14: 'AIS-SART active' };
+  function navStatusText(ns) { return ns == null || NAV_STATUS[ns] == null ? 'Not reported' : NAV_STATUS[ns]; }
+  // AIS ETA has month, day, hour, minute in UTC but no year: take the occurrence nearest to now (a bit in the past is allowed)
+  function etaTime(eta, nowMs) {
+    if (!eta || !(eta.month >= 1 && eta.month <= 12) || !(eta.day >= 1 && eta.day <= 31)) return null;
+    var h = eta.hour >= 0 && eta.hour <= 23 ? eta.hour : 0, m = eta.minute >= 0 && eta.minute <= 59 ? eta.minute : 0;
+    var y = new Date(nowMs).getUTCFullYear(), best = null;
+    for (var dy = -1; dy <= 1; dy++) {
+      var t = Date.UTC(y + dy, eta.month - 1, eta.day, h, m);
+      if (best === null || Math.abs(t - nowMs - 15 * 864e5) < Math.abs(best - nowMs - 15 * 864e5)) best = t;   // favour the future
+    }
+    return best;
+  }
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function etaText(eta, nowMs) {
+    var t = etaTime(eta, nowMs); if (t === null) return '';
+    var d = new Date(t), hasTime = eta.hour >= 0 && eta.hour <= 23;
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    return MON[d.getUTCMonth()] + ' ' + d.getUTCDate() + (hasTime ? ', ' + pad(d.getUTCHours()) + ':' + pad(eta.minute >= 0 && eta.minute <= 59 ? d.getUTCMinutes() : 0) + ' UTC' : '');
+  }
+  // UN/LOCODE -> [display name, lat, lon] for common destinations (ports of call seen in the demo areas and the big trade lanes)
+  var PORTS = {
+    USLAX: ['Los Angeles, US', 33.74, -118.26], USLGB: ['Long Beach, US', 33.75, -118.21], USOAK: ['Oakland, US', 37.80, -122.32],
+    USSFO: ['San Francisco, US', 37.80, -122.40], USSAN: ['San Diego, US', 32.70, -117.17], USSEA: ['Seattle, US', 47.60, -122.34],
+    USTIW: ['Tacoma, US', 47.27, -122.41], USPDX: ['Portland, US', 45.60, -122.75], USNYC: ['New York, US', 40.68, -74.03],
+    USEWR: ['Newark, US', 40.69, -74.15], USBAL: ['Baltimore, US', 39.26, -76.57], USORF: ['Norfolk, US', 36.90, -76.33],
+    USSAV: ['Savannah, US', 32.08, -81.09], USCHS: ['Charleston, US', 32.78, -79.92], USJAX: ['Jacksonville, US', 30.40, -81.55],
+    USMIA: ['Miami, US', 25.77, -80.17], USHOU: ['Houston, US', 29.73, -95.27], USMSY: ['New Orleans, US', 29.93, -90.06],
+    USBNA: ['Nashville, US', 36.17, -86.77], CAVAN: ['Vancouver, CA', 49.29, -123.11], CAPRR: ['Prince Rupert, CA', 54.31, -130.32],
+    MXZLO: ['Manzanillo, MX', 19.06, -104.31], MXLZC: ['Lázaro Cárdenas, MX', 17.94, -102.18], MXESE: ['Ensenada, MX', 31.85, -116.62],
+    PABLB: ['Balboa, PA', 8.95, -79.57], PAMIT: ['Manzanillo, PA', 9.36, -79.88],
+    CNSHA: ['Shanghai, CN', 30.63, 122.07], CNNGB: ['Ningbo, CN', 29.93, 121.85], CNYTN: ['Yantian, CN', 22.57, 114.27],
+    CNSZX: ['Shenzhen, CN', 22.50, 113.90], CNSHK: ['Shekou, CN', 22.48, 113.91], CNTAO: ['Qingdao, CN', 36.07, 120.32],
+    CNXMN: ['Xiamen, CN', 24.45, 118.07], CNTXG: ['Tianjin, CN', 38.97, 117.78], CNDLC: ['Dalian, CN', 38.93, 121.65],
+    CNNSA: ['Nansha, CN', 22.75, 113.60], HKHKG: ['Hong Kong, HK', 22.30, 114.15], TWKHH: ['Kaohsiung, TW', 22.60, 120.28],
+    KRPUS: ['Busan, KR', 35.10, 129.04], JPTYO: ['Tokyo, JP', 35.62, 139.78], JPYOK: ['Yokohama, JP', 35.45, 139.65],
+    JPNGO: ['Nagoya, JP', 35.05, 136.85], JPKOB: ['Kobe, JP', 34.67, 135.20], JPOSA: ['Osaka, JP', 34.64, 135.43],
+    SGSIN: ['Singapore, SG', 1.26, 103.84], MYPKG: ['Port Klang, MY', 3.00, 101.39], MYTPP: ['Tanjung Pelepas, MY', 1.36, 103.55],
+    VNSGN: ['Ho Chi Minh City, VN', 10.77, 106.71], VNCMT: ['Cai Mep, VN', 10.53, 107.03], THLCH: ['Laem Chabang, TH', 13.08, 100.88],
+    NLRTM: ['Rotterdam, NL', 51.95, 4.05], BEANR: ['Antwerp, BE', 51.28, 4.33], DEHAM: ['Hamburg, DE', 53.54, 9.97],
+    DEBRV: ['Bremerhaven, DE', 53.56, 8.55], GBFXT: ['Felixstowe, GB', 51.95, 1.32], GBSOU: ['Southampton, GB', 50.90, -1.42],
+    GBLGP: ['London Gateway, GB', 51.50, 0.47], FRLEH: ['Le Havre, FR', 49.48, 0.10], ESALG: ['Algeciras, ES', 36.13, -5.43],
+    ESVLC: ['Valencia, ES', 39.44, -0.32], ESBCN: ['Barcelona, ES', 41.35, 2.16], GIGIB: ['Gibraltar, GI', 36.14, -5.36],
+    MAPTM: ['Tanger Med, MA', 35.89, -5.50], ITGOA: ['Genoa, IT', 44.40, 8.92], AEJEA: ['Jebel Ali, AE', 25.01, 55.06],
+    LKCMB: ['Colombo, LK', 6.95, 79.84], INNSA: ['Nhava Sheva, IN', 18.95, 72.95], AUSYD: ['Sydney, AU', -33.97, 151.22],
+    AUMEL: ['Melbourne, AU', -37.83, 144.92], AUBNE: ['Brisbane, AU', -27.38, 153.17], NZAKL: ['Auckland, NZ', -36.84, 174.77]
+  };
+  var PORT_NAMES = { 'LOS ANGELES': 'USLAX', 'SAN PEDRO': 'USLAX', 'LA': 'USLAX', 'L A': 'USLAX', 'LONG BEACH': 'USLGB', 'LB': 'USLGB',
+    'LA LB': 'LALB', 'LALB': 'LALB', 'LA LONG BEACH': 'LALB', 'LOS ANGELES LONG BEACH': 'LALB',
+    'PORT NEWARK': 'USEWR', 'NEW YORK NEW JERSEY': 'USNYC', 'NY NJ': 'USNYC', 'NYNJ': 'USNYC', 'PUSAN': 'KRPUS', 'HONGKONG': 'HKHKG' };
+  PORTS.LALB = ['Los Angeles / Long Beach, US', 33.74, -118.24];
+  Object.keys(PORTS).forEach(function (k) { if (k === 'LALB') return; var n = PORTS[k][0].replace(/, [A-Z]{2}$/, '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); if (!PORT_NAMES[n]) PORT_NAMES[n] = k; });
+  var PORT_NAME_KEYS = Object.keys(PORT_NAMES).sort(function (a, b) { return b.length - a.length; });
+  // One destination text -> { name, lat, lon, code } or null (unknown: callers show the raw text)
+  function lookupPort(text) {
+    var s = String(text || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+    if (!s) return null;
+    var m = /^([A-Z]{2}) ?([A-Z0-9]{3})\b/.exec(s);
+    if (m && PORTS[m[1] + m[2]] && m[1] + m[2] !== 'LALB') { var p = PORTS[m[1] + m[2]]; return { code: m[1] + m[2], name: p[0], lat: p[1], lon: p[2] }; }
+    for (var i = 0; i < PORT_NAME_KEYS.length; i++) {
+      var k = PORT_NAME_KEYS[i];
+      if (s === k || (k.length > 3 && s.indexOf(k + ' ') === 0)) { var c = PORT_NAMES[k], q = PORTS[c]; return { code: c, name: q[0], lat: q[1], lon: q[2] }; }
+    }
+    return null;
+  }
+  // AIS destination (typed by the crew) -> { dest, destPort, origin }. AIS has no origin field; only when the crew wrote
+  // "FROM>TO" (e.g. "CNYTN>USLAX") is an origin shown, from the ship's own text. Unknown names keep the raw text.
+  function parseDestination(raw) {
+    var t = cleanText(raw).replace(/[<]/g, ' ').trim();
+    if (!t) return null;
+    var parts = t.split(/\s*>+\s*/).filter(Boolean), out = { dest: '', destPort: null, origin: '' };
+    var last = parts.length ? parts[parts.length - 1] : t, lp = lookupPort(last);
+    out.destPort = lp; out.dest = lp ? lp.name : last;
+    if (parts.length >= 2) { var op = lookupPort(parts[0]); out.origin = op ? op.name : parts[0]; }
+    return out;
+  }
+  // ROUTE row: "Hong Kong, HK → Los Angeles, US · ETA Nov 12, 14:30 UTC" (origin only when known) or "→ Los Angeles, US · ..."
+  function routeText(v, nowMs) {
+    var d = parseDestination(v && v.destination), eta = etaText(v && v.eta, nowMs);
+    if (!d) return eta ? 'Destination not sent · ETA ' + eta : '';
+    return (d.origin ? d.origin + ' → ' : '→ ') + d.dest + (eta ? ' · ETA ' + eta : '');
+  }
+  // Operator from a well-known name prefix (e.g. "MSC ANNA" -> MSC, "EVER GIVEN" -> Evergreen). AIS itself has no operator.
+  var OPERATORS = [['CMA CGM ', 'CMA CGM'], ['MAERSK ', 'Maersk'], ['MSC ', 'MSC'], ['COSCO ', 'COSCO'], ['CSCL ', 'COSCO'], ['EVER ', 'Evergreen'],
+    ['OOCL ', 'OOCL'], ['ONE ', 'ONE'], ['HMM ', 'HMM'], ['YM ', 'Yang Ming'], ['ZIM ', 'ZIM'], ['APL ', 'APL'], ['WAN HAI ', 'Wan Hai'],
+    ['SEASPAN ', 'Seaspan'], ['X-PRESS ', 'X-Press Feeders'], ['NYK ', 'NYK'], ['MOL ', 'MOL'], ['HYUNDAI ', 'HMM'],
+    ['CARNIVAL ', 'Carnival'], ['NORWEGIAN ', 'Norwegian Cruise Line'], ['CELEBRITY ', 'Celebrity Cruises'], ['DISNEY ', 'Disney Cruise Line']];
+  function operatorOf(name) {
+    var n = String(name || '').toUpperCase() + ' ';
+    for (var i = 0; i < OPERATORS.length; i++) if (n.indexOf(OPERATORS[i][0]) === 0) return OPERATORS[i][1];
+    return '';
+  }
+  // Type words for the label: "Container ship" / "Bulk carrier" / "Cruise ship" only when name or size says so, else the AIS type
+  function displayType(v) {
+    var code = v ? v.shipType : null;
+    if (code == null) return 'Type not sent yet';
+    var cat = decodeShipType(code).category, name = String(v.name || '').toUpperCase(), L = v.dims && v.dims.length > 0 ? v.dims.length : 0;
+    if (cat === 'cargo' && !(L && L < 60)) { if (CONTAINER_NAMES.test(name)) return 'Container ship'; if (BULK_NAMES.test(name)) return 'Bulk carrier'; }
+    if (cat === 'passenger' && L >= 180) return 'Cruise ship';
+    return shortType(code);
+  }
+  // Plain place for LOC: inside a port -> "Port of Los Angeles"; else the nearest town -> "Off Long Beach, CA" (rivers: "Near ...")
+  var PLACES = [   // [name, lat, lon, radius m (a port area), or 0 for a town; 'near' for river towns]
+    ['Port of Los Angeles', 33.737, -118.262, 2600], ['Port of Long Beach', 33.754, -118.212, 2600],
+    ['San Pedro, CA', 33.736, -118.292, 0], ['Long Beach, CA', 33.767, -118.189, 0], ['Palos Verdes, CA', 33.76, -118.40, 0], ['Huntington Beach, CA', 33.66, -118.00, 0],
+    ['Port Newark, NJ', 40.68, -74.15, 2500], ['Staten Island, NY', 40.58, -74.15, 0], ['Manhattan, NY', 40.71, -74.01, 0], ['Bayonne, NJ', 40.67, -74.11, 0],
+    ['Brooklyn, NY', 40.66, -73.99, 0], ['Sandy Hook, NJ', 40.46, -74.00, 0],
+    ['Port of Rotterdam', 51.95, 4.10, 9000], ['Hoek van Holland, NL', 51.98, 4.13, 0],
+    ['Port of Singapore', 1.265, 103.83, 4000], ['Singapore', 1.29, 103.85, 0], ['Batam, ID', 1.10, 104.03, 0],
+    ['Port of Dover', 51.12, 1.33, 1500], ['Port of Calais', 50.97, 1.86, 1500], ['Dover, UK', 51.12, 1.32, 0], ['Calais, FR', 50.95, 1.85, 0], ['Folkestone, UK', 51.08, 1.17, 0],
+    ['Old Hickory Lock and Dam', 36.2967, -86.6553, 800], ['Old Hickory, TN', 36.26, -86.65, 'near'], ['Hendersonville, TN', 36.30, -86.62, 'near'],
+    ['Nashville, TN', 36.16, -86.78, 'near'], ['Gallatin, TN', 36.39, -86.45, 'near'],
+    ['Port of New Orleans', 29.935, -90.06, 3000], ['New Orleans, LA', 29.95, -90.07, 'near'], ['Chalmette, LA', 29.94, -89.96, 'near'],
+    ['Port of Houston', 29.73, -95.27, 3500], ['Pasadena, TX', 29.69, -95.20, 'near'], ['Baytown, TX', 29.74, -94.98, 'near'], ['La Porte, TX', 29.67, -95.02, 'near'],
+    ['Port of Gibraltar', 36.14, -5.36, 2000], ['Port of Algeciras', 36.13, -5.43, 2500], ['Gibraltar', 36.14, -5.35, 0], ['Tarifa, ES', 36.01, -5.60, 0],
+    ['Tangier, MA', 35.78, -5.81, 0], ['Ceuta, ES', 35.89, -5.32, 0]
+  ];
+  function placeName(lat, lon) {
+    if (lat == null || lon == null) return '';
+    var town = null, td = Infinity;
+    for (var i = 0; i < PLACES.length; i++) {
+      var p = PLACES[i], d = distance(lat, lon, p[1], p[2]);
+      if (typeof p[3] === 'number' && p[3] > 0) { if (d <= p[3]) return p[0]; continue; }
+      if (d < td) { td = d; town = p; }
+    }
+    if (!town || td > 30000) return '';
+    return (town[3] === 'near' ? 'Near ' : 'Off ') + town[0];
+  }
+  // 33°43.20'N 118°15.00'W
+  function fmtLatLon(lat, lon) {
+    if (lat == null || lon == null) return '—';
+    var f = function (v, p, n) { var a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60; if (m >= 59.995) { d++; m = 0; } return d + '°' + (m < 10 ? '0' : '') + m.toFixed(2) + "'" + (v < 0 ? n : p); };
+    return f(lat, 'N', 'S') + ' ' + f(lon, 'E', 'W');
+  }
+  // Everything the helm strip and the bridge screens show, as plain strings. AIS has no depth: never a made-up number.
+  function helmData(v, nowMs) {
+    var f = (v && v.fix) || {}, hd = f.heading, cog = f.cog;
+    var r = function (n) { if (n == null) return '—'; var x = String(Math.round(n) % 360); while (x.length < 3) x = '0' + x; return x + '°'; };
+    var d = parseDestination(v && v.destination), eta = etaText(v && v.eta, nowMs);
+    return {
+      heading: hd == null ? null : hd, cogDeg: cog == null ? null : cog,
+      hdg: r(hd), cog: r(cog), sog: f.sog == null ? '—' : f.sog.toFixed(1) + ' kn', rot: rotText(f), status: navStatusText(f.navStatus),
+      draft: v && v.draught != null ? v.draught.toFixed(1) + ' m' : '—', dest: d ? (d.origin ? d.origin + ' → ' : '') + d.dest : 'Not sent',
+      destPort: d ? d.destPort : null, eta: eta || '—', pos: fmtLatLon(f.lat, f.lon), depth: 'Charted depth coming soon'
+    };
+  }
+
   root.AISCore = {
     KNOT_MS: KNOT_MS, MAX_DR_SECONDS: MAX_DR_SECONDS,
     decodeShipType: decodeShipType, parseMessage: parseMessage, parseTimeUtc: parseTimeUtc, cleanText: cleanText,
@@ -1022,7 +1563,10 @@
     shortestAngle: shortestAngle, formatAge: formatAge,
     AREAS: AREAS, lon2tile: lon2tile, lat2tile: lat2tile, tile2lon: tile2lon, tile2lat: tile2lat, tilesForBox: tilesForBox, escapeHtml: escapeHtml, vesselTitle: vesselTitle, popupHtml: popupHtml, decayFactor: decayFactor,
     shortType: shortType, shipStatus: shipStatus, flagOf: flagOf, shipIdentity: shipIdentity, rideList: rideList, relayUrl: relayUrl,
-    DemoFeed: DemoFeed, DEMO_FLEET: DEMO_FLEET, DEMO_TRACK: DEMO_TRACK, fmtTimeUtc: fmtTimeUtc
+    DemoFeed: DemoFeed, DEMO_FLEET: DEMO_FLEET, DEMO_TRACK: DEMO_TRACK, fmtTimeUtc: fmtTimeUtc,
+    decodeRot: decodeRot, rotText: rotText, navStatusText: navStatusText, etaTime: etaTime, etaText: etaText, lookupPort: lookupPort,
+    parseDestination: parseDestination, routeText: routeText, operatorOf: operatorOf, displayType: displayType, placeName: placeName,
+    fmtLatLon: fmtLatLon, helmData: helmData, PORTS: PORTS
   };
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -1037,6 +1581,7 @@ const C = window.AISCore;
 const $ = (id) => document.getElementById(id);
 
 const RELAY = 'https://imhere-flights.bt4w8jn5ty.workers.dev';
+const BUILD = 'fccf2745';   // content hash, filled in by tools/build.js: script URLs carry ?v=BUILD so phones never run a stale copy
 const OLD_KEY_STORE = 'imhere.aisstream.key';   // older versions kept a pasted key here; no longer used
 const LIVE_MAX_AGE_MS = 20 * 60 * 1000;   // drop vessels silent for 20 min
 const LIVE_FRESH_MS = 30000;              // "live" only while connected and reports arrived in the last 30 s
@@ -1063,7 +1608,7 @@ const LEAFLET_URLS = [
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
   'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-];
+].map((u) => u + '?v=' + BUILD);
 
 /* ---------------- state ---------------- */
 const state = {
@@ -1351,9 +1896,9 @@ function load3D() {
   if (scene3d) return Promise.resolve(scene3d);
   if (scene3dLoading) return scene3dLoading;
   $('loading3d').hidden = false; $('loading3d').textContent = 'Loading the 3D view\u2026';
-  scene3dLoading = Promise.all([import('three'), import('three/addons/controls/OrbitControls.js')])
+  scene3dLoading = Promise.all([import('three'), import('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js?v=' + BUILD)])
     .then(([THREE, ctrl]) => {
-      scene3d = createScene(THREE, ctrl.OrbitControls);
+      scene3d = createScene(THREE, ctrl.OrbitControls, { cycleSeat: vrCycleSeat, nextShip: vrNextShip, onXR });
       window.__boats3d = scene3d;   // for the headless tests
       $('loading3d').hidden = true;
       return scene3d;
@@ -1367,7 +1912,7 @@ function load3D() {
   return scene3dLoading;
 }
 
-function createScene(THREE, OrbitControls) {
+function createScene(THREE, OrbitControls, hooks) {
   const host = $('view3d');
   const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -1387,7 +1932,16 @@ function createScene(THREE, OrbitControls) {
   sun.position.copy(SUN_DIR);
   scene.add(sun);
 
-  const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 250000);
+  // near plane 0.05 m: the helm console is ~0.6 m from the eye
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 250000);
+  // VR: the camera rides in a rig (the headset moves the camera inside it). On screens the rig stays at the origin.
+  renderer.xr.enabled = true;
+  const rig = new THREE.Group(); rig.name = 'rig'; rig.add(camera); scene.add(rig);
+  // VR safety (shared/xr-safety.js): B / Y exit, crash-proof loop, frame-cost watchdog. No big red panel: Exit VR is the
+  // last row of the I'M HERE label. A (right) changes seat, X (left) moves the label, so only buttons 5 (B / Y) exit.
+  let xrLevel = 0;
+  const XRS = window.ImHereXR ? window.ImHereXR.install({ THREE, renderer, scene, camera, scale: 0.9, rays: true, panel: false, exitButtons: [5],
+    hint: 'A: change seat · B or Y: exit VR', onQuality: (n) => { xrLevel = n; } }) : null;
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.maxPolarAngle = Math.PI * 0.495;
@@ -1522,7 +2076,8 @@ function createScene(THREE, OrbitControls) {
   const vessels = new Map();   // mmsi -> view state
   const world = { lat0: 0, lon0: 0 };
   let lookYaw = 0, lookPitch = -0.04;
-  let camMode = 'deck';   // 'deck' | 'captain' | 'chase'
+  let camMode = 'captain';   // 'captain' (the helm, where you board) | 'deck' | 'chase'
+  const chartTiles = [], trail = [];   // chartplotter: imagery tiles (scene x/z) and the ridden ship's track
   let lastFrame = performance.now();
   let lastLabelSort = 0;
 
@@ -1537,10 +2092,12 @@ function createScene(THREE, OrbitControls) {
     }
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous');
+    chartTiles.length = 0; trail.length = 0;
     C.tilesForBox(area.box, 48, 13).forEach((t) => {
       const nw = toXZ(t.north, t.west), se = toXZ(t.south, t.east);
       const w = se.x - nw.x, h = se.z - nw.z;
       const mat = tileMaterial();
+      chartTiles.push({ x0: nw.x, z0: nw.z, x1: se.x, z1: se.z, mat });   // the chartplotter draws the same imagery
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(nw.x + w / 2, 1.0, nw.z + h / 2);   // land a metre above the sea, clear of the wave crests
@@ -1778,13 +2335,28 @@ function createScene(THREE, OrbitControls) {
     }
     return y;
   }
-  function wheelhouse(kit, o) {   // glass band all round, visor roof; eye stands just behind the front glass
-    const h = o.h || 2.6, l = o.l, w = o.w;
-    kit.box('vc', w, 1.0, l, o.x || 0, o.y, o.z, o.color);
-    kit.box('glass', w * 1.002, h - 1.4, l * 1.002, o.x || 0, o.y + 1.0, o.z);
-    kit.box('vc', w + (o.wings || 0) * 2, 0.4, l + 0.9, o.x || 0, o.y + h - 0.4, o.z - 0.35, o.color);
-    if (o.wings) kit.box('vc', w + o.wings * 2, 1.1, Math.min(3, l * 0.5), 0, o.y, o.z - l / 2 + Math.min(3, l * 0.5) / 2, o.color);
-    return { front: o.z - l / 2, floor: o.y };
+  /* Wheelhouse: a hollow room (lower walls, glass band, visor roof) so the Captain seat is INSIDE, at the helm, with the
+     console in front and the windows above it. From inside, the glass box's faces point away and are not drawn, so the
+     view out is clear; dark window posts and a header frame the windows. */
+  function wheelhouse(kit, o) {
+    const h = o.h || 2.6, l = o.l, w = o.w, x = o.x || 0, t = Math.min(0.25, Math.max(0.1, w * 0.04)), front = o.z - l / 2;
+    kit.box('vc', w, 1.0, t, x, o.y, front + t / 2, o.color); kit.box('vc', w, 1.0, t, x, o.y, o.z + l / 2 - t / 2, o.color);
+    kit.box('vc', t, 1.0, l, x - w / 2 + t / 2, o.y, o.z, o.color); kit.box('vc', t, 1.0, l, x + w / 2 - t / 2, o.y, o.z, o.color);
+    kit.box('glass', w * 1.002, h - 1.4, l * 1.002, x, o.y + 1.0, o.z);
+    kit.box('vc', w + (o.wings || 0) * 2, 0.4, l + 0.9, x, o.y + h - 0.4, o.z - 0.35, o.color);
+    if (o.wings) { const wl = Math.min(3, l * 0.5); [-1, 1].forEach((sd) => kit.box('vc', o.wings, 1.1, wl, x + sd * (w / 2 + o.wings / 2), o.y, front + wl / 2, o.color)); }
+    // inside: window posts along the front glass, a header beam and a sill (seen from the helm)
+    const n = Math.max(2, Math.min(7, Math.round(w / 2.2)));
+    for (let i = 1; i < n; i++) kit.box('vc', 0.05, h - 1.4, 0.06, x - w / 2 + w * i / n, o.y + 1.0, front + 0.05, 0x23292e);
+    kit.box('vc', w - 2 * t, 0.12, 0.1, x, o.y + h - 0.52, front + 0.06, 0x23292e);
+    kit.box('vc', w - 2 * t, 0.05, 0.28, x, o.y + 0.98, front + 0.14, 0x3a4248);
+    kit.box('vc', w - 2 * t, 0.02, l - 2 * t, x, o.y, o.z, 0x5b5f5c);   // deck of the wheelhouse
+    return { front, floor: o.y, l, w };
+  }
+  // the helm: the eye stands ~1.15 m behind the front glass (inside), the console sits just behind the glass
+  function bridge(wh, up) {
+    const inset = Math.min(wh.l - 0.4, 1.15);
+    return { z: wh.front + inset, y: wh.floor + up, console: { z: wh.front + 0.3, y: wh.floor, w: Math.min(1.2, wh.w * 0.6) } };
   }
   function funnel(kit, x, y, z, w, l, h, color, band) {
     kit.box('vc', w, h, l, x, y, z, color);
@@ -1836,7 +2408,7 @@ function createScene(THREE, OrbitControls) {
           kit.box('vc', rows * rowW, 0.8, bayL, 0, y0 - 0.8, zc, 0x3a4248);   // hatch cover
         }
       });
-      const spot = { deck: { x: B * 0.07, t: 0.9, up: 1.7, yaw: 0 }, captain: { z: wh.front - 0.35, y: wh.floor + 1.75 } };
+      const spot = { deck: { x: B * 0.07, t: 0.9, up: 1.7, yaw: 0 }, captain: bridge(wh, 1.75) };
       return { H, stacks, spot };
     },
     tanker(kit, L, B, seed) {
@@ -1860,7 +2432,7 @@ function createScene(THREE, OrbitControls) {
       mast(kit, 0, H.deckY(0.95), H.Z(0.95), 6);
       foredeck(kit, H, B, 0x1a1a1a);
       kit.edgeRail(H, 0.12, 0.84, 1.0, 0xd0d0d0, 0.08, 24);
-      return { H, spot: { deck: { z: H.Z(0.62), y: dy + 2.45 + 1.7, yaw: 0 }, captain: { z: wh.front - 0.35, y: wh.floor + 1.75 } } };
+      return { H, spot: { deck: { z: H.Z(0.62), y: dy + 2.45 + 1.7, yaw: 0 }, captain: bridge(wh, 1.75) } };
     },
     bulk(kit, L, B, seed) {
       const T = Math.min(18, L * 0.055), F = Math.max(1.8, Math.min(8, L * 0.035));
@@ -1886,7 +2458,7 @@ function createScene(THREE, OrbitControls) {
       mast(kit, 0, H.deckY(0.95), H.Z(0.95), 6);
       foredeck(kit, H, B, 0x1a1a1a);
       kit.edgeRail(H, 0.12, 0.86, 1.0, 0xd0d0d0, 0.08, 24);
-      return { H, spot: { deck: { x: B * 0.4, t: 0.5, up: 1.7, yaw: 0 }, captain: { z: wh.front - 0.35, y: wh.floor + 1.75 } } };
+      return { H, spot: { deck: { x: B * 0.4, t: 0.5, up: 1.7, yaw: 0 }, captain: bridge(wh, 1.75) } };
     },
     tug(kit, L, B, seed, v, work) {
       const c = pick(PAL.tug, seed), T = Math.min(5.5, L * 0.14), F = Math.max(1, Math.min(3.2, L * 0.08));
@@ -1903,7 +2475,7 @@ function createScene(THREE, OrbitControls) {
         kit.cyl('vc', 1.0, 1.0, B * 0.45, 0, H.deckY(0.22) + 0.9, H.Z(0.22), 0x8a2a20, 10, { rz: Math.PI / 2 });   // towing winch
         kit.box('vc', 0.6, 1.2, 0.6, 0, H.deckY(0.08), H.Z(0.08), 0x222222);
       }
-      return { H, spot: { deck: { t: 0.88, up: 1.6, yaw: 0 }, captain: { z: wh.front - 0.35, y: wh.floor + 1.7 } } };
+      return { H, spot: { deck: { t: 0.88, up: 1.6, yaw: 0 }, captain: bridge(wh, 1.7) } };
     },
     workboat(kit, L, B, seed, v) { return BUILD.tug(kit, L, B, seed, v, true); },
     tow(kit, L, B, seed) {
@@ -1927,7 +2499,7 @@ function createScene(THREE, OrbitControls) {
         if (covered) kit.box('vc', bw * 0.84, 1.4, bl * 0.9, bx, 1.2, bz, (r * cols + c) % 4 ? 0x9a9a8a : 0x3d6a8a);
         else kit.box('vc', bw * 0.84, 0.5, bl * 0.9, bx, 0.6, bz, 0x22201c);
       }
-      return { H: TB, spot: { deck: { x: 0, z: -L / 2 + 1.5, y: 1.2 + 1.7, yaw: 0 }, captain: { z: wh.front - 0.35, y: wh.floor + 1.7 } } };
+      return { H: TB, spot: { deck: { x: 0, z: -L / 2 + 1.5, y: 1.2 + 1.7, yaw: 0 }, captain: bridge(wh, 1.7) } };
     },
     ferry(kit, L, B, seed) {
       const T = Math.min(4.5, L * 0.045), F = Math.max(1.2, Math.min(4, L * 0.045));
@@ -1941,7 +2513,7 @@ function createScene(THREE, OrbitControls) {
       kit.ringRail(B * 0.9, tl, 0, top, H.Z(0.47) + (decks - 1) * L * 0.02, 1.1, 0xe6e6e6);
       for (let k = 0; k < Math.floor(tl / 5); k++) [-1, 1].forEach((sd) => kit.box('vc', 0.6, 0.5, 2.4, sd * B * 0.3, top, H.Z(0.47) + L * 0.1 - k * 5, 0x2a5aa8));
       kit.edgeRail(H, 0.78, 1.0, 1.0, 0xe6e6e6, 0.08, 8);
-      return { H, spot: { deck: { z: H.Z(0.47) + L * 0.05, y: top + 1.7, yaw: 0 }, captain: { z: wh.front - 0.35, y: wh.floor + 1.75 } } };
+      return { H, spot: { deck: { z: H.Z(0.47) + L * 0.05, y: top + 1.7, yaw: 0 }, captain: bridge(wh, 1.75) } };
     },
     cruise(kit, L, B, seed) {
       const T = Math.min(8.8, L * 0.028), F = Math.max(3, Math.min(13, L * 0.042));
@@ -1968,7 +2540,7 @@ function createScene(THREE, OrbitControls) {
       kit.box('vc', B * 0.35, 0.4, L * 0.07, 0, y, H.Z(0.45), 0x2bb3d8);
       kit.box('vc', B * 0.3, 0.4, L * 0.05, 0, y, H.Z(0.58), 0x2bb3d8);
       funnel(kit, 0, y, H.Z(0.22), B * 0.3, L * 0.07, 10, pick(PAL.funnel, seed >> 2), pick(PAL.funnel, seed >> 4));
-      return { H, spot: { deck: { x: 0, z: H.Z(0.52), y: y + 1.7, yaw: 0 }, captain: { z: wh.front - 0.35, y: wh.floor + 1.75 } } };
+      return { H, spot: { deck: { x: 0, z: H.Z(0.52), y: y + 1.7, yaw: 0 }, captain: bridge(wh, 1.75) } };
     },
     fishing(kit, L, B, seed) {
       const T = Math.min(5, L * 0.11), F = Math.max(0.9, Math.min(3, L * 0.07));
@@ -1984,7 +2556,7 @@ function createScene(THREE, OrbitControls) {
       [-1, 1].forEach((sd) => kit.box('vc', 0.4, gh, 0.4, sd * B * 0.38, ay, az, 0xe08a1e));
       kit.box('vc', B * 0.8, 0.4, 0.4, 0, ay + gh, az, 0xe08a1e);
       kit.cyl('vc', 0.65, 0.65, B * 0.5, 0, H.deckY(0.2) + 0.75, H.Z(0.2), 0x2a7d4f, 10, { rz: Math.PI / 2 });   // net drum
-      return { H, spot: { deck: { t: 0.44, up: 1.75, yaw: Math.PI }, captain: { z: wh.front - 0.35, y: wh.floor + 1.65 } } };
+      return { H, spot: { deck: { t: 0.44, up: 1.75, yaw: Math.PI }, captain: bridge(wh, 1.65) } };
     },
     sailboat(kit, L, B, seed) {
       const T = Math.max(0.4, L * 0.05), F = Math.max(0.6, L * 0.09);
@@ -2030,7 +2602,7 @@ function createScene(THREE, OrbitControls) {
       const top = house(kit, { w: B * 0.7, l: hl, z: hz, y0: H.deckY(0.35), decks, color: WHITE, deckH: Math.min(2.8, Math.max(2, L * 0.08)) });
       const wh = wheelhouse(kit, { w: B * 0.65, l: Math.max(2.2, hl * 0.7), y: top, z: hz, color: WHITE });
       mast(kit, 0, top + 2.6, hz, Math.max(2, L * 0.08));
-      return { H, spot: { deck: { t: 0.8, up: 1.7, yaw: 0 }, captain: { z: wh.front - 0.35, y: wh.floor + 1.7 } } };
+      return { H, spot: { deck: { t: 0.8, up: 1.7, yaw: 0 }, captain: bridge(wh, 1.7) } };
     }
   };
 
@@ -2115,7 +2687,10 @@ function createScene(THREE, OrbitControls) {
       if (s.y != null) return new THREE.Vector3(s.x || 0, s.y, s.z);
       return new THREE.Vector3(s.x || 0, H.deckY(s.t) + s.up, H.Z(s.t));
     };
-    const spots = { deck: at(res.spot.deck), deckYaw: res.spot.deck.yaw || 0, captain: new THREE.Vector3(0, res.spot.captain.y, res.spot.captain.z) };
+    const cs = res.spot.captain;
+    const spots = { deck: at(res.spot.deck), deckYaw: res.spot.deck.yaw || 0, captain: new THREE.Vector3(0, cs.y, cs.z),
+      // where the helm console stands (no wheelhouse, e.g. a sailboat's cockpit: just ahead of the helmsman)
+      console: cs.console || { z: cs.z - 0.85, y: cs.y - 1.7, w: Math.min(1.0, B * 0.3) } };
     const motion = new THREE.Group(); motion.add(body);
     body.position.set(hull.stbd, 0, -hull.fwd);   // antenna is the group origin; hull centre sits fwd/stbd of it
     const g = new THREE.Group(); g.add(motion);
@@ -2196,22 +2771,247 @@ function createScene(THREE, OrbitControls) {
       s.model.group.rotation.y = -s.yaw * Math.PI / 180;
       seaMotion(s, t, dt);
       const sog = v.fix.sog || 0;
-      s.model.wake.visible = sog >= 0.3;
+      s.model.wake.visible = sog >= 0.3 && xrLevel < 1;
       s.model.wake.material.uniforms.uSog.value = sog;
       if (s.model.sails) { s.model.sails.visible = sog >= 1.5; s.model.furled.visible = sog < 1.5; }
     });
     if (now - lastLabelSort > 500) {
       lastLabelSort = now;
-      const cam = camera.position;
+      const cam = camera.getWorldPosition(new THREE.Vector3());
       const arr = [];
       vessels.forEach((s, mmsi) => arr.push([mmsi, (s.x - cam.x) ** 2 + (s.z - cam.z) ** 2, s]));
       arr.sort((a, b) => a[1] - b[1]);
       arr.forEach(([mmsi, , s], i) => {
         const riding = mmsi === state.rideMmsi, aboard = riding && camMode !== 'chase';
-        s.model.label.visible = (i < 30 && !aboard) || (riding && !aboard);
+        s.model.label.visible = xrLevel < 2 && ((i < (renderer.xr.isPresenting ? 12 : 30) && !aboard) || (riding && !aboard));
       });
     }
   }
+
+  /* ----- the helm console: two canvas screens in front of the Captain seat (chartplotter + instruments) -----
+     One console, moved onto the ship you ride. Screens are redrawn only when what they show changes, at most 10 times a
+     second (4 under the VR watchdog), with no mipmaps, so a texture upload stays cheap in a headset. */
+  const SCR_W = 640, SCR_H = 444;
+  function screen(x) {
+    const cv = document.createElement('canvas'); cv.width = SCR_W; cv.height = SCR_H;
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
+    tex.anisotropy = Math.min(4, maxAniso);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.52 * SCR_H / SCR_W), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+    m.position.set(x, 0.2, 0.012);
+    return { cv, tex, m, sig: '', draws: 0 };
+  }
+  const helm = (() => {
+    const g = new THREE.Group(); g.name = 'helm-console'; g.visible = false;
+    const deskMat = new THREE.MeshStandardMaterial({ color: 0x2b3238, roughness: 0.6, metalness: 0.2 });
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.45), deskMat); desk.position.y = 0.5; g.add(desk);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.24, 0.03, 0.5), new THREE.MeshStandardMaterial({ color: 0x1c2125, roughness: 0.4 })); top.position.y = 1.0; g.add(top);
+    const panel = new THREE.Group(); panel.position.set(0, 1.0, 0.06); panel.rotation.x = -0.6; g.add(panel);   // screens lean back, facing the eye
+    const bezel = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.42, 0.04), new THREE.MeshStandardMaterial({ color: 0x0b0e10, roughness: 0.5 })); bezel.position.set(0, 0.2, -0.012); panel.add(bezel);
+    const chart = screen(-0.28), inst = screen(0.28); panel.add(chart.m, inst.m);
+    g.traverse((o) => { if (o.material) o.material.userData.shared = true; if (o.geometry) o.geometry.userData.shared = true; });   // never disposed with a ship
+    return { g, panel, chart, inst, at: 0, owner: null };
+  })();
+  const NM = 1852;
+  function fitText(g, t, w) { t = String(t); if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  function drawChart(S, v, now) {
+    const g = S.cv.getContext('2d'), W = SCR_W, H = SCR_H, s = vessels.get(v.mmsi);
+    const R = (s && s.model.length < 60) ? 1 : 3, cx = W / 2, cy = H / 2 + 18, k = (H / 2 - 34) / (R * NM);   // px per metre
+    g.fillStyle = '#081723'; g.fillRect(0, 0, W, H);
+    g.save(); g.beginPath(); g.rect(0, 40, W, H - 40); g.clip();
+    if (s) {
+      if (xrLevel < 2) {   // the same satellite imagery, dimmed, as the chart's coastline
+        g.globalAlpha = 0.6;
+        chartTiles.forEach((t) => { const im = t.mat.map && t.mat.map.image; if (!im || !im.width) return;
+          const x0 = cx + (t.x0 - s.x) * k, y0 = cy + (t.z0 - s.z) * k, x1 = cx + (t.x1 - s.x) * k, y1 = cy + (t.z1 - s.z) * k;
+          if (x1 < 0 || y1 < 0 || x0 > W || y0 > H) return; try { g.drawImage(im, x0, y0, x1 - x0, y1 - y0); } catch (e) { /* ignore */ } });
+        g.globalAlpha = 1; g.fillStyle = 'rgba(4,16,28,0.45)'; g.fillRect(0, 0, W, H);
+      }
+      // range rings
+      g.strokeStyle = 'rgba(160,210,255,0.45)'; g.lineWidth = 1.5; g.setLineDash([6, 6]); g.font = '15px system-ui,sans-serif'; g.fillStyle = 'rgba(190,225,255,0.85)';
+      for (let i = 1; i <= 3; i++) { const r = R * NM * i / 3 * k; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke(); g.fillText((R * i / 3).toFixed(R * i / 3 < 1 ? 1 : 0) + ' nm', cx + r * 0.7071 + 4, cy - r * 0.7071 - 4); }
+      g.setLineDash([]);
+      // track history
+      if (trail.length > 1) { g.strokeStyle = 'rgba(255,214,90,0.9)'; g.lineWidth = 2.5; g.beginPath();
+        trail.forEach((p, i) => { const x = cx + (p.x - s.x) * k, y = cy + (p.z - s.z) * k; if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.lineTo(cx, cy); g.stroke(); }
+      // route toward the destination port (dashed), when the destination is a known port
+      const hd = C.helmData(v, now);
+      if (hd.destPort) {
+        const p = toXZ(hd.destPort.lat, hd.destPort.lon), dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz);
+        if (d > 50) { const L = Math.min(d * k, 2000), ux = dx / d, uz = dz / d;
+          g.strokeStyle = '#ff9de2'; g.lineWidth = 2.5; g.setLineDash([12, 9]); g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + ux * L, cy + uz * L); g.stroke(); g.setLineDash([]);
+          const ex = Math.max(70, Math.min(W - 70, cx + ux * Math.min(L, 210))), ey = Math.max(60, Math.min(H - 14, cy + uz * Math.min(L, 160)));
+          g.font = '600 16px system-ui,sans-serif'; g.fillStyle = '#ffc6ef'; g.textAlign = 'center'; g.fillText(fitText(g, '→ ' + hd.destPort.name.replace(/, [A-Z]{2}$/, '') + ' ' + (d / NM).toFixed(d / NM < 10 ? 1 : 0) + ' nm', 230), ex, ey); g.textAlign = 'left'; }
+      }
+      // nearby AIS targets, nearest named first
+      const near = [];
+      vessels.forEach((o, mm) => { if (mm === v.mmsi) return; const x = cx + (o.x - s.x) * k, y = cy + (o.z - s.z) * k; if (x < -10 || y < 30 || x > W + 10 || y > H + 10) return; near.push([Math.hypot(x - cx, y - cy), x, y, o, mm]); });
+      near.sort((a, b) => a[0] - b[0]);
+      near.forEach(([, x, y, o, mm], i) => {
+        const tv = state.store.vessels.get(mm), col = CAT_COLORS[C.decodeShipType(tv && tv.shipType).category] || CAT_COLORS.unknown, a = o.yaw * Math.PI / 180;
+        g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(0, -11); g.lineTo(7, 8); g.lineTo(-7, 8); g.closePath(); g.fill(); g.stroke(); g.restore();
+        if (i < 8 && tv) { g.font = '15px system-ui,sans-serif'; g.fillStyle = '#e8f3ff'; g.fillText(fitText(g, C.vesselTitle(tv), 150), x + 10, y + 5); }
+      });
+      // own ship: heading line to the edge, COG vector (6 minutes ahead), the ship
+      const hdg = (hd.heading != null ? hd.heading : s.yaw) * Math.PI / 180;
+      g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(hdg) * 900, cy - Math.cos(hdg) * 900); g.stroke();
+      const f = v.fix || {};
+      if (f.cog != null && f.sog != null && f.sog >= 0.3) { const c = f.cog * Math.PI / 180, L = Math.max(16, f.sog * NM / 10 * k);
+        g.strokeStyle = '#5DCAA5'; g.lineWidth = 3; g.setLineDash([8, 6]); g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(c) * L, cy - Math.cos(c) * L); g.stroke(); g.setLineDash([]); }
+      g.save(); g.translate(cx, cy); g.rotate(hdg); g.fillStyle = '#ffffff'; g.strokeStyle = '#0a1a28'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(0, -16); g.lineTo(9, -4); g.lineTo(9, 14); g.lineTo(-9, 14); g.lineTo(-9, -4); g.closePath(); g.fill(); g.stroke(); g.restore();
+    }
+    g.restore();
+    // header
+    g.fillStyle = '#0d2233'; g.fillRect(0, 0, W, 40);
+    g.font = '700 18px system-ui,sans-serif'; g.fillStyle = '#9fd0ff'; g.fillText('CHART', 14, 27);
+    g.font = '16px system-ui,sans-serif'; g.fillStyle = '#d7e6f2'; g.fillText('North up · ' + R + ' nm · AIS targets', 86, 27);
+    g.textAlign = 'right'; g.fillStyle = '#ffb38a'; g.fillText('Not for navigation', W - 12, 27); g.textAlign = 'left';
+    g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = 2; g.strokeRect(1, 1, W - 2, H - 2);
+    S.tex.needsUpdate = true; S.draws++;
+  }
+  function drawInstruments(S, v, now) {
+    const g = S.cv.getContext('2d'), W = SCR_W, H = SCR_H, d = C.helmData(v, now);
+    g.fillStyle = '#0a141c'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#0d2233'; g.fillRect(0, 0, W, 40);
+    g.font = '700 18px system-ui,sans-serif'; g.fillStyle = '#9fd0ff'; g.fillText('INSTRUMENTS', 14, 27);
+    g.font = '16px system-ui,sans-serif'; g.fillStyle = '#d7e6f2'; g.fillText(fitText(g, C.vesselTitle(v), W - 190), 150, 27);
+    drawCompass(g, 150, 214, 118, d.heading, d.cogDeg, true);
+    g.font = '15px system-ui,sans-serif'; g.fillStyle = '#9fb3c4'; g.fillText('HDG', 34, 372); g.fillText('COG', 164, 372);
+    g.font = '600 32px system-ui,sans-serif'; g.fillStyle = '#ffffff'; g.fillText(d.hdg, 34, 408); g.fillStyle = '#5DCAA5'; g.fillText(d.cog, 164, 408);
+    const rows = [['SOG', d.sog], ['RATE OF TURN', d.rot], ['NAV STATUS', d.status], ['DRAFT', d.draft], ['DESTINATION', d.dest], ['ETA', d.eta], ['POSITION', d.pos], ['DEPTH', d.depth]];
+    rows.forEach(([l, val], i) => { const y = 62 + i * 47;
+      g.font = '14px system-ui,sans-serif'; g.fillStyle = '#9fb3c4'; g.fillText(l, 310, y);
+      g.font = (l === 'DEPTH' ? '500 19px' : '600 22px') + ' system-ui,sans-serif'; g.fillStyle = l === 'DEPTH' ? '#c9d4dd' : '#ffffff'; g.fillText(fitText(g, val, W - 322), 310, y + 25); });
+    g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = 2; g.strokeRect(1, 1, W - 2, H - 2);
+    S.tex.needsUpdate = true; S.draws++;
+  }
+  function helmStep(v, now) {
+    const want = !!(v && camMode === 'captain' && state.rideMmsi === v.mmsi && vessels.get(v.mmsi));
+    const s = want ? vessels.get(v.mmsi) : null;
+    if (!want) { helm.g.visible = false; if (helm.g.parent) helm.g.parent.remove(helm.g); helm.owner = null; return; }
+    if (helm.owner !== s.model) {   // stand the console on this ship's bridge
+      const c = s.model.spots.console; s.model.body.add(helm.g); helm.owner = s.model;
+      helm.g.position.set(0, c.y, c.z); helm.g.scale.set(Math.max(0.5, Math.min(1, c.w / 1.2)), 1, 1); helm.chart.sig = helm.inst.sig = '';
+    }
+    helm.g.visible = true;
+    // track history: a point every ~3 s or 20 m
+    const last = trail[trail.length - 1];
+    if (!last || last.m !== v.mmsi) { trail.length = 0; trail.push({ x: s.x, z: s.z, t: now, m: v.mmsi }); }
+    else if (now - last.t > 3000 || Math.hypot(s.x - last.x, s.z - last.z) > 20) { trail.push({ x: s.x, z: s.z, t: now, m: v.mmsi }); if (trail.length > 400) trail.shift(); }
+    const tNow = performance.now(); if (tNow - helm.at < (xrLevel ? 250 : 100)) return; helm.at = tNow;
+    const R = s.model.length < 60 ? 1 : 3, k = (SCR_H / 2 - 34) / (R * NM);
+    const csig = [Math.round(s.x * k), Math.round(s.z * k), Math.round(s.yaw), vessels.size, Math.floor(now / 2000), tileStats.ok, v.destination].join('|');
+    if (csig !== helm.chart.sig) { helm.chart.sig = csig; drawChart(helm.chart, v, now); }
+    const d = C.helmData(v, now), isig = JSON.stringify([d, C.vesselTitle(v)]);
+    if (isig !== helm.inst.sig) { helm.inst.sig = isig; drawInstruments(helm.inst, v, now); }
+  }
+
+  /* ----- VR: the I'M HERE label (one card, Exit VR as its last row), seat / ship / label controls ----- */
+  const MARKX = window.ImHereMark;
+  const markXR = MARKX && MARKX.xrPanel ? MARKX.xrPanel(THREE, { exitRow: true }) : null;
+  const LABEL_MODES = ['dash', 'high', 'wrist'];
+  const LABEL_NAMES = { dash: 'Label A: Dashboard', high: 'Label B: High corner', wrist: 'Label C: Wrist (raise left hand)' };
+  // A sits low-left like a cockpit tag (left, as in aviation); B high on the left; C on the left wrist
+  const LABEL_PLACE = { dash: { el: -28 * Math.PI / 180, az: 24 * Math.PI / 180, d: 0.9 }, high: { el: 25 * Math.PI / 180, az: 32 * Math.PI / 180, d: 1.0 } };
+  let labelMode = 'dash';
+  { let saved = null, qp = null; try { saved = localStorage.getItem('imhere.boats.label'); qp = new URLSearchParams(location.search).get('label'); } catch (e) { /* private mode */ }
+    labelMode = LABEL_MODES.includes(qp) ? qp : LABEL_MODES.includes(saved) ? saved : 'dash'; }
+  const labelXR = { head: new THREE.Vector3(), eye: new THREE.Vector3(), eyeQ: new THREE.Quaternion(), init: false, wristOn: false, v: new THREE.Vector3(), q: new THREE.Quaternion(), f: new THREE.Vector3() };
+  const toastXR = (() => {
+    const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 96;
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4 * 96 / 1024), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+    m.renderOrder = 10001; m.visible = false; m.frustumCulled = false; rig.add(m);
+    return { cv, tex, m, until: 0, txt: '' };
+  })();
+  function toast(txt) {
+    const P = toastXR, g = P.cv.getContext('2d'); P.txt = txt; P.until = performance.now() + 1500;
+    g.clearRect(0, 0, 1024, 96); g.font = '500 40px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const w = g.measureText(txt).width + 56; g.fillStyle = 'rgba(10,18,32,0.82)'; g.beginPath();
+    if (g.roundRect) g.roundRect((1024 - w) / 2, 6, w, 84, 42); else g.rect((1024 - w) / 2, 6, w, 84); g.fill();
+    g.fillStyle = '#fff'; g.fillText(txt, 512, 50); P.tex.needsUpdate = true;
+  }
+  function setLabelMode(m, announce) {
+    if (!LABEL_MODES.includes(m)) return;
+    labelMode = m; labelXR.init = false; labelXR.wristOn = false;
+    if (markXR) markXR.userData.exitIgnore = m === 'wrist' ? 'left' : '';
+    try { localStorage.setItem('imhere.boats.label', m); } catch (e) { /* private mode */ }
+    if (announce) toast(LABEL_NAMES[m]);
+  }
+  if (markXR) {
+    markXR.visible = false; rig.add(markXR);
+    markXR.userData.exitIgnore = labelMode === 'wrist' ? 'left' : '';
+    markXR.userData.onExitHover = (on) => MARKX.xrExitHover && MARKX.xrExitHover(on);
+    if (XRS && XRS.exitTargets) XRS.exitTargets.push(markXR);
+  }
+  function labelXRStep(dt, xr) {
+    if (!markXR) return;
+    const T = toastXR, Hh = labelXR;
+    if (!xr) { markXR.visible = T.m.visible = false; Hh.init = false; return; }
+    const frame = renderer.xr.getFrame && renderer.xr.getFrame(), ref = renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace();
+    const vp = frame && ref ? frame.getViewerPose(ref) : null;
+    if (vp) { const tp = vp.transform.position, to = vp.transform.orientation; Hh.eye.set(tp.x, tp.y, tp.z); Hh.eyeQ.set(to.x, to.y, to.z, to.w); }
+    else { Hh.eye.copy(camera.position); Hh.eyeQ.copy(camera.quaternion); }
+    if (!Hh.init) { Hh.head.copy(Hh.eye); Hh.init = true; } else Hh.head.lerp(Hh.eye, 1 - Math.exp(-dt * 2));
+    T.m.visible = performance.now() < T.until;
+    if (T.m.visible) { T.m.position.set(Hh.head.x, Hh.head.y - 0.2, Hh.head.z - 1.0); T.m.rotation.set(-0.2, 0, 0, 'YXZ'); }
+    if (labelMode !== 'wrist') {
+      const P = LABEL_PLACE[labelMode], ce = Math.cos(P.el);
+      markXR.position.set(Hh.head.x - Math.sin(P.az) * ce * P.d, Hh.head.y + Math.sin(P.el) * P.d, Hh.head.z - Math.cos(P.az) * ce * P.d);
+      markXR.rotation.set(P.el, P.az, 0, 'YXZ'); markXR.scale.setScalar(1); markXR.visible = true; return;
+    }
+    const ses = renderer.xr.getSession && renderer.xr.getSession();
+    let pose = null;
+    if (frame && ref && ses) for (const src of ses.inputSources) {
+      if (!src || src.handedness !== 'left') continue;
+      if (src.hand) { const j = src.hand.get && src.hand.get('wrist'); pose = j && frame.getJointPose ? frame.getJointPose(j, ref) : null; }
+      else if (src.gripSpace) pose = frame.getPose(src.gripSpace, ref);
+      break;
+    }
+    if (!pose) { markXR.visible = false; Hh.wristOn = false; return; }
+    const p = pose.transform.position, o = pose.transform.orientation;
+    Hh.q.set(o.x, o.y, o.z, o.w);
+    Hh.v.set(0, 0.06, 0.03).applyQuaternion(Hh.q).add(Hh.f.set(p.x, p.y, p.z));
+    markXR.position.copy(Hh.v); markXR.scale.setScalar(0.5);
+    const dx = Hh.eye.x - Hh.v.x, dy = Hh.eye.y - Hh.v.y, dz = Hh.eye.z - Hh.v.z, dist = Math.hypot(dx, dy, dz);
+    markXR.rotation.set(Math.atan2(-dy, Math.hypot(dx, dz)), Math.atan2(dx, dz), 0, 'YXZ');
+    Hh.f.set(0, 0, -1).applyQuaternion(Hh.eyeQ);
+    const look = dist > 0 ? -(Hh.f.x * dx + Hh.f.y * dy + Hh.f.z * dz) / dist : 0;
+    const on = dist < (Hh.wristOn ? 0.8 : 0.7) && dy < (Hh.wristOn ? 0.55 : 0.45) && look > (Hh.wristOn ? 0.5 : 0.65);
+    Hh.wristOn = on; markXR.visible = on;
+  }
+  // controllers (read-only polling; nothing captured): A (right) = next seat, right thumbstick click = next ship,
+  // X or left thumbstick click = label placement A -> B -> C. B / Y exit (handled by the safety layer).
+  const pad = { seat: false, ship: false, label: false };
+  function padStep() {
+    const ses = renderer.xr.getSession && renderer.xr.getSession(); if (!ses || !ses.inputSources) return;
+    let seat = false, ship = false, label = false;
+    for (const src of ses.inputSources) { const gp = src && src.gamepad; if (!gp || src.hand) continue;
+      const b = gp.buttons || [], left = src.handedness === 'left';
+      if (left) { if ((b[4] && b[4].pressed) || (b[3] && b[3].pressed)) label = true; }
+      else { if (b[4] && b[4].pressed) seat = true; if (b[3] && b[3].pressed) ship = true; } }
+    if (seat && !pad.seat) vrSeat();
+    if (ship && !pad.ship && hooks && hooks.nextShip) { const t = hooks.nextShip(); if (t) toast(t); }
+    if (label && !pad.label) setLabelMode(LABEL_MODES[(LABEL_MODES.indexOf(labelMode) + 1) % LABEL_MODES.length], true);
+    pad.seat = seat; pad.ship = ship; pad.label = label;
+  }
+  function vrSeat() { if (hooks && hooks.cycleSeat) { const t = hooks.cycleSeat(); if (t) toast(t); } }
+  // session start / end: remember the screen camera, start in the rig; restore it after
+  const saved = { pos: new THREE.Vector3(), q: new THREE.Quaternion(), yaw: 0 };
+  let xrHeadY = 1.6;
+  renderer.xr.addEventListener('sessionstart', () => {
+    saved.pos.copy(camera.position); saved.q.copy(camera.quaternion);
+    const d = camera.getWorldDirection(new THREE.Vector3()); saved.yaw = Math.atan2(-d.x, -d.z);
+    xrHeadY = 1.6; aboardYaw = null; labelXR.init = false; controls.enabled = false;
+    if (hooks && hooks.onXR) hooks.onXR(true);
+  });
+  renderer.xr.addEventListener('sessionend', () => {
+    rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
+    camera.position.copy(saved.pos); camera.quaternion.copy(saved.q); camera.updateMatrixWorld();
+    if (markXR) markXR.visible = false; toastXR.m.visible = false; aboardYaw = null;
+    if (hooks && hooks.onXR) hooks.onXR(false);
+  });
 
   /* ----- cameras ----- */
   let prevRidePos = null;
@@ -2233,6 +3033,7 @@ function createScene(THREE, OrbitControls) {
     const s = state.rideMmsi != null ? vessels.get(state.rideMmsi) : null;
     const nowT = performance.now(), cdt = Math.min(0.25, (nowT - aboardT) / 1000); aboardT = nowT;
     const aboard = s && camMode !== 'chase';
+    if (renderer.xr.isPresenting) { vrCamera(s, aboard, cdt); return; }
     if (!aboard) aboardYaw = null;
     if (!s) { controls.enabled = true; prevRidePos = null; controls.update(); return; }
     if (aboard) {
@@ -2259,6 +3060,37 @@ function createScene(THREE, OrbitControls) {
       controls.update();
     }
   }
+  // VR: the rig carries you; your head turns freely inside it. The rig stays level (no roll or pitch from the sea) and
+  // turns with the ship at most 30 deg/s. Lowered by the (smoothed) head height, so the eye is at the seat.
+  function seatEye(s, spot) {
+    const m = s.model;
+    eye.copy(spot).add(m.anchor).applyEuler(m.motion.rotation); eye.y += m.motion.position.y;
+    return eye.applyAxisAngle(THREE.Object3D.DEFAULT_UP, -aboardYaw).add(m.group.position);
+  }
+  function vrCamera(s, aboard, cdt) {
+    controls.enabled = false;
+    xrHeadY += (camera.position.y - xrHeadY) * (1 - Math.exp(-cdt * 3));
+    if (!s) { rig.position.set(saved.pos.x, saved.pos.y - xrHeadY, saved.pos.z); rig.rotation.set(0, saved.yaw, 0, 'YXZ'); aboardYaw = null; return; }
+    const want = s.yaw * Math.PI / 180;
+    if (aboardYaw === null) aboardYaw = want;
+    else { const d = Math.atan2(Math.sin(want - aboardYaw), Math.cos(want - aboardYaw)), cap = (30 * Math.PI / 180) * cdt; aboardYaw += Math.max(-cap, Math.min(cap, d)); }
+    if (aboard) {
+      seatEye(s, camMode === 'captain' ? s.model.spots.captain : s.model.spots.deck);
+      rig.position.set(eye.x, eye.y - xrHeadY, eye.z);
+      rig.rotation.set(0, -aboardYaw + (camMode === 'deck' ? s.model.spots.deckYaw : 0), 0, 'YXZ');
+    } else {   // chase: behind and above the ship, facing the way it goes
+      const L = s.model.length, small = L < 60, back = small ? L * 1.8 + 12 : L * 0.9 + 40, up = small ? L * 0.5 + 5 : L * 0.35 + 18;
+      rig.position.set(s.x - Math.sin(aboardYaw) * back, up - xrHeadY, s.z + Math.cos(aboardYaw) * back);
+      rig.rotation.set(0, -aboardYaw, 0, 'YXZ');
+    }
+  }
+  // where the VR rig would put your eye for a seat (tests; no headset needed)
+  function vrSeatEye(mode) {
+    const s = state.rideMmsi != null ? vessels.get(state.rideMmsi) : null; if (!s) return null;
+    const keep = aboardYaw; if (aboardYaw === null) aboardYaw = s.yaw * Math.PI / 180;
+    const e = seatEye(s, mode === 'captain' ? s.model.spots.captain : s.model.spots.deck).clone(); aboardYaw = keep;
+    return e;
+  }
   // drag to look around when aboard
   let drag = null;
   renderer.domElement.addEventListener('pointerdown', (e) => { if (camMode !== 'chase' && state.rideMmsi != null) { drag = { x: e.clientX, y: e.clientY }; } });
@@ -2273,37 +3105,56 @@ function createScene(THREE, OrbitControls) {
 
   function resize() {
     const w = host.clientWidth || 1, h = host.clientHeight || 1;
+    if (renderer.xr.isPresenting) return;
     renderer.setSize(w, h, false);
-    camera.aspect = w / h; camera.updateProjectionMatrix();
+    camera.aspect = w / h;
+    // Captain: a wider view so the window AND the console screens fit; a bit wider still on a portrait phone
+    camera.fov = camMode === 'captain' && state.rideMmsi != null ? (camera.aspect < 1 ? 72 : 65) : 55;
+    camera.updateProjectionMatrix();
   }
   if (window.ResizeObserver) new ResizeObserver(resize).observe(host); else window.addEventListener('resize', resize);
   resize();
 
-  const t0 = performance.now();
+  const t0 = performance.now(), camW = new THREE.Vector3();
   let frames = 0;
   function frame() {
     frames++;
     const t = performance.now();
     const dt = Math.min(0.25, (t - lastFrame) / 1000); lastFrame = t;
     uTime.value = (t - t0) / 1000;
-    updateVessels(Date.now(), dt, uTime.value);
+    const now = Date.now(), xr = renderer.xr.isPresenting;
+    updateVessels(now, dt, uTime.value);
     updateCamera();
-    // the dense wave patch and the sky follow the camera
-    const lookAhead = Math.min(PATCH_HALF * 0.5, Math.max(0, camera.position.y * 0.6));
+    const rv = state.rideMmsi != null ? state.store.vessels.get(state.rideMmsi) : null;
+    helmStep(rv, now);
+    if (xr) { padStep(); labelXRStep(dt, true); } else if (markXR && markXR.visible) labelXRStep(dt, false);
+    // the dense wave patch and the sky follow the camera (its world position: in VR it sits inside the rig)
+    rig.updateMatrixWorld(); const cw = camera.getWorldPosition(camW);
+    const lookAhead = Math.min(PATCH_HALF * 0.5, Math.max(0, cw.y * 0.6));
     const dir = camera.getWorldDirection(eye.set(0, 0, 0));
     const hl = Math.hypot(dir.x, dir.z) || 1;
-    patch.x = camera.position.x + dir.x / hl * lookAhead; patch.z = camera.position.z + dir.z / hl * lookAhead;
+    patch.x = cw.x + dir.x / hl * lookAhead; patch.z = cw.z + dir.z / hl * lookAhead;
     nearWater.position.set(patch.x, 0, patch.z); uPatch.value.set(patch.x, patch.z, PATCH_HALF);
-    sky.position.copy(camera.position);
+    sky.position.copy(cw);
     renderer.render(scene, camera);
   }
 
   return {
     setArea, clear, removeVessel, startRide,
-    setCamMode(m) { camMode = m; lookYaw = 0; lookPitch = -0.04; if (m === 'chase' && state.rideMmsi != null) startRide(state.rideMmsi); },
+    setCamMode(m) {
+      camMode = m; lookYaw = 0; lookPitch = m === 'captain' ? -0.3 : -0.04;   // Captain: eyes on the horizon with the screens in view
+      aboardYaw = renderer.xr.isPresenting ? aboardYaw : null; resize();
+      if (m === 'chase' && state.rideMmsi != null && !renderer.xr.isPresenting) startRide(state.rideMmsi);
+    },
+    resize, renderer, vrSeatEye,
+    helm() { return { visible: helm.g.visible && !!helm.g.parent, onShip: helm.owner ? helm.owner.kind : null, chartDraws: helm.chart.draws, instDraws: helm.inst.draws,
+      trail: trail.length, consoleWorld: helm.g.parent ? helm.panel.getWorldPosition(new THREE.Vector3()).toArray().map((x) => +x.toFixed(2)) : null }; },
+    xrLabel() { return markXR ? { exitRect: markXR.userData.exitRect, mode: labelMode, inExitTargets: !!(XRS && XRS.exitTargets.includes(markXR)) } : null; },
+    vrPress(btn) { if (btn === 'A') vrSeat(); else if (btn === 'X') setLabelMode(LABEL_MODES[(LABEL_MODES.indexOf(labelMode) + 1) % LABEL_MODES.length], true); else if (btn === 'stick' && hooks.nextShip) hooks.nextShip(); return toastXR.txt; },
+    xrSessionInit: XRS && XRS.sessionInit ? XRS.sessionInit : {},
     get camMode() { return camMode; },
     hasVessel(mmsi) { return vessels.has(mmsi); },
-    debug() { const s = state.rideMmsi != null ? vessels.get(state.rideMmsi) : null; const bb = s ? new THREE.Box3().setFromObject(s.model.motion) : null; return { frames, box: bb ? [bb.min.toArray().map(Math.round), bb.max.toArray().map(Math.round)] : null, meshes: s ? s.model.body.children.map((m) => m.material.type + ':' + (m.geometry.index ? m.geometry.index.count / 3 : 0) + ':' + m.visible) : null, cam: camera.position.toArray().map(Math.round), ship: s ? [Math.round(s.x), Math.round(s.z), +s.heave.toFixed(2), +s.pitch.toFixed(3), +s.roll.toFixed(3)] : null, target: controls.target.toArray().map(Math.round) }; },
+    debug() { const s = state.rideMmsi != null ? vessels.get(state.rideMmsi) : null; const bb = s ? new THREE.Box3().setFromObject(s.model.motion) : null; return { frames, box: bb ? [bb.min.toArray().map(Math.round), bb.max.toArray().map(Math.round)] : null, meshes: s ? s.model.body.children.filter((m) => m.isMesh).map((m) => m.material.type + ':' + (m.geometry.index ? m.geometry.index.count / 3 : 0) + ':' + m.visible) : null, cam: camera.position.toArray().map(Math.round), ship: s ? [Math.round(s.x), Math.round(s.z), +s.heave.toFixed(2), +s.pitch.toFixed(3), +s.roll.toFixed(3)] : null, target: controls.target.toArray().map(Math.round) }; },
     modelOf(mmsi) { const s = vessels.get(mmsi); return s ? { kind: s.model.kind, length: s.model.length, beam: s.model.beam } : null; },
     overview() { state.rideMmsi = null; camera.position.set(0, 9000, 14000); controls.target.set(0, 0, 0); controls.enabled = true; controls.update(); },
     run(on) { renderer.setAnimationLoop(on ? frame : null); if (on) { lastFrame = performance.now(); resize(); } }
@@ -2323,10 +3174,11 @@ function setRide(mmsi) {
   }
   $('ships').hidden = mmsi != null;
   $('aboard').hidden = mmsi == null;
+  if (scene3d) scene3d.resize();
   renderAboard(); refreshMark();
 }
-function goAboard(mmsi) {
-  if (scene3d) scene3d.setCamMode('deck');
+function goAboard(mmsi) {   // you board at the helm: Captain is the first seat on every ship type
+  if (scene3d) scene3d.setCamMode('captain');
   if (state.view !== '3d') showView('3d');
   setRide(mmsi);
 }
@@ -2367,7 +3219,8 @@ function renderList(force) {
 function renderAboard() {
   const info = $('aboardInfo');
   const v = state.rideMmsi != null ? state.store.vessels.get(state.rideMmsi) : null;
-  const mode = scene3d ? scene3d.camMode : 'deck';
+  const mode = scene3d ? scene3d.camMode : 'captain';
+  renderHelm(v, mode);
   $('camDeck').setAttribute('aria-pressed', String(mode === 'deck'));
   $('camCaptain').setAttribute('aria-pressed', String(mode === 'captain'));
   $('camChase').setAttribute('aria-pressed', String(mode === 'chase'));
@@ -2378,6 +3231,82 @@ function renderAboard() {
   info.append(b, document.createTextNode(C.shortType(v.shipType) + ' · ' + C.shipStatus(v) + (hd == null ? '' : ' · heading ' + Math.round(hd) + '°') +
     (mode !== 'chase' ? ' · drag to look around' : '')));
 }
+
+/* ---------------- helm instruments (screen strip in Captain; the 3D console draws the same data) ---------------- */
+// Compass rose, north up: white heading pointer, green COG mark on the ring. Shared by the strip and the console screen.
+function drawCompass(g, cx, cy, r, hdg, cog, big) {
+  g.save();
+  g.fillStyle = '#0e2230'; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = big ? 2 : 1; g.stroke();
+  for (let a = 0; a < 360; a += big ? 10 : 30) {
+    const t = a * Math.PI / 180, l = a % 30 === 0 ? r * 0.12 : r * 0.06;
+    g.beginPath(); g.moveTo(cx + Math.sin(t) * r, cy - Math.cos(t) * r); g.lineTo(cx + Math.sin(t) * (r - l), cy - Math.cos(t) * (r - l)); g.stroke();
+  }
+  g.fillStyle = '#d7e6f2'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '600 ' + Math.round(r * (big ? 0.15 : 0.3)) + 'px system-ui,sans-serif';
+  [['N', 0], ['E', 90], ['S', 180], ['W', 270]].forEach(([n, a]) => { const t = a * Math.PI / 180, rr = r * (big ? 0.78 : 0.62); g.fillStyle = n === 'N' ? '#ff8a7a' : '#d7e6f2'; g.fillText(n, cx + Math.sin(t) * rr, cy - Math.cos(t) * rr); });
+  if (big) { g.font = '13px system-ui,sans-serif'; g.fillStyle = '#9fb3c4';
+    for (let a = 30; a < 360; a += 30) if (a % 90) { const t = a * Math.PI / 180; g.fillText(String(a), cx + Math.sin(t) * r * 0.78, cy - Math.cos(t) * r * 0.78); } }
+  if (cog != null) { const t = cog * Math.PI / 180; g.save(); g.translate(cx + Math.sin(t) * r, cy - Math.cos(t) * r); g.rotate(t);
+    g.fillStyle = '#5DCAA5'; g.beginPath(); g.moveTo(0, r * 0.02); g.lineTo(r * 0.09, r * 0.17); g.lineTo(-r * 0.09, r * 0.17); g.closePath(); g.fill(); g.restore(); }
+  if (hdg != null) { const t = hdg * Math.PI / 180; g.strokeStyle = '#ffffff'; g.lineWidth = big ? 4 : 2.5; g.beginPath(); g.moveTo(cx, cy);
+    g.lineTo(cx + Math.sin(t) * r * 0.86, cy - Math.cos(t) * r * 0.86); g.stroke();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(cx, cy, big ? 6 : 3, 0, Math.PI * 2); g.fill(); }
+  else { g.fillStyle = '#9fb3c4'; g.font = Math.round(r * 0.2) + 'px system-ui,sans-serif'; g.fillText('no heading', cx, cy); }
+  g.restore();
+}
+let helmSig = '';
+function renderHelm(v, mode) {
+  const show = !!(v && mode === 'captain' && state.view === '3d' && !(scene3d && scene3d.renderer.xr.isPresenting));
+  $('helm').hidden = !show;
+  if (!show) { helmSig = ''; return; }
+  const d = C.helmData(v, Date.now()), sig = JSON.stringify(d);
+  if (sig === helmSig) return;
+  helmSig = sig;
+  const cv = $('helmCompass'), g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height);
+  drawCompass(g, 56, 56, 54, d.heading, d.cogDeg, false);
+  const cells = [['HDG', d.hdg], ['COG', d.cog], ['SOG', d.sog], ['Turn', d.rot], ['Status', d.status], ['Draft', d.draft], ['Depth', 'coming soon (NOAA)', 'wide'],
+    ['Dest', d.dest, 'wide'], ['ETA', d.eta], ['Pos', d.pos]];
+  const dl = $('helmCells'); dl.textContent = '';
+  cells.forEach(([k, val, cls]) => { const w = document.createElement('div'); if (cls) w.className = cls;
+    const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = val; w.append(dt, dd); dl.appendChild(w); });
+}
+
+/* ---------------- VR: seat and ship controls, Enter VR button ---------------- */
+const SEATS = ['captain', 'deck', 'chase'], SEAT_NAMES = { captain: 'Captain (at the helm)', deck: 'On deck', chase: 'Chase cam' };
+function vrCycleSeat() {
+  if (!scene3d) return '';
+  if (state.rideMmsi == null) { const r = C.rideList(state.store, C.AREAS[state.areaId].center, 1)[0]; if (!r) return 'No ships yet'; goAboard(r.mmsi); return 'Aboard ' + r.title + ': Captain'; }
+  const m = SEATS[(SEATS.indexOf(scene3d.camMode) + 1) % SEATS.length];
+  scene3d.setCamMode(m); renderAboard(); refreshMark();
+  return SEAT_NAMES[m];
+}
+function vrNextShip() {
+  const rows = C.rideList(state.store, C.AREAS[state.areaId].center, LIST_MAX);
+  if (!rows.length) return 'No ships yet';
+  const i = rows.findIndex((r) => r.mmsi === state.rideMmsi), r = rows[(i + 1) % rows.length];
+  goAboard(r.mmsi); return r.title + ': Captain';
+}
+function setupVR() {
+  const btn = $('vrBtn');
+  if (!navigator.xr || !navigator.xr.isSessionSupported) return;
+  navigator.xr.isSessionSupported('immersive-vr').then((ok) => {
+    if (!ok) return;
+    btn.hidden = false;
+    btn.addEventListener('click', async () => {
+      if (state.view !== '3d') showView('3d');
+      const s = await load3D(); if (!s) return;
+      const r = s.renderer;
+      if (r.xr.isPresenting) { try { r.xr.getSession().end(); } catch (e) { /* ignore */ } return; }
+      try {
+        const init = Object.assign({}, s.xrSessionInit), opt = new Set(['local-floor'].concat(init.optionalFeatures || []));
+        init.optionalFeatures = [...opt];
+        const ses = await navigator.xr.requestSession('immersive-vr', init);
+        await r.xr.setSession(ses);
+      } catch (e) { setFeedNote('Could not start VR: ' + (e && e.message ? e.message : e)); }
+    });
+  }).catch(() => {});
+}
+function onXR(on) { $('vrBtn').textContent = on ? 'Exit VR' : 'Enter VR'; if (!on && scene3d) scene3d.resize(); renderAboard(); }
 
 /* ---------------- I'M HERE label (shared/imhere-mark.js, inlined in the page) ---------------- */
 const MARK = window.ImHereMark;
@@ -2410,22 +3339,32 @@ function refreshMark() {
         time: state.lastMsgAt || null, timeLabel: 'Last report', note: 'Age of each vessel\'s last report:', list: list.map((x) => ({ text: C.vesselTitle(x), time: x.updatedAt })) }
     : { kind: 'simulated', label: 'Vessels', source: 'Simulated sample: three made-up tows/tugs on an approximate Cumberland River path near Old Hickory Dam. Not real vessels or positions.',
         list: list.map((x) => ({ text: C.vesselTitle(x), time: x.updatedAt })) };
-  const cam = scene3d ? scene3d.camMode : 'deck';
-  const VIEW_NAMES = { deck: 'On deck, 3D render', captain: "Captain's view from the bridge, 3D render", chase: 'Chase cam, 3D render' };
+  const cam = scene3d ? scene3d.camMode : 'captain';
+  const SEAT = { deck: 'On deck', captain: 'Captain, at the helm', chase: 'Chase cam' };
+  const id = v ? C.shipIdentity(v, demo) : null;
+  const dr = v && v.fix ? C.deadReckon(v.fix, now) : null;
+  const loc = (dr && C.placeName(dr.lat, dr.lon)) || SHORT_AREA[state.areaId] || area.name;
+  if (v) stats.push(['Seat', SEAT[cam] || cam]);
   MARK.update({
-    context: '', line1: v ? C.shipIdentity(v, demo).line1 : (demo ? 'Simulated sample' : 'AIS') + ' · Ship tracking',
-    line2: v ? C.shipIdentity(v, demo).line2 : list.length + (list.length === 1 ? ' ship' : ' ships') + ' nearby', line2small: v ? C.shipStatus(v) : '',
-    loc: SHORT_AREA[state.areaId] || area.name,
-    signal: demo ? { text: 'Demo data' } : state.mode === 'live' && (v ? v.updatedAt : state.lastMsgAt) ? { source: 'AIS', time: v ? v.updatedAt : state.lastMsgAt }
+    context: '', line1: v ? id.line1 : (demo ? 'Simulated sample' : 'AIS') + ' · Ship tracking',
+    line2: v ? id.line2 : list.length + (list.length === 1 ? ' ship' : ' ships') + ' nearby', line2small: v ? C.shipStatus(v) : '',
+    loc, route: v && state.view === '3d' ? C.routeText(v, now) || 'Destination not sent yet' : '',
+    signal: demo ? { text: 'Demo data' } : state.mode === 'live' && (v ? v.updatedAt : state.lastMsgAt) ? { source: 'aisstream', time: v ? v.updatedAt : state.lastMsgAt }
       : { text: f.kind === 'error' ? 'No signal' : 'Connecting…' },
-    view: state.view === 'map' ? 'Map' : v ? VIEW_NAMES[cam] || '3D render' : '3D render', tag, stats,
+    view: state.view === 'map' ? 'Map' : v ? '3D render · ship typical of type' : '3D render', tag, stats,
+    about: v ? { title: SEAT[cam] || '', text: cam === 'captain' ? 'Bridge windows ahead; the chart and instrument screens are on the console in front of you.' : '' } : null,
     sceneNote: 'The map is real satellite imagery (Esri), captured earlier, not live; ships are drawn from live AIS reports. The sea, waves and wakes are computer-drawn, not live. No AI-generated scenes and no video.',
     items: [vesselsItem,
+      { kind: 'data', label: 'Route and ETA', source: 'Destination and ETA as typed in by the ship\'s crew (AIS static data). AIS has no "from" port: an origin is shown only if the crew wrote one (e.g. "CNYTN>USLAX"). Common port codes are turned into names (USLAX -> Los Angeles, US); anything else is shown as sent' },
+      { kind: 'data', label: 'Bridge screens and helm strip', source: 'Heading, course and speed over ground, rate of turn, nav status, draft, destination, ETA and position, all from AIS. The chart is the same satellite imagery with AIS targets; not for navigation' },
+      { kind: 'assumed', label: 'Depth, wind and tide', source: 'Not in AIS, so not shown (no made-up numbers). Charted depth and wind / tide will come from NOAA in a later version' },
+      { kind: 'assumed', label: 'Operator / flag', source: 'AIS has no operator field: a well-known name prefix gives it (MSC, Maersk, EVER = Evergreen…); otherwise the flag comes from the MMSI\'s country digits (MID)' },
       { kind: 'estimated', label: 'Movement between reports', source: 'Estimated from the last speed and course (at most 10 minutes), then glides to each new report' },
-      { kind: 'illustrative', label: '3D boats', source: 'Typical ships of the reported AIS type (container ship, tanker, tug, ferry, sailboat…), scaled to the reported length and width (typical size if not sent yet) and turned to the reported heading. Not the real ship\'s look: AIS does not say e.g. container vs bulk, so that is guessed from name and size; container colours and stacks are made up' },
+      { kind: 'illustrative', label: '3D boats', source: 'Typical ships of the reported AIS type (container ship, tanker, tug, ferry, sailboat…), scaled to the reported length and width (typical size if not sent yet) and turned to the reported heading. Not the real ship\'s look: AIS does not say e.g. container vs bulk, so that is guessed from name and size; container colours and stacks are made up. The bridge interior and console are drawn, not the real ship\'s' },
       { kind: 'illustrative', label: 'Sea and land', source: 'Waves, wakes (stronger with reported speed) and the gentle rocking aboard are simulated, not measured sea state; land is the flat satellite map, no buildings, bridges or terrain' },
       { kind: 'data', label: 'Map', source: 'Esri World Imagery (OpenStreetMap tiles as fallback)' },
-      { kind: 'assumed', label: 'Coverage', source: 'Depends on volunteer AIS receivers near the area; most small pleasure boats carry no AIS and never appear' }] });
+      { kind: 'assumed', label: 'Coverage', source: 'Depends on volunteer AIS receivers near the area; most small pleasure boats carry no AIS and never appear' },
+      { kind: 'data', label: 'Page version', source: 'Build ' + BUILD } ] });
   MARK.setLive(live);
 }
 
@@ -2438,7 +3377,7 @@ function showView(name) {
   $('tabMap').setAttribute('aria-pressed', String(name === 'map'));
   $('tab3d').setAttribute('aria-pressed', String(name === '3d'));
   if (name === 'map') {
-    if (scene3d) scene3d.run(false);
+    if (scene3d && !scene3d.renderer.xr.isPresenting) scene3d.run(false);
     if (state.rideMmsi != null) setRide(null);
     $('ships').hidden = true;
     mapView.ensure().then(() => { if (mapView.map) setTimeout(() => mapView.map.invalidateSize(), 0); });
@@ -2519,6 +3458,7 @@ function init() {
     renderList(false); renderAboard(); renderFeedMsg(); refreshMark();
   }, 1000);
   renderFeedMsg(); refreshMark();
+  setupVR();
 }
 
 init();
