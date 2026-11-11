@@ -62,7 +62,7 @@
     <div class="r s"><span class="l">DATE</span><span class="v">11 NOV 26</span></div>
     <div class="r s"><span class="l">TIME</span><span class="v">10:20 AM</span></div>
   </div>
-  <div class="cr"><span>Google</span><span>ⓘ Details</span></div>
+  <div class="cr"><span>Google</span><span id="det" style="cursor:pointer">ⓘ Details</span></div>
 </div>
 <p class="note">Design test. The rows are sample data; the photo is the real Planespotters photo for the registration typed above.</p>
 
@@ -99,6 +99,7 @@ document.getElementById("go").onclick = () => load(document.getElementById("reg"
 document.getElementById("reg").addEventListener("keydown", e => { if (e.key === "Enter") load(e.target.value); });
 document.querySelectorAll(".bgs button").forEach(b => b.onclick = () => document.body.style.background = b.dataset.bg);
 document.getElementById("card").onclick = () => document.getElementById("card").classList.toggle("min");
+document.getElementById("det").onclick = (e) => { e.stopPropagation(); e.target.textContent = "Details sheet: design pending"; };
 load("N8771D");
 </script>
 </body>
