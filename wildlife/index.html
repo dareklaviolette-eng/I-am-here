@@ -85,7 +85,7 @@ footer{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;align-items:c
   <h3>Now riding</h3>
   <div id="info"></div>
 </aside>
-<canvas id="mini" title="Open map"></canvas>
+<canvas id="mini" title="Open map" hidden></canvas>
 <footer>
   <button id="play" aria-label="Play/pause"></button>
   <input type="range" id="slider" min="0" max="10000" step="1" value="0" aria-label="Time">
@@ -129,10 +129,21 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
    In VR, xrPanel(THREE) draws the same label on a canvas (row labels use a 50% white fill there: hairline outlines
    alias and shimmer at headset panel scale).
 
+   Optional two-line identity (v4.1; pages that pass only `context` look exactly as before):
+       I'M HERE                                   (i)  ×
+       Health · Cardiovascular system                        <- line1: provider · type (11px, white 60%)
+       Entering the heart from your upper body               <- line2: where you are, plain English (13px, white 92%)
+       superior vena cava                                    <- line2small: the technical term (10px, white 45%)
+       LOC / SIGNAL / VIEW rows as above
+
    API
-     ImHereMark.init({ context, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.init({ context, line1, line2, line2small, about, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
      ImHereMark.update({ ...same keys })
         context   e.g. 'SWA 444 · 737-800 · approach BNA', 'ISS · over Pacific Ocean', 'Heart · stop 1 of 10'
+        line1     optional identity line 1 (provider · type); replaces `context` when given
+        line2     optional identity line 2: where you are, in plain English
+        line2small optional smaller, dimmer line under line2 (e.g. the medical or technical term)
+        about     optional { title, text } shown at the top of the (i) details (e.g. the current stop, in plain words)
         loc       place, e.g. 'Nashville, TN'
         signal    { source, time }  -> "source, live" while setLive(true), else "source, 3 hrs ago"
                   { source, date }  -> "GPS track, 3 May 2008"      { text } -> 'Demo data', 'Fixed camera', ...
@@ -179,6 +190,9 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
     '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
     '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
     '.imh-r2{margin-top:1px;font-weight:400;font-size:11px;color:rgba(255,255,255,.6);overflow-wrap:anywhere}' +   /* context line */
+    '.imh-id2{margin-top:2px;font-weight:500;font-size:13px;line-height:1.25;color:rgba(255,255,255,.92);overflow-wrap:anywhere}' +   /* identity line 2 */
+    '.imh-id3{margin-top:1px;font-size:10px;line-height:1.2;color:rgba(255,255,255,.45);overflow-wrap:anywhere}' +   /* its technical term */
+    '.imh-ab{margin-top:5px;font-size:11.5px;line-height:1.35;color:#e8eef4}.imh-ab b{display:block;font-size:12px;color:#fff;margin-bottom:1px}' +
     '.imh-rows{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;margin:5px 0 0}' +
     '.imh-l{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:transparent;' +
     '-webkit-text-stroke:.5px rgba(255,255,255,.65);text-stroke:.5px rgba(255,255,255,.65);white-space:nowrap}' +
@@ -202,10 +216,10 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
     '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
     '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
 
-  var S = { context: '', loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
+  var S = { context: '', line1: '', line2: '', line2small: '', about: null, loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
     sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
   var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
-  var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
+  var box, mini, miniLive, r2, id2, id3, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function fmtAge(ms) {   // "3 s ago", "14 min ago", "3 hrs ago", "5 days ago", "7 yrs ago"
@@ -224,7 +238,8 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
     if (!href) return document.createTextNode(text);
     var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
   }
-  function line2() { return S.context || ''; }
+  function line2() { return S.line1 || S.context || ''; }   // identity line 1 (historically "line 2" of the card, under the watermark)
+  function idLines() { return [line2(), S.line2 || '', S.line2 ? S.line2small || '' : '']; }
   function fmtDay(ms) { var d = new Date(ms); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
   // SIGNAL value as [text, liveWordShown]: "source, live" only while setLive(true)
   function signalParts() {
@@ -237,17 +252,22 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
   }
   function rows() { var sp = signalParts(); return [['LOC', S.loc || 'None'], ['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]; }
   function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
-  function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
+  function label() {
+    var L = idLines(), id = L[0] + '. ' + (L[1] ? L[1] + (L[2] ? ' (' + L[2] + ')' : '') + '. ' : '');
+    return "I'M HERE. " + id + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
 
   function render() {
     if (!S.mounted) return;
     var R = rows();
-    var sig = JSON.stringify([line2(), R, S.dismissed, S.srcOpen, S.live]);
+    var L = idLines();
+    var sig = JSON.stringify([L, R, S.dismissed, S.srcOpen, S.live]);
     if (sig !== lastSig) {
       lastSig = sig;
       box.hidden = S.dismissed; mini.hidden = !S.dismissed; miniLive.hidden = !S.live;
       box.classList.toggle('imh-wide', S.srcOpen);
-      r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
+      r2.textContent = L[0]; r2.hidden = !L[0]; r2.title = L[0];
+      id2.textContent = L[1]; id2.hidden = !L[1];
+      id3.textContent = L[2]; id3.hidden = !L[2];
       rowsEl.textContent = '';
       R.forEach(function (r) {
         rowsEl.appendChild(el('span', 'imh-l', r[0] + ':'));
@@ -267,7 +287,11 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
   function renderSources() {
     if (!S.mounted || !S.srcOpen) return;
     var now = Date.now(), frag = document.createDocumentFragment();
-    var st = (S.stats || []).filter(Boolean);
+    if (S.about && (S.about.title || S.about.text)) {
+      var ab = el('div', 'imh-ab'); if (S.about.title) ab.appendChild(el('b', null, S.about.title));
+      if (S.about.text) ab.appendChild(document.createTextNode(S.about.text)); frag.appendChild(ab);
+    }
+    var st =(S.stats || []).filter(Boolean);
     if (st.length) {
       var r3 = el('div', 'imh-r3');
       st.forEach(function (s) { var d = el('div', 'imh-st'); d.appendChild(el('i', null, s[0])); d.appendChild(el('b', null, s[1] == null || s[1] === '' ? '–' : String(s[1]))); r3.appendChild(d); });
@@ -361,6 +385,8 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
     button(x, function () { setDismissed(true, true); });
     r1.appendChild(x); box.appendChild(r1);
     r2 = el('div', 'imh-r2'); box.appendChild(r2);
+    id2 = el('div', 'imh-id2'); id2.hidden = true; box.appendChild(id2);
+    id3 = el('div', 'imh-id3'); id3.hidden = true; box.appendChild(id3);
     rowsEl = el('div', 'imh-rows'); box.appendChild(rowsEl);
     var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
     more.addEventListener('mouseenter', function () {
@@ -387,7 +413,8 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
   }
   function apply(o) {
     if (!o) return;
-    ['context', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.about !== undefined) S.about = o.about && typeof o.about === 'object' ? { title: String(o.about.title || ''), text: String(o.about.text || '') } : null;
+    ['context', 'line1', 'line2', 'line2small', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
     if (o.signal !== undefined) S.signal = o.signal;
     if (o.stats) S.stats = [].concat(o.stats);
     if (o.tag !== undefined) S.tag = o.tag;
@@ -400,17 +427,31 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
   // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
   function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  function xrHeight() { var L = idLines(); return 262 + (L[1] ? 42 : 0) + (L[2] ? 30 : 0); }
+  function xrResize(H) {   // two-line identity makes the panel taller: new canvas texture (GPU storage is fixed-size) + geometry
+    var T = xr.THREE, c = xr.canvas; c.height = H;
+    var tex = new T.CanvasTexture(c); if (T.SRGBColorSpace) tex.colorSpace = T.SRGBColorSpace;
+    xr.meshes.forEach(function (m) {
+      m.material.map = tex; m.material.needsUpdate = true;
+      var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / 512);
+    });
+    xr.tex.dispose(); xr.tex = tex;
+  }
   function drawXR() {
     if (!xr) return;
-    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
+    if (xr.canvas.height !== xrHeight()) xrResize(xrHeight());
+    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height, L = idLines();
     g.clearRect(0, 0, W, H);
     g.fillStyle = 'rgba(10,18,32,0.72)'; rr(g, 3, 3, W - 6, H - 6, 18); g.fill();   // a little denser in VR for legibility
     g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
     g.textBaseline = 'alphabetic';
     g.save(); g.fillStyle = 'rgba(255,255,255,0.3)'; g.font = '400 22px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '6px'; g.fillText("I'M HERE", 28, 46); g.restore();
-    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 88);
+    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, L[0], W - 56), 28, 88);
+    var y = 140;
+    if (L[1]) { g.fillStyle = 'rgba(255,255,255,0.92)'; g.font = '500 30px ' + FONT; g.fillText(fit(g, L[1], W - 56), 28, 128); y += 42; }
+    if (L[2]) { g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + FONT; g.fillText(fit(g, L[2], W - 56), 28, 158); y += 30; }
     // labels: translucent fill in VR (a 0.5px outline aliases/shimmers at headset panel scale); values solid white
-    var R = rows(), lx = 28, vx = 0, y = 140;
+    var R = rows(), lx = 28, vx = 0;
     g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px';
     R.forEach(function (r) { vx = Math.max(vx, g.measureText(r[0] + ':').width); });
     vx += lx + 22;
@@ -428,12 +469,13 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
   function xrPanel(THREE, o) {
     o = o || {};
     if (!xr) {
-      var c = document.createElement('canvas'); c.width = 512; c.height = 262;
+      var c = document.createElement('canvas'); c.width = 512; c.height = xrHeight();
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-      xr = { canvas: c, tex: tex };
+      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [] };
     }
     var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
-    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 262 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * xr.canvas.height / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    m.userData.imhW = w; xr.meshes.push(m);
     m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
     m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
     m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
@@ -522,6 +564,8 @@ function parseMovebankCSV(text) {
   const iLon = col(COLS.lon), iLat = col(COLS.lat), iT = col(COLS.time), iId = col(COLS.id), iTax = col(COLS.taxon);
   const iAlt = col(COLS.alt), iDep = col(COLS.depth), iVis = col(['visible']);
   const iO1 = col(['manually-marked-outlier']), iO2 = col(['algorithm-marked-outlier']);
+  const iNick = col(['individual-nick-name', 'nick-name', 'nickname', 'animal-name']), iTag = col(['tag-local-identifier', 'tag-id']);
+  const iOrg = col(['tracking-organization', 'tracking-organisation', 'organization', 'organisation']), iNamedBy = col(['named-by']);
   if (iLon < 0 || iLat < 0) throw new Error('Could not find location-long / location-lat columns. Columns found: ' + header.slice(0, 12).join(', '));
   const byId = new Map(); let rows = 0, skipped = 0, hidden = 0;
   for (let li = hi + 1; li < lines.length; li++) {
@@ -538,7 +582,7 @@ function parseMovebankCSV(text) {
     else if (iDep >= 0) { const d = parseFloat(get(iDep)); if (isFinite(d)) alt = -Math.abs(d); }
     const id = (iId >= 0 && get(iId)) || 'track 1';
     let tr = byId.get(id);
-    if (!tr) { tr = { id, taxon: get(iTax), points: [] }; byId.set(id, tr); }
+    if (!tr) { tr = { id, taxon: get(iTax), nick: get(iNick), tagId: get(iTag), org: get(iOrg), namedBy: get(iNamedBy), points: [] }; byId.set(id, tr); }
     if (!tr.taxon && iTax >= 0) tr.taxon = get(iTax);
     tr.points.push({ t, lat, lon, alt });
   }
@@ -619,6 +663,8 @@ function buildTrack(raw, opts = {}) {
   const dts = []; for (let i = 0; i < n - 1; i++) dts.push(T[i + 1] - T[i]); dts.sort((a, b) => a - b);
   return {
     id: raw.id, taxon: raw.taxon || '', name: opts.name || raw.id, isSample: !!opts.isSample, source: opts.source || '',
+    // identity for the I'M HERE label: tag id, the animal's name (if it has one), who tracks it and who named it
+    tagId: opts.tagId || raw.tagId || raw.id, animalName: opts.animalName || raw.nick || '', org: opts.org || raw.org || '', namedBy: opts.namedBy || raw.namedBy || '',
     n, t: T, lat, lon, alt: hasAlt ? alt : null, x, z, seg, cum,
     mx: tang(x), mz: tang(z), ma: hasAlt ? tang(alt) : null,
     lat0, lon0, t0: T[0], t1: T[n - 1], totalDist: cum[n - 1], medianDt: dts[dts.length >> 1],
@@ -1181,7 +1227,7 @@ function placeFor(lat, lon, water) {
   return coarseRegion(lat, lon, () => !water);
 }
 const MARK = window.ImHereMark;
-if (MARK) MARK.init({ context: 'Wildlife', below: ['header'], zIndex: 4 });
+if (MARK) MARK.init({ line1: 'Wildlife', below: ['header'], zIndex: 4 });
 // Google Photorealistic 3D Tiles under the animal (GitHub build only: tools/build-github.mjs injects the domain-restricted
 // key; the claude.ai artifact has no key and keeps the procedural landscape). Same module as the 737 (google-scenery.js).
 const GOOGLE_KEY = 'AIzaSyD5_qsBFe74zBURZ8UTYFzz_7es3dPSM9A';   // restricted to dareklaviolette-eng.github.io
@@ -1257,6 +1303,9 @@ function refreshMark() {
     : { kind: 'recorded', label: 'Track: ' + tr.name + (tr.taxon ? ' (' + tr.taxon + ')' : ''), source: 'Your file: ' + tr.source,
         age: `Recorded ${range}` + (ago >= 1 ? ` (last fix ${ago.toLocaleString('en-US')} day${ago === 1 ? '' : 's'} ago)` : ''),
         note: `${tr.n.toLocaleString('en-US')} GPS fixes. The file is read on this device only; nothing is uploaded.` },
+    { kind: tr.isSample ? 'sample' : 'data', label: 'Animal: Tag ' + tr.tagId + (tr.animalName ? ' · ' + tr.animalName : ''),
+      source: 'Tracked by: ' + (tr.org || (tr.isSample ? 'nobody (synthetic sample track)' : 'not given in the file')),
+      note: 'Name: ' + (tr.animalName || 'none') + (tr.animalName ? ' · Named by: ' + (tr.namedBy || 'not given') : '') },
     { kind: 'estimated', label: 'Motion between fixes', source: 'Interpolated in the page; positions and times at each fix come from the track' }];
   if (tr.timesEstimated) items.push({ kind: 'estimated', label: 'Times', source: 'The file has no timestamps, so times are estimated from distance (10 m/s)' });
   items.push(tr.hasAlt
@@ -1270,7 +1319,8 @@ function refreshMark() {
   const lon = ((S.lon + 540) % 360) - 180, brg = (Math.atan2(S.vx, -S.vz) / DEG + 360) % 360;
   const cn = COMMON[String(tr.taxon || '').trim().toLowerCase()], who = cn ? cn.replace(/^./, (c) => c.toLowerCase()) : 'tagged animal';
   const nameCap = cn || (tr.taxon ? 'Tagged animal' : animal);
-  MARK.update({ context: nameCap + ' · ' + (tr.isSample ? 'sample tag' : 'tag ' + tr.id), loc: placeFor(S.lat, lon, ocean),
+  MARK.update({ context: '', line1: (tr.isSample ? 'Sample track' : tr.org || 'Your data') + ' · ' + nameCap,
+    line2: 'Tag ' + tr.tagId + (tr.animalName ? ' · ' + tr.animalName : ''), line2small: '', loc: placeFor(S.lat, lon, ocean),
     signal: tr.isSample ? { text: 'Demo data' } : { source: 'GPS track', date: tr.t[S.i] ?? tr.t0 },
     view: wlTilesOn() ? 'Google 3D + render' : '3D render',
     sceneNote: wlTilesOn() ? 'Mixed: the ground is actual aerial imagery (Google Photorealistic 3D Tiles, captured on past dates, not live); the animal, water effects and sky are computer-rendered. Nothing is AI-generated.'
@@ -1392,7 +1442,7 @@ miniCanvas.addEventListener('click', () => setView('map'));
 function seek(t) { simT = clamp(t, cur.t0, cur.t1); snap = true; }
 function setView(v) {
   view = v; document.querySelectorAll('.views button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
-  mapCanvas.hidden = v !== 'map'; miniCanvas.style.visibility = v === 'map' ? 'hidden' : 'visible';
+  mapCanvas.hidden = v !== 'map';   // no corner mini-map in Ride / Chase ("don't give the eagle a flight director"); the map is under Map
   look.yaw = look.pitch = 0; snap = true;
 }
 document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
@@ -1531,7 +1581,6 @@ function frame() {
     if (now - markT > 1000) { markT = now; refreshMark(); }
     if (now - infoT > 250) { infoT = now; updateInfo(); if (!sliding) slider.value = String(Math.round((simT - cur.t0) / Math.max(1, cur.t1 - cur.t0) * 10000)); }
     if (view === 'map') drawMap(mapCanvas, mapCache, true);
-    else if (now - miniT > 300 && miniCanvas.clientWidth > 0) { miniT = now; drawMap(miniCanvas, miniCache, false); }
     if (view !== 'map' || xr) renderer.render(scene, camera);
   } catch (e) {
     if (!errShown) { errShown = true; toast('Something went wrong while drawing: ' + e.message, 9000); }
@@ -1540,8 +1589,8 @@ function frame() {
 
 // ---- boot: two clearly labelled SAMPLE tracks ----
 function parseSample(csv, name, opts) { const raw = parseMovebankCSV(csv).tracks[0]; return buildTrack(raw, { name, isSample: true, source: 'sample (synthetic)', ...opts }); }
-const eagleTrack = addTrack(parseSample(genEagleCSV(), 'Bald eagle, lake & river soar (SAMPLE)', { altBase: EAGLE_ALT_BASE }));
-addTrack(parseSample(genSharkCSV(), 'White shark, coastal migration (SAMPLE)', { altBase: 0 }));
+const eagleTrack = addTrack(parseSample(genEagleCSV(), 'Bald eagle, lake & river soar (SAMPLE)', { altBase: EAGLE_ALT_BASE, tagId: '4417' }));
+addTrack(parseSample(genSharkCSV(), 'White shark, coastal migration (SAMPLE)', { altBase: 0, tagId: '2208' }));
 selectTrack(eagleTrack);
 renderer.setAnimationLoop(frame);
 </script>

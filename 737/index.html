@@ -132,10 +132,21 @@
    In VR, xrPanel(THREE) draws the same label on a canvas (row labels use a 50% white fill there: hairline outlines
    alias and shimmer at headset panel scale).
 
+   Optional two-line identity (v4.1; pages that pass only `context` look exactly as before):
+       I'M HERE                                   (i)  ×
+       Health · Cardiovascular system                        <- line1: provider · type (11px, white 60%)
+       Entering the heart from your upper body               <- line2: where you are, plain English (13px, white 92%)
+       superior vena cava                                    <- line2small: the technical term (10px, white 45%)
+       LOC / SIGNAL / VIEW rows as above
+
    API
-     ImHereMark.init({ context, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.init({ context, line1, line2, line2small, about, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
      ImHereMark.update({ ...same keys })
         context   e.g. 'SWA 444 · 737-800 · approach BNA', 'ISS · over Pacific Ocean', 'Heart · stop 1 of 10'
+        line1     optional identity line 1 (provider · type); replaces `context` when given
+        line2     optional identity line 2: where you are, in plain English
+        line2small optional smaller, dimmer line under line2 (e.g. the medical or technical term)
+        about     optional { title, text } shown at the top of the (i) details (e.g. the current stop, in plain words)
         loc       place, e.g. 'Nashville, TN'
         signal    { source, time }  -> "source, live" while setLive(true), else "source, 3 hrs ago"
                   { source, date }  -> "GPS track, 3 May 2008"      { text } -> 'Demo data', 'Fixed camera', ...
@@ -182,6 +193,9 @@
     '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
     '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
     '.imh-r2{margin-top:1px;font-weight:400;font-size:11px;color:rgba(255,255,255,.6);overflow-wrap:anywhere}' +   /* context line */
+    '.imh-id2{margin-top:2px;font-weight:500;font-size:13px;line-height:1.25;color:rgba(255,255,255,.92);overflow-wrap:anywhere}' +   /* identity line 2 */
+    '.imh-id3{margin-top:1px;font-size:10px;line-height:1.2;color:rgba(255,255,255,.45);overflow-wrap:anywhere}' +   /* its technical term */
+    '.imh-ab{margin-top:5px;font-size:11.5px;line-height:1.35;color:#e8eef4}.imh-ab b{display:block;font-size:12px;color:#fff;margin-bottom:1px}' +
     '.imh-rows{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;margin:5px 0 0}' +
     '.imh-l{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:transparent;' +
     '-webkit-text-stroke:.5px rgba(255,255,255,.65);text-stroke:.5px rgba(255,255,255,.65);white-space:nowrap}' +
@@ -205,10 +219,10 @@
     '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
     '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
 
-  var S = { context: '', loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
+  var S = { context: '', line1: '', line2: '', line2small: '', about: null, loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
     sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
   var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
-  var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
+  var box, mini, miniLive, r2, id2, id3, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function fmtAge(ms) {   // "3 s ago", "14 min ago", "3 hrs ago", "5 days ago", "7 yrs ago"
@@ -227,7 +241,8 @@
     if (!href) return document.createTextNode(text);
     var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
   }
-  function line2() { return S.context || ''; }
+  function line2() { return S.line1 || S.context || ''; }   // identity line 1 (historically "line 2" of the card, under the watermark)
+  function idLines() { return [line2(), S.line2 || '', S.line2 ? S.line2small || '' : '']; }
   function fmtDay(ms) { var d = new Date(ms); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
   // SIGNAL value as [text, liveWordShown]: "source, live" only while setLive(true)
   function signalParts() {
@@ -240,17 +255,22 @@
   }
   function rows() { var sp = signalParts(); return [['LOC', S.loc || 'None'], ['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]; }
   function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
-  function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
+  function label() {
+    var L = idLines(), id = L[0] + '. ' + (L[1] ? L[1] + (L[2] ? ' (' + L[2] + ')' : '') + '. ' : '');
+    return "I'M HERE. " + id + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
 
   function render() {
     if (!S.mounted) return;
     var R = rows();
-    var sig = JSON.stringify([line2(), R, S.dismissed, S.srcOpen, S.live]);
+    var L = idLines();
+    var sig = JSON.stringify([L, R, S.dismissed, S.srcOpen, S.live]);
     if (sig !== lastSig) {
       lastSig = sig;
       box.hidden = S.dismissed; mini.hidden = !S.dismissed; miniLive.hidden = !S.live;
       box.classList.toggle('imh-wide', S.srcOpen);
-      r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
+      r2.textContent = L[0]; r2.hidden = !L[0]; r2.title = L[0];
+      id2.textContent = L[1]; id2.hidden = !L[1];
+      id3.textContent = L[2]; id3.hidden = !L[2];
       rowsEl.textContent = '';
       R.forEach(function (r) {
         rowsEl.appendChild(el('span', 'imh-l', r[0] + ':'));
@@ -270,7 +290,11 @@
   function renderSources() {
     if (!S.mounted || !S.srcOpen) return;
     var now = Date.now(), frag = document.createDocumentFragment();
-    var st = (S.stats || []).filter(Boolean);
+    if (S.about && (S.about.title || S.about.text)) {
+      var ab = el('div', 'imh-ab'); if (S.about.title) ab.appendChild(el('b', null, S.about.title));
+      if (S.about.text) ab.appendChild(document.createTextNode(S.about.text)); frag.appendChild(ab);
+    }
+    var st =(S.stats || []).filter(Boolean);
     if (st.length) {
       var r3 = el('div', 'imh-r3');
       st.forEach(function (s) { var d = el('div', 'imh-st'); d.appendChild(el('i', null, s[0])); d.appendChild(el('b', null, s[1] == null || s[1] === '' ? '–' : String(s[1]))); r3.appendChild(d); });
@@ -364,6 +388,8 @@
     button(x, function () { setDismissed(true, true); });
     r1.appendChild(x); box.appendChild(r1);
     r2 = el('div', 'imh-r2'); box.appendChild(r2);
+    id2 = el('div', 'imh-id2'); id2.hidden = true; box.appendChild(id2);
+    id3 = el('div', 'imh-id3'); id3.hidden = true; box.appendChild(id3);
     rowsEl = el('div', 'imh-rows'); box.appendChild(rowsEl);
     var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
     more.addEventListener('mouseenter', function () {
@@ -390,7 +416,8 @@
   }
   function apply(o) {
     if (!o) return;
-    ['context', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.about !== undefined) S.about = o.about && typeof o.about === 'object' ? { title: String(o.about.title || ''), text: String(o.about.text || '') } : null;
+    ['context', 'line1', 'line2', 'line2small', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
     if (o.signal !== undefined) S.signal = o.signal;
     if (o.stats) S.stats = [].concat(o.stats);
     if (o.tag !== undefined) S.tag = o.tag;
@@ -403,17 +430,31 @@
   // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
   function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  function xrHeight() { var L = idLines(); return 262 + (L[1] ? 42 : 0) + (L[2] ? 30 : 0); }
+  function xrResize(H) {   // two-line identity makes the panel taller: new canvas texture (GPU storage is fixed-size) + geometry
+    var T = xr.THREE, c = xr.canvas; c.height = H;
+    var tex = new T.CanvasTexture(c); if (T.SRGBColorSpace) tex.colorSpace = T.SRGBColorSpace;
+    xr.meshes.forEach(function (m) {
+      m.material.map = tex; m.material.needsUpdate = true;
+      var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / 512);
+    });
+    xr.tex.dispose(); xr.tex = tex;
+  }
   function drawXR() {
     if (!xr) return;
-    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
+    if (xr.canvas.height !== xrHeight()) xrResize(xrHeight());
+    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height, L = idLines();
     g.clearRect(0, 0, W, H);
     g.fillStyle = 'rgba(10,18,32,0.72)'; rr(g, 3, 3, W - 6, H - 6, 18); g.fill();   // a little denser in VR for legibility
     g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
     g.textBaseline = 'alphabetic';
     g.save(); g.fillStyle = 'rgba(255,255,255,0.3)'; g.font = '400 22px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '6px'; g.fillText("I'M HERE", 28, 46); g.restore();
-    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 88);
+    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, L[0], W - 56), 28, 88);
+    var y = 140;
+    if (L[1]) { g.fillStyle = 'rgba(255,255,255,0.92)'; g.font = '500 30px ' + FONT; g.fillText(fit(g, L[1], W - 56), 28, 128); y += 42; }
+    if (L[2]) { g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + FONT; g.fillText(fit(g, L[2], W - 56), 28, 158); y += 30; }
     // labels: translucent fill in VR (a 0.5px outline aliases/shimmers at headset panel scale); values solid white
-    var R = rows(), lx = 28, vx = 0, y = 140;
+    var R = rows(), lx = 28, vx = 0;
     g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px';
     R.forEach(function (r) { vx = Math.max(vx, g.measureText(r[0] + ':').width); });
     vx += lx + 22;
@@ -431,12 +472,13 @@
   function xrPanel(THREE, o) {
     o = o || {};
     if (!xr) {
-      var c = document.createElement('canvas'); c.width = 512; c.height = 262;
+      var c = document.createElement('canvas'); c.width = 512; c.height = xrHeight();
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-      xr = { canvas: c, tex: tex };
+      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [] };
     }
     var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
-    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 262 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * xr.canvas.height / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    m.userData.imhW = w; xr.meshes.push(m);
     m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
     m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
     m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
@@ -1102,16 +1144,21 @@ function refreshMark() {
   const jst = JOIN.hex && JOIN.tracker ? JOIN.tracker.state(Date.now()) : null;
   const awayNm = jst && d ? Math.hypot(...toLocal(d.arp, jst.lat, jst.lon)) / 1852 : 0;
   const apt = d ? shortName(d) : '', near = awayNm < 30;
-  // context line: callsign · type · phase (climbing out of X / cruising over Y / approach Z / landed Z)
+  // two-line identity: line1 = airline · type, line2 = flight number · tail; LOC = a plain place phrase
   const typ = JOIN.hex && JOIN.info && JOIN.info.type ? ({ B738: '737-800', B737: '737-700', B739: '737-900', B38M: '737 MAX 8', B39M: '737 MAX 9', B736: '737-600' }[JOIN.info.type] || JOIN.info.type) : '737-800';
-  const phase = jst ? (jst.onGround ? (near ? 'landed ' + apt : 'on the ground')
-      : (jst.vr || 0) > 300 && near ? 'climbing out of ' + apt : (jst.vr || 0) < -300 && near ? 'approach ' + apt
-      : 'cruising over ' + (JOIN.place ? JOIN.place.municipality || JOIN.place.name : 'open country'))
-    : live ? 'live feed' : mode === 'cruise' ? 'cruising' : d ? 'approach ' + apt + ' ' + AP.rwy : 'parked';
-  const call = live ? (F.flight && F.flight !== 'DEMO' ? F.flight : 'Live flight') : 'Demo flight';
   const town = (x) => x ? [x.municipality || placeName(x), (x.region || '').replace(/^[A-Z]{2}-/, '')].filter(Boolean).join(', ') : '';
-  MARK.update({ context: [call, typ, phase].join(' · '),
-    loc: jst && !near && JOIN.place ? 'near ' + town(JOIN.place) : d ? town(d) : 'None',
+  const city = (x) => x ? x.municipality || placeName(x) : '', at = d ? city(d) + ' (' + apt + ')' : '';
+  const over = (x) => x ? US_STATE[(x.region || '').replace(/^US-/, '')] || city(x) : 'open country';
+  const loc = jst ? (jst.onGround ? (near ? 'On the ground at ' + at : JOIN.place ? 'On the ground near ' + town(JOIN.place) : 'On the ground')
+      : (jst.vr || 0) > 300 && near ? 'Climbing out of ' + at : (jst.vr || 0) < -300 && near ? 'On approach to ' + at
+      : 'Cruising over ' + over(JOIN.place))
+    : live ? (d ? 'Near ' + at : 'None') : mode === 'cruise' ? (d ? 'Cruising near ' + at : 'Cruising') : d ? 'On approach to ' + at : 'Parked';
+  const cs = live && F.flight && F.flight !== 'DEMO' ? F.flight.trim().toUpperCase() : '', m = /^([A-Z]{3})(\d+[A-Z]?)$/.exec(cs);
+  const airline = !live ? 'Demo flight' : m && AIRLINE[m[1]] ? AIRLINE[m[1]] : m ? m[1] : 'Live flight';
+  const reg = JOIN.hex && JOIN.info && JOIN.info.reg ? JOIN.info.reg : '';
+  const line2 = !live ? (mode === 'cruise' ? 'Demo cruise' : d ? 'Demo approach · ' + apt + ' ' + AP.rwy : 'Demo flight')
+    : [m ? 'Flight ' + m[2] : cs, reg && reg !== cs ? reg : ''].filter(Boolean).join(' · ') || 'Live flight';
+  MARK.update({ context: '', line1: airline + ' · ' + typ, line2, line2small: '', loc,
     signal: JOIN.hex ? { source: JOIN.src || 'ADS-B', time: feedAt } : live ? { source: 'External feed', time: feedAt } : { text: 'Demo data' },
     view: tiles && realNow > 0.01 ? 'Google 3D + render' : '3D render',
     stats: [['Alt', Math.round(F.altitude).toLocaleString('en-US') + ' ft'], ['GS', Math.round(F.groundSpeed) + ' kt'],
@@ -1121,12 +1168,24 @@ function refreshMark() {
       : 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.' });
   MARK.setLive(liveNow);
 }
+// airline from the ICAO callsign prefix (SWA444 -> Southwest); unknown prefixes show as the 3 letters
+const AIRLINE = { SWA: 'Southwest', AAL: 'American', DAL: 'Delta', UAL: 'United', ASA: 'Alaska', JBU: 'JetBlue', NKS: 'Spirit', FFT: 'Frontier',
+  AAY: 'Allegiant', SCX: 'Sun Country', WJA: 'WestJet', ACA: 'Air Canada', AMX: 'Aeroméxico', VIV: 'Viva Aerobus', CMP: 'Copa', GOL: 'GOL',
+  RYR: 'Ryanair', BAW: 'British Airways', KLM: 'KLM', DLH: 'Lufthansa', AFR: 'Air France', THY: 'Turkish', UAE: 'Emirates', QFA: 'Qantas',
+  VOZ: 'Virgin Australia', JAL: 'Japan Airlines', ANA: 'ANA', CCA: 'Air China', CES: 'China Eastern', CSN: 'China Southern', ETH: 'Ethiopian',
+  FDX: 'FedEx', UPS: 'UPS', GTI: 'Atlas Air', ABX: 'ABX Air', ATN: 'ATI', NAX: 'Norwegian', SVA: 'Saudia', AIC: 'Air India', PAL: 'Philippine Airlines' };
+const US_STATE = { AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware',
+  DC: 'Washington, DC', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa', KS: 'Kansas', KY: 'Kentucky',
+  LA: 'Louisiana', ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri', MT: 'Montana',
+  NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey', NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota',
+  OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina', SD: 'South Dakota', TN: 'Tennessee',
+  TX: 'Texas', UT: 'Utah', VT: 'Vermont', VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming' };
 // short readable place for the label: the city, else the airport name without "International Airport" etc.
 const placeName = (d) => (d.municipality || String(d.name || d.icao).split(/[\n(,]/)[0]
   .replace(/\b(International|Intl\.?|Airport|Regional|Municipal|Metropolitan|Field|Air ?(Force|National Guard)? ?Base|Airfield)\b/gi, '')
   .replace(/\s+/g, ' ').trim()) || d.icao;
 const fmtSince = (ms) => { const s = Math.round((Date.now() - ms) / 1000); return s < 90 ? s + ' s ago' : Math.round(s / 60) + ' min ago'; };
-if (MARK) MARK.init({ subject: 'Boeing 737-800', below: ['header'], credits: [{ text: 'Cockpit model: hakai315 · CC BY 4.0', href: COCKPIT_URL }] });
+if (MARK) MARK.init({ line1: 'Demo flight · 737-800', below: ['header'], credits: [{ text: 'Cockpit model: hakai315 · CC BY 4.0', href: COCKPIT_URL }] });
 setInterval(refreshMark, 1000);
 
 // ---------------------------------------------------------------------------
