@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>i'm here · card test</title>
+<style>
+  body{margin:0;min-height:100vh;background:#9dbfe0;font-family:-apple-system,system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;gap:14px;padding:18px 12px;box-sizing:border-box}
+  .bar{display:flex;gap:6px}
+  .bar input{font:14px ui-monospace,Menlo,monospace;padding:6px 8px;width:120px;border-radius:6px;border:1px solid #567}
+  .bar button{font:14px system-ui;padding:6px 10px;border-radius:6px;border:1px solid #567;background:#fff}
+  .bgs{display:flex;gap:6px}
+  .bgs button{width:28px;height:20px;border-radius:4px;border:1px solid #567}
+  .cd{width:290px;background:rgba(12,16,30,.6);border:.5px solid rgba(255,255,255,.28);border-radius:7px;color:rgba(255,255,255,.92);font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+  .wm{font-family:"Arial Black","Helvetica Neue",Arial,sans-serif;font-size:26px;font-weight:900;letter-spacing:2px;line-height:1.1;color:transparent;-webkit-text-stroke:.5px rgba(255,255,255,.85);padding:8px 11px 3px}
+  .ph{margin:3px 11px 0;border:.5px solid rgba(255,255,255,.3);aspect-ratio:3/2;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:12px;color:rgba(255,255,255,.6);overflow:hidden;position:relative}
+  .ph img{width:100%;height:100%;object-fit:cover;display:block}
+  .pc{position:absolute;right:4px;bottom:3px;font-size:9px;color:rgba(255,255,255,.8);text-shadow:0 0 3px #000;text-decoration:none}
+  .cap{display:flex;justify-content:space-between;align-items:flex-start;padding:5px 11px 0;font-size:11px;color:rgba(255,255,255,.55);line-height:1.35}
+  .fb{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:40px}
+  .fl{width:18px;height:11px;opacity:.85;background:repeating-linear-gradient(#b22234 0 1.57px,#fff 1.57px 3.14px)}
+  .ln{border-top:.5px solid rgba(255,255,255,.2);margin-top:5px;padding:3px 0 4px}
+  .r{display:grid;grid-template-columns:38px 1fr;padding:1px 11px;align-items:baseline}
+  .l{font-size:11px;color:rgba(110,220,235,.7)}.v{font-size:13px}
+  .s .l{color:rgba(110,220,235,.55)}.s .v{font-size:11px;color:rgba(255,255,255,.7)}
+  .g{color:#7ef0a2}
+  .cr{display:flex;justify-content:space-between;border-top:.5px solid rgba(255,255,255,.2);padding:4px 11px;font-size:11px;color:rgba(255,255,255,.55)}
+  .note{font-size:12px;color:#123;max-width:290px;text-align:center}
+</style>
+</head>
+<body>
+<div class="bar"><input id="reg" value="N8771D" aria-label="Registration"><button id="go">Load photo</button></div>
+<div class="bgs" aria-label="Background">
+  <button style="background:#9dbfe0" data-bg="#9dbfe0" aria-label="Sky"></button>
+  <button style="background:#e8eef4" data-bg="#e8eef4" aria-label="Snow"></button>
+  <button style="background:#24302a" data-bg="#24302a" aria-label="Terrain"></button>
+  <button style="background:#0b0f1a" data-bg="#0b0f1a" aria-label="Night"></button>
+</div>
+
+<div class="cd">
+  <div class="wm">i'm here</div>
+  <div class="ph" id="ph">loading photo…</div>
+  <div class="cap"><div class="fb"><span class="fl"></span><span>USA</span></div><div style="text-align:right">REG <span id="regv">N8771D</span><br>737 MAX 8</div></div>
+  <div class="ln">
+    <div class="r"><span class="l">LOC</span><span class="v">Santa Ana, CA</span></div>
+    <div class="r"><span class="l">ORG</span><span class="v">Southwest Airlines</span></div>
+    <div class="r"><span class="l">FLT</span><span class="v">SWA2588</span></div>
+    <div class="r"><span class="l">RTE</span><span class="v">SMF–SNA · Approach 20R</span></div>
+    <div class="r"><span class="l">POV</span><span class="v">Captain</span></div>
+    <div class="r"><span class="l">SIG</span><span class="v">FR24 · <span class="g">LIVE</span></span></div>
+    <div class="r s"><span class="l">DATE</span><span class="v">11 NOV 26</span></div>
+    <div class="r s"><span class="l">TIME</span><span class="v">10:20 AM</span></div>
+  </div>
+  <div class="cr"><span>Google</span><span>ⓘ Details</span></div>
+</div>
+<p class="note">Design test. The rows are sample data; the photo is the real Planespotters photo for the registration typed above.</p>
+
+<script>
+const RELAY = "https://imhere-flights.bt4w8jn5ty.workers.dev";
+const ph = document.getElementById("ph");
+async function load(reg) {
+  reg = reg.trim().toUpperCase();
+  document.getElementById("regv").textContent = reg;
+  ph.textContent = "loading photo…";
+  let p = null;
+  try {
+    const r = await fetch(RELAY + "/photo?reg=" + encodeURIComponent(reg));
+    const j = await r.json();
+    if (j && j.photos && j.photos.length) p = j.photos[0];
+  } catch (e) {}
+  if (!p) {
+    try {
+      const r = await fetch("https://api.planespotters.net/pub/photos/reg/" + encodeURIComponent(reg));
+      const j = await r.json();
+      if (j && j.photos && j.photos.length) { const q = j.photos[0]; p = { large: q.thumbnail_large, thumb: q.thumbnail, link: q.link, photographer: q.photographer }; }
+    } catch (e) {}
+  }
+  if (!p) { ph.textContent = "no photo found for " + reg; return; }
+  const src = (p.large && p.large.src) || (p.thumb && p.thumb.src);
+  ph.innerHTML = "";
+  const img = new Image(); img.alt = reg; img.src = src; ph.appendChild(img);
+  const a = document.createElement("a"); a.className = "pc"; a.href = p.link; a.target = "_blank"; a.rel = "noopener";
+  a.textContent = "© " + (p.photographer || "unknown") + " / Planespotters.net"; ph.appendChild(a);
+}
+document.getElementById("go").onclick = () => load(document.getElementById("reg").value);
+document.getElementById("reg").addEventListener("keydown", e => { if (e.key === "Enter") load(e.target.value); });
+document.querySelectorAll(".bgs button").forEach(b => b.onclick = () => document.body.style.background = b.dataset.bg);
+load("N8771D");
+</script>
+</body>
+</html>
