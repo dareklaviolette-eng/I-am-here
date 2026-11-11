@@ -774,6 +774,7 @@ import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockp
 import { toLocal } from './airport-kit.js';
 import { fetchMetar, isLive as wxIsLive, summary as wxSummary, windComponents } from './weather.js';
 import { createGoogleScenery, debugOverlay, debugLines } from './google-scenery.js';
+import { createCockpitSwitch, isAirbusType, airbusName, AIRBUS_URL, AIRBUS_CREDIT } from './airbus-cockpit.js';
 
 // Google Map Tiles API key. Safe to publish: Google only accepts it from https://dareklaviolette-eng.github.io/
 const GOOGLE_KEY = 'AIzaSyD5_qsBFe74zBURZ8UTYFzz_7es3dPSM9A';
@@ -908,6 +909,7 @@ function buildAirframe() {
   g.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
   return g;
 }
+let COCKPIT = null;   // 737 or Airbus flight deck (./airbus-cockpit.js), created after the EFB below
 const displays = SCREENS.map((d) => {
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
@@ -927,7 +929,7 @@ new GLTFLoader().load('./shell.gltf', (gltf) => {
     const m = o.material;   // Lambert: cheaper than PBR, looks the same on these matte surfaces
     o.material = new THREE.MeshLambertMaterial({ color: m.color, side: THREE.DoubleSide, name: m.name });
   });
-  aircraft.add(shell);
+  aircraft.add(shell); if (COCKPIT) COCKPIT.attach737(shell);   // hidden while the Airbus cockpit is showing
   aircraft.updateMatrixWorld(true);
   shell.traverse((o) => { o.matrixAutoUpdate = false; });   // static: never recomputed
   $('loader').style.display = 'none';
@@ -1298,12 +1300,13 @@ const liveStatus = (t) => { $('liveStatus').textContent = t; };
 function renderLiveList(list) {
   const box = $('liveList'); box.textContent = '';
   for (const f of list.slice(0, 40)) {
-    const b = document.createElement('button'); if (!f.is737) b.className = 'no737';
+    const ride = f.is737 || isAirbusType(f.type);   // a cockpit exists for 737s and the A320 family
+    const b = document.createElement('button'); if (!ride) b.className = 'no737';
     const head = `${f.flight || f.reg || f.hex.toUpperCase()} · ${f.type || 'type ?'}`;
-    const sub = `${f.onGround ? 'on the ground' : (f.altFt != null ? Math.round(f.altFt).toLocaleString('en-US') + ' ft' : 'alt ?')} · ${Math.round(f.distNm)} nm` + (f.is737 ? '' : ' · cockpit not available yet');
+    const sub = `${f.onGround ? 'on the ground' : (f.altFt != null ? Math.round(f.altFt).toLocaleString('en-US') + ' ft' : 'alt ?')} · ${Math.round(f.distNm)} nm` + (ride ? '' : ' · cockpit not available yet');
     b.innerHTML = '<span></span><small></small>'; b.firstChild.textContent = head; b.lastChild.textContent = sub;
-    b.title = f.is737 ? 'Ride in this 737' : 'Only the 737 cockpit exists so far';
-    b.onclick = () => { if (f.is737) joinFlight(f); };
+    b.title = f.is737 ? 'Ride in this 737' : ride ? 'Ride in this Airbus' : 'Only the 737 and A320-family cockpits exist so far';
+    b.onclick = () => { if (ride) joinFlight(f); };
     box.appendChild(b);
   }
 }
@@ -1326,12 +1329,18 @@ const TYPE_LABEL = { B736: '737-600', B737: '737-700', B738: '737-800', B739: '7
   A319: 'A319', A320: 'A320', A321: 'A321', A20N: 'A320neo', A21N: 'A321neo', B752: '757-200', B763: '767-300', B772: '777-200', B77W: '777-300ER',
   B788: '787-8', B789: '787-9', B78X: '787-10', E75L: 'E175', CRJ9: 'CRJ-900', CRJ7: 'CRJ-700', BCS3: 'A220-300', BCS1: 'A220-100', A333: 'A330-300', A359: 'A350-900' };
 function typeNoteText(f) {
+  if (COCKPIT && COCKPIT.isAirbus()) {   // Airbus deck: A320-family rides, or ?cockpit=airbus on another type
+    if (!f || isAirbusType(f.type)) return '';
+    const n = TYPE_LABEL[f.type] || f.type;
+    return f.type ? `Cockpit shown is an Airbus A320; this flight is ${/^[AEFHILMNORSX8]/i.test(n) ? 'an' : 'a'} ${n}.` : "Cockpit shown is an Airbus A320; this flight's aircraft type is not in the feed.";
+  }
   if (!f || COCKPIT_737.test(f.type || '')) return '';
   const name = TYPE_LABEL[f.type] || f.type;
   return f.type ? `Cockpit shown is a 737-800; this flight is ${/^[AEFHILMNORSX8]/i.test(name) ? 'an' : 'a'} ${name}.` : "Cockpit shown is a 737-800; this flight's aircraft type is not in the feed.";
 }
 function showTypeNote(f) { const t = typeNoteText(f); $('typeNote').textContent = t; $('typeNote').hidden = !t; }
 function joinFlight(f) {
+  if (COCKPIT) COCKPIT.forType(f.type);   // A320 family -> Airbus deck (loads once), others -> 737
   showTypeNote(f);
   JOIN.hex = f.hex; JOIN.info = f; JOIN.tracker = new Tracker(); JOIN.tracker.onFix(f); JOIN.prevTrack = null; JOIN.landed = false; JOIN.groundT = 0;
   JOIN.back.ok(); JOIN.back.next = 0; JOIN.backAt = 0; JOIN.fr24.reset();   // first poll right away (Flightradar24 first)
@@ -1367,7 +1376,7 @@ async function autoJoin(q) {
   joinFlight({ ...r.flight, is737: COCKPIT_737.test(r.flight.type || '') });
 }
 function leaveFlight() {
-  JOIN.hex = null; JOIN.tracker = null; $('liveLeave').hidden = true; showTypeNote(null); sigNote(); liveStatus('Left the live flight. Back to the demo.');
+  JOIN.hex = null; JOIN.tracker = null; $('liveLeave').hidden = true; showTypeNote(null); if (COCKPIT) COCKPIT.forType(null); sigNote(); liveStatus('Left the live flight. Back to the demo.');
   ORG.lat = airport.data.arp[0]; ORG.lon = airport.data.arp[1]; orgOff = [0, 0]; if (scenery) placeScenery();
   F.flight = 'DEMO'; setMode(mode);
 }
@@ -1383,7 +1392,8 @@ async function pollLive() {
     if (JOIN.hex !== hex || JOIN.tracker !== tracker) return;   // left or switched flights while this was in flight
     const wasLost = JOIN.back.fails > 0 || Date.now() - feedAt > LIVE_FRESH_S * 1000;
     JOIN.back.ok();
-    if (tracker.onFix(r.flight)) { feedAt = r.flight.fixAt; JOIN.info = { ...JOIN.info, ...r.flight }; JOIN.src = r.source; if (wasLost) JOIN.backAt = Date.now(); }
+    if (tracker.onFix(r.flight)) { const t0 = JOIN.info && JOIN.info.type; feedAt = r.flight.fixAt; JOIN.info = { ...JOIN.info, ...r.flight, type: r.flight.type || t0 }; JOIN.src = r.source; if (wasLost) JOIN.backAt = Date.now();
+      if (COCKPIT && JOIN.info.type !== t0) COCKPIT.forType(JOIN.info.type); }
   } catch (e) { if (JOIN.hex === hex) JOIN.back.fail(Date.now(), e.message); }
   finally { JOIN.busy = false; refreshMark(); }
 }
@@ -1525,13 +1535,16 @@ function refreshMark() {
     note: WX.data.raw + (wxIsLive(WX.data) ? '' : '\nOlder than 90 minutes: not live.') + '\nClouds, visibility, rain/snow and wind are drawn from this report.' });
   else items.push({ kind: 'estimated', label: 'Weather', source: WX.err ? 'METAR not reachable: ' + WX.err : 'Loading the METAR…' });
   items.push({ kind: 'illustrative', label: `Time of day: ${todName}`, source: 'Chosen with the Day/Dusk/Night buttons, not the real time at the airport' });
-  items.push({ kind: 'illustrative', label: '737-800 flight deck', source: '3D model "Boeing 737-800 Cockpit" by hakai315 (Sketchfab, CC BY 4.0), optimized', href: COCKPIT_URL,
+  const AB = COCKPIT && COCKPIT.isAirbus();
+  items.push(AB ? { kind: 'illustrative', label: 'Airbus A320 flight deck', source: '3D model ' + AIRBUS_CREDIT + ', optimized for VR', href: AIRBUS_URL,
+      note: (JOIN.hex && typeNoteText(JOIN.info) ? typeNoteText(JOIN.info) + '\n' : '') + 'Cockpit displays are drawn from the flight data above (simplified, 737NG-style symbology on the Airbus screens).' }
+    : { kind: 'illustrative', label: '737-800 flight deck', source: '3D model "Boeing 737-800 Cockpit" by hakai315 (Sketchfab, CC BY 4.0), optimized', href: COCKPIT_URL,
     note: (JOIN.hex && typeNoteText(JOIN.info) ? typeNoteText(JOIN.info) + '\n' : '') + 'Cockpit displays are drawn from the flight data above (737NG-style, simplified).' });
   const jst = JOIN.hex && JOIN.tracker ? JOIN.tracker.state(Date.now()) : null;
   const awayNm = jst && d ? Math.hypot(...toLocal(d.arp, jst.lat, jst.lon)) / 1852 : 0;
   const apt = d ? shortName(d) : '', near = awayNm < 30;
   // two-line identity: line1 = airline · type, line2 = flight number · tail; LOC = a plain place phrase
-  const typ = JOIN.hex && JOIN.info && JOIN.info.type ? ({ B738: '737-800', B737: '737-700', B739: '737-900', B38M: '737 MAX 8', B39M: '737 MAX 9', B736: '737-600' }[JOIN.info.type] || JOIN.info.type) : JOIN.hex ? 'type not reported' : '737-800';
+  const typ = JOIN.hex && JOIN.info && JOIN.info.type ? ({ B738: '737-800', B737: '737-700', B739: '737-900', B38M: '737 MAX 8', B39M: '737 MAX 9', B736: '737-600' }[JOIN.info.type] || airbusName(JOIN.info.type) || JOIN.info.type) : JOIN.hex ? 'type not reported' : AB ? 'Airbus A320' : '737-800';
   const town = (x) => x ? [x.municipality || placeName(x), (x.region || '').replace(/^[A-Z]{2}-/, '')].filter(Boolean).join(', ') : '';
   const city = (x) => x ? x.municipality || placeName(x) : '', at = d ? city(d) + ' (' + apt + ')' : '';
   const over = (x) => x ? US_STATE[(x.region || '').replace(/^US-/, '')] || city(x) : 'open country';
@@ -1545,7 +1558,9 @@ function refreshMark() {
   const line2 = !live ? (mode === 'cruise' ? 'Demo cruise' : d ? 'Demo approach · ' + apt + ' ' + AP.rwy : 'Demo flight')
     : [m ? 'Flight ' + m[2] : cs, reg && reg !== cs ? reg : ''].filter(Boolean).join(' · ') || 'Live flight';
   const lost = JOIN.hex && !liveNow ? sigText() : null;   // also on the VR label (the on-screen note is not drawn in a headset)
-  MARK.update({ context: '', line1: airline + ' · ' + typ, line2, line2small: lost && lost.lost ? 'Signal lost · reconnecting' : '', loc,
+  MARK.update({ context: '', line1: airline + ' · ' + typ, line2,
+    about: AB ? { title: 'Airbus A320 flight deck', text: 'Cockpit model: "Airbus Cockpit Interior" by davidolaleye1 (https://sketchfab.com/3d-models/airbus-cockpit-interior-06ca045e131b4cfdac76ddbd55ed3b4a), CC-BY-4.0. Optimized for VR by I\'M HERE.' } : null,
+    credits: [AB ? { text: 'Cockpit model: davidolaleye1 · CC BY 4.0', href: AIRBUS_URL } : { text: 'Cockpit model: hakai315 · CC BY 4.0', href: COCKPIT_URL }], line2small: lost && lost.lost ? 'Signal lost · reconnecting' : '', loc,
     signal: JOIN.hex ? { source: JOIN.src || 'ADS-B', time: feedAt } : live ? { source: 'External feed', time: feedAt } : { text: 'Demo data' },
     view: tiles && realNow > 0.01 ? 'Google 3D + render' : '3D render',
     stats: [['Alt', Math.round(F.altitude).toLocaleString('en-US') + ' ft'], ['GS', Math.round(F.groundSpeed) + ' kt'],
@@ -1731,7 +1746,7 @@ let seat = 'captain';
 function setSeat(k) {
   seat = k; const s = SEATS[k]; const eye = toWorld(s.eye), at = toWorld(s.at);
   document.querySelectorAll('[data-seat]').forEach((b) => b.classList.toggle('on', b.dataset.seat === k));
-  dome.position.copy(toWorld([0, 2.6, 0.9]));
+  dome.position.copy(toWorld(COCKPIT ? COCKPIT.domeAt() : [0, 2.6, 0.9])); if (COCKPIT) COCKPIT.onSeat(k);
   if (renderer.xr.isPresenting) { placeRig(); return; }
   camera.position.copy(eye);
   airframe.visible = !!s.orbit; chaseIdle = 0;
@@ -1811,7 +1826,7 @@ const efb = (() => {
       B(X + 388, Y, 180, chh, paused ? 'Play' : 'Pause', () => $('play').click());
       if (JOIN.hex) B(X, Y + 100, 374, chh, 'Leave live flight', leaveFlight);
       else B(X, Y + 100, 374, chh, 'Find live flights', () => findLive(''));
-      (JOIN.hex ? [] : JOIN.list.filter((f) => f.is737).slice(0, 3)).forEach((f, i) =>
+      (JOIN.hex ? [] : JOIN.list.filter((f) => f.is737 || isAirbusType(f.type)).slice(0, 3)).forEach((f, i) =>
         B(X, Y + 196 + i * 84, 568, 72, `${f.flight || f.reg} · ${f.type} · ${f.onGround ? 'ground' : Math.round(f.altFt || 0).toLocaleString('en-US') + ' ft'} · ${Math.round(f.distNm)} nm`, () => joinFlight(f)));
     }
   }
@@ -1850,7 +1865,7 @@ const efb = (() => {
       g.fillText(scenery && scenery.stats().visible ? Math.round(realTarget() * 100) + '%' : '—', X + 205, 84 + 78 + 14 + 39); g.textAlign = 'left';
       g.fillStyle = '#aab6c2'; g.font = '400 22px system-ui, sans-serif'; wrapText('Realism (test): how strongly Google 3D tiles show over our render. ' + $('realNote').textContent, X, 380, 560, 30, 5); }
     if (tab === 'Airport' && airport) { g.fillStyle = '#e8eef4'; g.font = '600 24px system-ui, sans-serif'; g.fillText(`${airport.data.icao} · runways`, X, 104); g.fillText('Go to airport', X, 314); }
-    if (tab === 'Flight') { g.fillStyle = '#aab6c2'; g.font = '400 20px system-ui, sans-serif'; if (!JOIN.hex) g.fillText(JOIN.list.length ? '737s within 150 nm (tap to ride):' : 'Live ADS-B: 737s first.', X, 278); }
+    if (tab === 'Flight') { g.fillStyle = '#aab6c2'; g.font = '400 20px system-ui, sans-serif'; if (!JOIN.hex) g.fillText(JOIN.list.length ? '737s & A320s within 150 nm (tap to ride):' : 'Live ADS-B: 737s first.', X, 278); }
     if (tab === 'Charts') { g.fillStyle = '#e8eef4'; g.font = '600 34px system-ui, sans-serif'; g.fillText('Charts', X, 120); g.fillStyle = '#7f8c99'; g.font = '400 26px system-ui, sans-serif'; g.fillText('Coming soon', X, 170); }
     tex.needsUpdate = true;
   }
@@ -1932,6 +1947,16 @@ const pos = { x: 0, z: 0 };   // aircraft position over the ground (m), for grou
 const att = new THREE.Euler(0, 0, 0, 'YXZ');
 let viewHdg = null;   // comfort-smoothed heading used for the view (see the loop)
 let last = performance.now(), dispClock = 1, uiClock = 1, efbClock = 1;
+// Flight deck by aircraft type: A320 family -> Airbus cockpit, everything else -> 737. ?cockpit=airbus forces it for tests.
+COCKPIT = createCockpitSwitch({ THREE, GLTFLoader, aircraft, S, SEATS, displays, mounts: efb.mounts, force: params.get('cockpit'),
+  onChange: () => { efbZoomed = null; setSeat(seat); if (renderer.xr.isPresenting) placeRig(); efbDirty = true; showCredit(); showTypeNote(JOIN.hex ? JOIN.info : null); refreshMark(); } });
+function showCredit() {
+  const ab = COCKPIT && COCKPIT.isAirbus(), el = $('credit'); if (!el) return;
+  const a = document.createElement('a'); a.target = '_blank'; a.rel = 'noopener';
+  a.href = ab ? AIRBUS_URL : COCKPIT_URL; a.textContent = ab ? '"Airbus Cockpit Interior"' : '"Boeing 737-800 Cockpit"';
+  el.textContent = 'Cockpit model: '; el.append(a, ab ? ' by davidolaleye1 · CC BY 4.0 · optimized' : ' by hakai315 · CC BY 4.0 · optimized');
+  const b = $('brand'); if (b) b.firstChild.textContent = ab ? (airbusName(JOIN.hex && JOIN.info && JOIN.info.type) || 'Airbus A320') + ' ' : '737-800 ';
+}
 setTOD('day'); setSeat('captain');
 if (params.get('flight')) autoJoin(params.get('flight').trim()); else loadAirport(params.get('apt') || 'KBNA', params.get('rwy'));
 // One failing step (a live-feed edge case, a view switch mid-update) must never stop the picture: each part of a frame is

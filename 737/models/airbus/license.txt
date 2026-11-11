@@ -1,0 +1,11 @@
+Model Information:
+* title:	Airbus Cockpit Interior
+* source:	https://sketchfab.com/3d-models/airbus-cockpit-interior-06ca045e131b4cfdac76ddbd55ed3b4a
+* author:	davidolaleye1 (https://sketchfab.com/davidolaleye1)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Airbus Cockpit Interior" (https://sketchfab.com/3d-models/airbus-cockpit-interior-06ca045e131b4cfdac76ddbd55ed3b4a) by davidolaleye1 (https://sketchfab.com/davidolaleye1) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
