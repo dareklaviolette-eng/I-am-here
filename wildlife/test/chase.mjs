@@ -1,8 +1,11 @@
-// Chase view, real page in headless Chrome (SwiftShader): node test/chase.mjs
-// For every SAMPLE track, at many points along it, on desktop, phone (portrait) and a simulated WebXR head (local-floor,
-// 1.6 m eye height, looking straight ahead), the animal must be inside the camera frustum, closer than the visible fog
-// distance, in front of the camera, behind the animal, on the same side of the water surface and above the ground.
-// Also checks the comfort rules in Chase: yaw <= 30 deg/s and no roll.
+// Views, real page in headless Chrome (SwiftShader): node test/chase.mjs
+// The views are exactly Ride, Beside and Chase. For every SAMPLE track, at many points along it, on desktop, phone
+// (portrait) and a simulated WebXR head (local-floor, 1.6 m eye height, looking straight ahead):
+//   Beside and Chase (default, and dragged to the orbit's limits): the animal is inside the camera frustum, closer
+//   than the visible fog distance, in front of the camera, on the same side of the water surface, the camera above the
+//   ground; in WebXR the animal is at or above -20 deg pitch from the eye (never beneath the rider).
+//   Ride: the eye (the WebXR head, not the floor under it) is at the animal's eye.
+// Also checks the comfort rules: yaw <= 30 deg/s and no roll.
 // Uses a local three r165 (THREE_DIR=/path/to/three, default /home/claude/xrtest/three; the sandbox has no CDN).
 import fs from 'node:fs'; import path from 'node:path'; import http from 'node:http'; import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +16,7 @@ html = html.replace('https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.modu
   .replaceAll('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/', './three/examples/jsm/');
 const hook = 'renderer.setAnimationLoop(frame);';
 if (html.split(hook).length !== 2) throw new Error('animation loop hook not found');
-html = html.replace(hook, hook + ` window.__wl = { look, frame, setView, seek, setPlay, tracks, selectTrack, cam, camera, rig, renderer, clock, eagle, shark, fogUnder, fogAbove, scene, setDist, camDist,
+html = html.replace(hook, hook + ` window.__wl = { look, frame, setView, seek, setPlay, tracks, selectTrack, cam, camera, rig, renderer, clock, eagle, shark, fogUnder, fogAbove, scene, orbit, orbitClamp, orbitDefaults, VIEWS, ORBIT_PITCH,
   terrainHeight, ORIGIN, get world() { return world; }, get cur() { return cur; }, get view() { return view; } };`);
 
 const server = http.createServer((req, res) => {
@@ -64,9 +67,12 @@ for (const p of profiles) {
     const P = W.camera.projectionMatrix.constructor, M = W.camera.matrixWorld.constructor, V = W.camera.position.constructor;
     const pos = new V(), fwd = new V(), up = new V(), rgt = new V(), tmp = new V();
     const samples = W.tracks.filter(t => t.isSample);
-    const combos = [['chase', 'wide'], ['chase', 'alongside'], ['chase', 'close'], ['ride', 'wide'], ['ride', 'alongside'], ['ride', 'close']];
-    for (const [vw, dk] of combos) for (const tr of samples) {
-      W.selectTrack(tr); W.setView(vw); W.setDist(dk); W.setPlay(true);
+    out.views = W.VIEWS.join(',');
+    const combos = [['ride', null], ['beside', null], ['chase', null], ['chase', { yaw: 2.2, pitch: 1, dist: 0 }], ['chase', { yaw: -1.4, pitch: -1, dist: 99 }]];
+    for (const [vw, orb] of combos) for (const tr of samples) {
+      W.selectTrack(tr); W.setView(vw); W.setPlay(true);
+      if (orb) { Object.assign(W.orbit, orb); W.orbitClamp(); }   // dragged as far as the comfort limits allow
+      const dk = orb ? 'dragged ' + W.orbit.yaw.toFixed(1) + '/' + (W.orbit.pitch * 180 / Math.PI).toFixed(0) + 'deg/' + W.orbit.dist.toFixed(1) + 'm' : 'default';
       const model = W.world.mode === 'ocean' ? W.shark : W.eagle;
       for (let f = 0.01; f < 0.95; f += 0.065) {
         W.seek(tr.t0 + (tr.t1 - tr.t0) * f);
@@ -78,6 +84,13 @@ for (const p of profiles) {
           if (prevYaw !== null) { let d = Math.abs(W.rig.rotation.y - prevYaw) % (2 * Math.PI); d = Math.min(d, 2 * Math.PI - d); if (d / DT * 180 / Math.PI > out.maxYaw) out.yawAt = vw + '/' + dk + ' ' + tr.name.slice(0, 12) + ' @' + f.toFixed(2) + ' frame ' + i; out.maxYaw = Math.max(out.maxYaw, d / DT * 180 / Math.PI); }
           prevYaw = W.rig.rotation.y;
           out.maxRoll = Math.max(out.maxRoll, Math.abs(Math.asin(Math.max(-1, Math.min(1, rgt.y)))) * 180 / Math.PI);
+        }
+        if (vw === 'ride') {   // the eye is the animal's eye (in WebXR: the head, not the floor under it)
+          model.group.updateMatrixWorld(true); W.camera.updateMatrixWorld(true); W.camera.getWorldPosition(pos);
+          const e = model.eye.clone().applyMatrix4(model.group.matrixWorld), d = pos.distanceTo(e);
+          out.checked++; out.rideMax = Math.max(out.rideMax || 0, d);
+          if (!(d < 0.05)) out.bad.push('ride ' + tr.name.slice(0, 12) + ' @' + f.toFixed(2) + ': eye ' + d.toFixed(2) + ' m from the animal eye');
+          continue;
         }
         // frustum test on the animal's bounding sphere
         const g = model.group; g.updateMatrixWorld(true);
@@ -93,13 +106,16 @@ for (const p of profiles) {
         out.checked++; out.minD = Math.min(out.minD, d); out.maxD = Math.max(out.maxD, d);
         const err = [];
         if (!(view.z < -W.camera.near)) err.push('animal behind the camera');
+        const pitch = Math.atan2(c.y - pos.y, Math.hypot(c.x - pos.x, c.z - pos.z)) * 180 / Math.PI;
+        out.minPitch = Math.min(out.minPitch ?? 99, pitch); out.maxPitch = Math.max(out.maxPitch ?? -99, pitch);
+        if (xr && !(pitch >= -20)) err.push('animal ' + pitch.toFixed(1) + ' deg below the eye (beneath the rider)');
         if (!(Math.abs(ndc.x) < 0.95 && Math.abs(ndc.y) < 0.95)) err.push('animal centre outside frustum ndc=' + ndc.x.toFixed(2) + ',' + ndc.y.toFixed(2));
         const seeTo = !fog ? W.camera.far : fog.isFogExp2 ? 1.5 / fog.density : fog.far * 0.5;   // exp2: green/blue transmission > ~20 %
         if (!(d < seeTo)) err.push('animal ' + d.toFixed(0) + ' m away, visibility ' + seeTo.toFixed(0) + ' m');
         if (!(d > r * 1.2)) err.push('camera inside the animal d=' + d.toFixed(2));
         const head = new V(Math.sin(W.cam.yaw), 0, Math.cos(W.cam.yaw));
         tmp.copy(c).sub(pos); tmp.y = 0;
-        if (!(tmp.dot(head) > 0)) err.push('camera not behind the animal');
+        if (!orb && !(tmp.dot(head) > 0)) err.push('camera not behind the animal');
         if ((c.y < 0) !== (pos.y < 0)) err.push('camera and animal on different sides of the surface cam y=' + pos.y.toFixed(2) + ' animal y=' + c.y.toFixed(2));
         const gh = W.terrainHeight(W.world, pos.x + W.ORIGIN.x, pos.z + W.ORIGIN.z);
         if (!(pos.y > gh + 0.3)) err.push('camera inside terrain');
@@ -109,7 +125,8 @@ for (const p of profiles) {
     }
     return out;
   })()`).catch((e) => ({ bad: ['eval: ' + e.message] }));
-  const label = `${p.name}: ${res.checked} Chase + Ride positions (wide, alongside, close), distance ${res.minD?.toFixed(1)}..${res.maxD?.toFixed(1)} m, max yaw ${res.maxYaw?.toFixed(1)} deg/s, max roll ${res.maxRoll?.toFixed(2)} deg (${res.yawAt})`;
+  const label = `${p.name}: views ${res.views}; ${res.checked} Ride / Beside / Chase positions, distance ${res.minD?.toFixed(1)}..${res.maxD?.toFixed(1)} m, animal pitch ${res.minPitch?.toFixed(1)}..${res.maxPitch?.toFixed(1)} deg, ride eye error <= ${res.rideMax?.toFixed(3)} m, max yaw ${res.maxYaw?.toFixed(1)} deg/s, max roll ${res.maxRoll?.toFixed(2)} deg (${res.yawAt})`;
+  if (res.views !== 'ride,beside,chase') failures.push(p.name + ': views are not exactly Ride / Beside / Chase: ' + res.views);
   if (res.bad.length) failures.push(label + '\n    ' + res.bad.slice(0, 8).join('\n    ') + (res.bad.length > 8 ? `\n    ... ${res.bad.length} total` : ''));
   if (!(res.maxYaw <= 30.01)) failures.push(p.name + ': chase yaw rate ' + res.maxYaw + ' deg/s');
   if (!(res.maxRoll < 0.01)) failures.push(p.name + ': chase camera roll ' + res.maxRoll + ' deg');
@@ -117,4 +134,4 @@ for (const p of profiles) {
 }
 if (logs.length) console.log(logs.slice(0, 5).join('\n'));
 if (failures.length) { console.error('FAIL\n' + failures.join('\n')); done(1); }
-console.log('chase: animal framed on every sample track (desktop, phone, WebXR)'); done(0);
+console.log('views: animal framed in Beside and Chase, eye on the animal in Ride, on every sample track (desktop, phone, WebXR)'); done(0);

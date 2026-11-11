@@ -10,8 +10,8 @@ html = html.replace('https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.modu
   .replaceAll('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/', './three/examples/jsm/');
 const hook = 'renderer.setAnimationLoop(frame);';
 if (html.split(hook).length !== 2) throw new Error('animation loop hook not found');
-html = html.replace(hook, hook + ` window.__wl = { tracks, selectTrack, addTrack, buildTrack, parseMovebankCSV, setView, setDist, seek, setPlay, card, cardXR, paintCardXR,
-  capXR, NARR, narrate, guideStep, renderCard, get GS() { return GS; }, get cur() { return cur; }, get world() { return world; } };`);
+html = html.replace(hook, hook + ` window.__wl = { tracks, selectTrack, addTrack, buildTrack, parseMovebankCSV, setView, seek, setPlay, card, vrCard, paintVRCard, vrCardPress, VIEWS,
+  capXR, NARR, orbit, chaseDrag, narrate, guideStep, renderCard, get GS() { return GS; }, get cur() { return cur; }, get world() { return world; } };`);
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(req.url.split('?')[0]);
   if (u === '/' || u === '/index.html') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end(html); }
@@ -76,17 +76,25 @@ await ev(`(() => { const W = window.__wl, raw = W.parseMovebankCSV(${JSON.string
 for (let i = 0; i < 20 && (await ev(`document.querySelector('#cardImg').hidden`)); i++) await sleep(100);
 const real = await ev(`({ l1: document.querySelector('#cardL1').textContent, l2: document.querySelector('#cardL2').textContent, org: document.querySelector('#cardOrg').textContent,
   nb: document.querySelector('#cardNamed').textContent, seen: document.querySelector('#cardSeen').textContent, img: !document.querySelector('#cardImg').hidden,
-  cap: document.querySelector('#cardCap').textContent, cr: document.querySelector('#cardCredit').textContent, eye: document.querySelector('#distEye').textContent })`);
+  cap: document.querySelector('#cardCap').textContent, cr: document.querySelector('#cardCredit').textContent })`);
 ok('real track: line 1 "<org> · <common name>", line 2 "Tag <id> · <name>"', real.l1 === 'OCEARCH · White shark' && real.l2 === 'Tag T-77 · Mary Lee', JSON.stringify(real));
 ok('real track: org and named-by come from the data', real.org === 'OCEARCH' && real.nb === 'Her tagging crew');
 ok('real track: last seen near Monterey Bay, no sample flag', /^Monterey Bay, CA · \d+ days? ago$/.test(real.seen), real.seen);
 ok('photo not of this individual is captioned "Species photo, not this individual" and credited', real.img && real.cap === 'Species photo, not this individual' && real.cr === 'Photo: Test Photographer', JSON.stringify(real));
-ok('eye distance is labelled for the animal (Shark\'s-eye)', real.eye === 'Shark\'s-eye', real.eye);
 await ev(`(() => { const W = window.__wl; W.cur.photoIsIndividual = true; W.renderCard(true); })()`);
 for (let i = 0; i < 20 && (await ev(`document.querySelector('#cardImg').hidden`)); i++) await sleep(100);
 ok('photo of this very animal has no species caption', (await txt('#cardCap')) === '' && !(await ev(`document.querySelector('#cardImg').hidden`)));
-const xrp = await ev(`(() => { const W = window.__wl; W.paintCardXR(); const g = W.cardXR.cv.getContext('2d'), d = g.getImageData(0, 0, 1024, 512).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; })()`);
-ok('VR card panel paints (photo, text, path map)', xrp > 300000, String(xrp));
+// ---------------- the ONE VR card ----------------
+const vc = await ev(`(() => { const W = window.__wl; W.vrCard.open = false; W.paintVRCard();
+  const c = W.vrCard.cv, g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+  const h0 = c.height; W.vrCardPress('details'); W.paintVRCard(); const h1 = c.height; W.vrCardPress('details'); W.paintVRCard();
+  return { ink: n / (c.width * c.height), h0, h1, ids: W.vrCard.rects.map((r) => r.id).join(','), exit: !!W.vrCard.m.userData.exitRect, name: W.vrCard.m.name }; })()`);
+ok('VR card paints: identity, LOC / SIGNAL / VIEW, photo + details, Ride · Beside · Chase, Guide, Exit VR', vc.ink > 0.9 && vc.ids === 'details,view:ride,view:beside,view:chase,guide' && vc.exit, JSON.stringify(vc));
+ok('animal details open inside the same card (it grows; no second panel)', vc.h1 > vc.h0, JSON.stringify(vc));
+const vb = await ev(`(() => { const W = window.__wl, out = []; for (const v of W.VIEWS) { W.vrCardPress('view:' + v); out.push(W.view === undefined ? document.querySelector('.views .on').dataset.view : document.querySelector('.views .on').dataset.view); }
+  return { views: W.VIEWS.join(','), out: out.join(','), header: [...document.querySelectorAll('.views button')].map((b) => b.textContent).join(',') }; })()`);
+ok('views are exactly Ride / Beside / Chase (header and VR card buttons)', vb.views === 'ride,beside,chase' && vb.out === 'ride,beside,chase' && vb.header === 'Ride,Beside,Chase', JSON.stringify(vb));
+ok('no Wide or Close anywhere on the page', !(await ev(`/\\b(Wide|Close)\\b/.test(document.body.innerText) || !!document.querySelector('#dist, [data-dist]')`)));
 
 // ---------------- Naturalist Guide ----------------
 await ev(`window.__wl.selectTrack(window.__wl.tracks[0])`);
@@ -130,7 +138,10 @@ ok('CC off hides the captions', await ev(`document.querySelector('#cc').hidden`)
 await click('#ccBtn'); await click('#mute'); await sleep(150);
 const m = await ev(`({ t: document.querySelector('#mute').textContent, s: JSON.parse(localStorage.getItem('imhere.wildlife.guide')) })`);
 ok('Mute silences the voice and is remembered', m.t === 'Unmute' && m.s.voiceOn === false && m.s.cc === true, JSON.stringify(m));
-ok('VR caption copy matches the page caption', (await ev(`window.__wl.capXR.txt === document.querySelector('#ccText').textContent`)));
+ok('VR caption copy (shown on the VR card) matches the page caption', (await ev(`window.__wl.capXR.txt === document.querySelector('#ccText').textContent`)));
+const gc = await ev(`(() => { const W = window.__wl, h0 = (W.paintVRCard(), W.vrCard.cv.height); W.vrCardPress('guide'); W.paintVRCard(); const on = W.NARR.on, h1 = W.vrCard.cv.height;
+  W.vrCardPress('guide'); W.paintVRCard(); return { on, back: W.NARR.on, h0, h1 }; })()`);
+ok('Guide on / off from the VR card (captions get a row on the card)', gc.on !== gc.back && (gc.on ? gc.h1 > gc.h0 : gc.h1 < gc.h0), JSON.stringify(gc));
 // reload: the guide comes back on (remembered), captions on; then off is remembered too
 if (!(await load())) { console.error('FAIL reload'); done(1); }
 await sleep(500);
@@ -139,10 +150,21 @@ ok('after a reload the guide is still on (and still muted)', r2.on && r2.pressed
 await click('#guideBtn'); await sleep(200);
 const r3 = await ev(`({ on: window.__wl.NARR.on, cc: document.querySelector('#cc').hidden, mute: document.querySelector('#mute').hidden, s: JSON.parse(localStorage.getItem('imhere.wildlife.guide')) })`);
 ok('Guide off: captions gone, choice saved', !r3.on && r3.cc && r3.mute && r3.s.on === false, JSON.stringify(r3));
-// distance control is in Ride and Chase, not in Map, and remembered
-await click('#dist button[data-dist="wide"]'); await ev(`window.__wl.setView('map')`);
-const dm = await ev(`({ hidden: document.querySelector('#dist').hidden, s: JSON.parse(localStorage.getItem('imhere.wildlife.dist')) })`);
-ok('distance control: hidden on the Map, choice remembered per view', dm.hidden && dm.s.ride === 'wide' && dm.s.chase === 'close', JSON.stringify(dm));
+// Map is its own button (not a view); Chase drag moves the camera around the animal and keeps it
+await click('#mapBtn');
+const mp = await ev(`({ map: !document.querySelector('#map').hidden, on: document.querySelector('#mapBtn').getAttribute('aria-pressed') })`);
+await click('#mapBtn');
+const mb = await ev(`({ map: !document.querySelector('#map').hidden, view: document.querySelector('.views .on') && document.querySelector('.views .on').dataset.view })`);
+ok('Map button opens the map and goes back to the last view', mp.map && mp.on === 'true' && !mb.map && mb.view === 'ride', JSON.stringify([mp, mb]));
+const dr = await ev(`(async () => { const W = window.__wl; W.setView('chase'); const a = { ...W.orbit }; const cv = document.querySelector('#stage canvas'), r = cv.getBoundingClientRect();
+  return { a, r: [r.x + r.width / 2, r.y + r.height / 2] }; })()`);
+await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: dr.r[0], y: dr.r[1], button: 'left', clickCount: 1 });
+for (let k = 1; k <= 6; k++) await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: dr.r[0] + k * 20, y: dr.r[1] - k * 6, button: 'left', buttons: 1 });
+await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: dr.r[0] + 120, y: dr.r[1] - 36, button: 'left', clickCount: 1 });
+await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: dr.r[0], y: dr.r[1], deltaX: 0, deltaY: 300 });
+await sleep(300);
+const da = await ev('({ ...window.__wl.orbit })');
+ok('Chase on a screen: drag moves the camera around the animal, wheel sets the distance, kept after letting go', Math.abs(da.yaw - dr.a.yaw) > 0.3 && da.pitch < dr.a.pitch && da.dist > dr.a.dist, JSON.stringify([dr.a, da]));
 const bad = logs.filter((l) => !/WebGL|GPU|swiftshader/i.test(l));
 ok('no page exceptions', !bad.length, bad.slice(0, 3).join(' | '));
 if (fails.length) { console.error('\nFAIL\n' + fails.join('\n')); done(1); }

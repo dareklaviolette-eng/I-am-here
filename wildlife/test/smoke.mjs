@@ -29,7 +29,7 @@ globalThis.document = { querySelector: s => (els[s] ||= el()), querySelectorAll:
 Object.assign(globalThis, { innerWidth: 1200, innerHeight: 800, devicePixelRatio: 2,
   addEventListener: (k, fn) => (listeners[k] ||= []).push(fn), window: globalThis });
 let loopFn = null;
-mod = mod.replace('renderer.setAnimationLoop(frame);', 'renderer.setAnimationLoop(frame); globalThis.__frame = frame; globalThis.__api = { setView, selectTrack, tracks, loadFiles, seek, S, st, cam, get cur(){return cur}, get world(){return world}, setPlay, setDist, setGuide, narrate, renderCard };');
+mod = mod.replace('renderer.setAnimationLoop(frame);', 'renderer.setAnimationLoop(frame); globalThis.__frame = frame; globalThis.__api = { setView, selectTrack, tracks, loadFiles, seek, S, st, cam, get cur(){return cur}, get world(){return world}, setPlay, setGuide, narrate, renderCard, orbit, orbitZoom, chaseDrag, VIEWS };');
 // expose toast errors
 mod = mod.replace("function toast(msg, ms = 4500) {", "function toast(msg, ms = 4500) { globalThis.__toasts = (globalThis.__toasts||[]).concat(msg);");
 const tmp = fs.mkdtempSync('/tmp/wls-'); fs.writeFileSync(path.join(tmp, 'app.mjs'), mod);
@@ -38,13 +38,15 @@ const A = globalThis.__api, F = globalThis.__frame;
 const run = (n) => { for (let i = 0; i < n; i++) F(); };
 const check = (label) => { const bad = (globalThis.__toasts || []).filter(t => /went wrong|Could not/.test(t)); if (bad.length) { console.error('FAIL', label, bad); process.exit(1); } console.log('ok -', label); };
 run(5); check('boot eagle sample + frames (ride)');
-for (const v of ['chase', 'map', 'ride']) { A.setView(v); run(3); check('view ' + v); }
+if (JSON.stringify(A.VIEWS) !== JSON.stringify(['ride', 'beside', 'chase'])) { console.error('FAIL views are not exactly Ride / Beside / Chase', A.VIEWS); process.exit(1); }
+for (const v of ['beside', 'chase', 'map', 'ride']) { A.setView(v); run(3); check('view ' + v); }
 A.seek(A.cur.t0 + (A.cur.t1 - A.cur.t0) * 0.5); run(3); check('seek');
 A.selectTrack(A.tracks[1]); run(5); check('shark sample, world=' + A.world.mode);
 A.setView('chase'); run(3); A.setView('map'); run(2); check('shark chase/map');
 for (const tr of [A.tracks[1], A.tracks[0]]) { A.selectTrack(tr);
-  for (const v of ['ride', 'chase']) for (const d of ['wide', 'alongside', 'close', 'eye']) { A.setView(v); A.setDist(d); run(3); } }
-check('every camera distance in Ride and Chase, both samples');
+  for (const v of ['ride', 'beside', 'chase']) { A.setView(v); run(3); }
+  A.setView('chase'); A.chaseDrag(120, -40); A.orbitZoom(0.5); run(3); A.orbitZoom(4); run(3); }
+check('Ride, Beside and Chase (with a drag and zoom), both samples');
 A.setGuide(true, true); A.narrate('A test line. With two sentences.'); run(5); A.renderCard(true); A.setGuide(false, false); run(2);
 check('guide on / narrate / card / guide off');
 // VR comfort: on the eagle at x10, the ride camera yaw never turns faster than 30 deg/s and holds while circling
