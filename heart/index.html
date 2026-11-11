@@ -31,13 +31,15 @@
     border:1px solid var(--line) !important; background:var(--glass) !important; color:var(--ink) !important; font:13px system-ui, sans-serif !important; opacity:1 !important; min-height:38px; }
   #bottom { position:fixed; left:0; right:0; bottom:0; padding:0 12px calc(12px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; }
   #bottom > * { pointer-events:auto; }
-  #card { width:min(640px, 100%); background:var(--glass); border:1px solid var(--line); border-radius:16px; padding:12px 16px 12px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
-  #card .row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
-  #card h2 { margin:0; font-size:18px; font-weight:650; }
-  #card .step { font-size:12px; color:var(--dim); white-space:nowrap; }
-  #card p { margin:4px 0 0; color:#ead9d6; font-size:14.5px; }
-  #rhythm { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12.5px; color:var(--dim); min-height:30px; }
-  #ecg { width:120px; height:30px; flex:none; }
+  /* closed captions: the narrator's words, one line at a time, bottom centre */
+  #cc { max-width:min(720px, 100%); min-height:0; text-align:center; pointer-events:none !important; }
+  #cc span { display:inline; padding:3px 10px; line-height:1.55; font-size:17px; font-weight:500; color:#fff; background:rgba(0,0,0,.72); border-radius:6px;
+    -webkit-box-decoration-break:clone; box-decoration-break:clone; text-shadow:0 1px 2px rgba(0,0,0,.6); }
+  #cc[hidden], #cc span:empty { display:none; }
+  .sr { position:absolute !important; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; }
+  .txt { width:auto; min-width:40px; padding:0 10px; font-size:12.5px; font-weight:700; letter-spacing:.04em; }
+  #rhythm { display:flex; align-items:center; gap:8px; background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:4px 12px; min-height:38px; font-size:12px; color:var(--dim); }
+  #ecg { width:90px; height:26px; flex:none; }
   #controls { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; width:min(640px, 100%); }
   .hr { display:flex; align-items:center; gap:8px; background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:4px 14px; min-height:38px; font-size:13px; }
   .hr input { width:120px; accent-color:var(--accent); }
@@ -64,12 +66,13 @@
   .note { font-size:13px; color:var(--dim); }
   @media (max-width:560px) {
     .brand { display:none; }   /* phone: the I'M HERE label names the experience */
-    #card h2 { font-size:16px; } #card p { font-size:13.5px; }
+    #cc span { font-size:15.5px; }
+    #phase { display:none; }
     .hr input { width:90px; }
     #ecg { width:90px; }
     .seg button { padding:5px 11px; }
   }
-  @media (max-height:520px) { #card p { display:none; } #rhythm { display:none; } }
+  @media (max-height:520px) { #rhythm { display:none; } #cc span { font-size:15px; } }
 </style>
 <script type="importmap">
 { "imports": {
@@ -90,17 +93,15 @@
   </div>
   <div class="tools">
     <span id="vrslot"></span>
-    <button id="narr" class="icon on" title="Narration (on)" aria-label="Narration" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1zm3 5v2h2V9H7zm4 0v2h2V9h-2zm4 0v2h2V9h-2z"/></svg></button>
-    <button id="snd" class="icon" title="Heart sounds (off)" aria-label="Toggle heart sounds" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg></button>
+    <button id="mute" class="txt" title="Mute the narrator (captions keep going)" aria-label="Mute narrator" aria-pressed="false">Mute</button>
+    <button id="ccBtn" class="txt on" title="Captions (on)" aria-label="Captions" aria-pressed="true">CC</button>
+    <button id="snd" class="icon" title="Heart sounds (off)" aria-label="Toggle heart sounds" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M12 20s-6.4-3.9-8.2-7.9C2.5 9.2 4.3 6 7.4 6c1.8 0 3 1 4.6 2.7C13.6 7 14.8 6 16.6 6c3.1 0 4.9 3.2 3.6 6.1C18.4 16.1 12 20 12 20zM1 11h3l1.5-2.5 2 5 1.5-2.5h2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg></button>
     <button id="infoBtn" class="icon" title="About this model" aria-label="About this model"><svg viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg></button>
   </div>
 </div>
 <div id="bottom">
-  <div id="card" aria-live="polite">
-    <div class="row"><h2 id="stopTitle">Loading...</h2><span class="step" id="stepNo"></span></div>
-    <p id="stopText"></p>
-    <div id="rhythm"><canvas id="ecg" aria-hidden="true"></canvas><span id="phase"></span></div>
-  </div>
+  <div class="sr" aria-live="polite"><span id="stopTitle">Loading...</span> <span id="stepNo"></span></div>
+  <div id="cc" aria-hidden="true"><span id="ccText"></span></div>
   <div id="controls">
     <div class="ride-only">
       <button id="prev" class="icon" aria-label="Previous stop" title="Previous stop"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
@@ -113,6 +114,7 @@
       <output id="bpmOut">70</output> bpm
     </label>
     <button id="slow" title="Slow motion">Slow-mo</button>
+    <div id="rhythm" title="Simulated ECG and what the heart is doing now"><canvas id="ecg" aria-hidden="true"></canvas><span id="phase"></span></div>
     <div class="out-only">
       <button id="xray" title="See inside: chambers and valves">X-ray</button>
       <button id="lbl" class="on" title="Show labels">Labels</button>
@@ -122,7 +124,7 @@
 </div>
 <dialog id="info">
   <h3>About this model</h3>
-  <p><b>This is an illustrative model, not a scan of any patient.</b> What is simulated or simplified, and where each part comes from: tap the <b>I'M HERE</b> mark in the bottom corner.</p>
+  <p><b>This is an illustrative model, not a scan of any patient.</b> What is simulated or simplified, and where each part comes from: tap the <b>I'M HERE</b> label in the top-left corner, then <b>(i)</b>.</p>
   <p><b>The I'M HERE vision:</b> build this same ride from a patient's own imaging (CT, MRI or echo), so their doctor can take them through <i>their</i> heart - to show a leaky valve, a narrowed coronary artery or a planned repair, together.</p>
   <h4>What you are seeing</h4>
   <ul>
@@ -134,8 +136,9 @@
   <h4>How to use</h4>
   <ul>
     <li><b>Ride:</b> drag to look around; play/pause, previous/next stop; change the heart rate or use slow motion.</li>
+    <li><b>Narrator and captions:</b> <b>Mute</b> silences the voice (captions keep going); <b>CC</b> turns the captions on or off. Where you are, in plain words, is on the I'M HERE label: tap it to show it again.</li>
     <li><b>Outside:</b> drag to turn, pinch or scroll to zoom. X-ray shows the chambers (blue = oxygen-poor, red = oxygen-rich).</li>
-    <li><b>VR:</b> open in a headset browser and press Enter VR.</li>
+    <li><b>VR:</b> open in a headset browser and press Enter VR. Mute and CC are on the console below you.</li>
   </ul>
   <p class="note">For education only - not for diagnosis or treatment decisions.</p>
   <form method="dialog" style="text-align:right;margin-top:12px"><button>Close</button></form>
@@ -160,10 +163,21 @@
    In VR, xrPanel(THREE) draws the same label on a canvas (row labels use a 50% white fill there: hairline outlines
    alias and shimmer at headset panel scale).
 
+   Optional two-line identity (v4.1; pages that pass only `context` look exactly as before):
+       I'M HERE                                   (i)  ×
+       Health · Cardiovascular system                        <- line1: provider · type (11px, white 60%)
+       Entering the heart from your upper body               <- line2: where you are, plain English (13px, white 92%)
+       superior vena cava                                    <- line2small: the technical term (10px, white 45%)
+       LOC / SIGNAL / VIEW rows as above
+
    API
-     ImHereMark.init({ context, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.init({ context, line1, line2, line2small, about, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
      ImHereMark.update({ ...same keys })
         context   e.g. 'SWA 444 · 737-800 · approach BNA', 'ISS · over Pacific Ocean', 'Heart · stop 1 of 10'
+        line1     optional identity line 1 (provider · type); replaces `context` when given
+        line2     optional identity line 2: where you are, in plain English
+        line2small optional smaller, dimmer line under line2 (e.g. the medical or technical term)
+        about     optional { title, text } shown at the top of the (i) details (e.g. the current stop, in plain words)
         loc       place, e.g. 'Nashville, TN'
         signal    { source, time }  -> "source, live" while setLive(true), else "source, 3 hrs ago"
                   { source, date }  -> "GPS track, 3 May 2008"      { text } -> 'Demo data', 'Fixed camera', ...
@@ -210,6 +224,9 @@
     '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
     '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
     '.imh-r2{margin-top:1px;font-weight:400;font-size:11px;color:rgba(255,255,255,.6);overflow-wrap:anywhere}' +   /* context line */
+    '.imh-id2{margin-top:2px;font-weight:500;font-size:13px;line-height:1.25;color:rgba(255,255,255,.92);overflow-wrap:anywhere}' +   /* identity line 2 */
+    '.imh-id3{margin-top:1px;font-size:10px;line-height:1.2;color:rgba(255,255,255,.45);overflow-wrap:anywhere}' +   /* its technical term */
+    '.imh-ab{margin-top:5px;font-size:11.5px;line-height:1.35;color:#e8eef4}.imh-ab b{display:block;font-size:12px;color:#fff;margin-bottom:1px}' +
     '.imh-rows{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;margin:5px 0 0}' +
     '.imh-l{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:transparent;' +
     '-webkit-text-stroke:.5px rgba(255,255,255,.65);text-stroke:.5px rgba(255,255,255,.65);white-space:nowrap}' +
@@ -233,10 +250,10 @@
     '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
     '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
 
-  var S = { context: '', loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
+  var S = { context: '', line1: '', line2: '', line2small: '', about: null, loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
     sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
   var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
-  var box, mini, miniLive, r2, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
+  var box, mini, miniLive, r2, id2, id3, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function fmtAge(ms) {   // "3 s ago", "14 min ago", "3 hrs ago", "5 days ago", "7 yrs ago"
@@ -255,7 +272,8 @@
     if (!href) return document.createTextNode(text);
     var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
   }
-  function line2() { return S.context || ''; }
+  function line2() { return S.line1 || S.context || ''; }   // identity line 1 (historically "line 2" of the card, under the watermark)
+  function idLines() { return [line2(), S.line2 || '', S.line2 ? S.line2small || '' : '']; }
   function fmtDay(ms) { var d = new Date(ms); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
   // SIGNAL value as [text, liveWordShown]: "source, live" only while setLive(true)
   function signalParts() {
@@ -268,17 +286,22 @@
   }
   function rows() { var sp = signalParts(); return [['LOC', S.loc || 'None'], ['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]; }
   function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
-  function label() { return "I'M HERE. " + line2() + '. ' + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
+  function label() {
+    var L = idLines(), id = L[0] + '. ' + (L[1] ? L[1] + (L[2] ? ' (' + L[2] + ')' : '') + '. ' : '');
+    return "I'M HERE. " + id + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
 
   function render() {
     if (!S.mounted) return;
     var R = rows();
-    var sig = JSON.stringify([line2(), R, S.dismissed, S.srcOpen, S.live]);
+    var L = idLines();
+    var sig = JSON.stringify([L, R, S.dismissed, S.srcOpen, S.live]);
     if (sig !== lastSig) {
       lastSig = sig;
       box.hidden = S.dismissed; mini.hidden = !S.dismissed; miniLive.hidden = !S.live;
       box.classList.toggle('imh-wide', S.srcOpen);
-      r2.textContent = line2(); r2.hidden = !line2(); r2.title = line2();
+      r2.textContent = L[0]; r2.hidden = !L[0]; r2.title = L[0];
+      id2.textContent = L[1]; id2.hidden = !L[1];
+      id3.textContent = L[2]; id3.hidden = !L[2];
       rowsEl.textContent = '';
       R.forEach(function (r) {
         rowsEl.appendChild(el('span', 'imh-l', r[0] + ':'));
@@ -298,7 +321,11 @@
   function renderSources() {
     if (!S.mounted || !S.srcOpen) return;
     var now = Date.now(), frag = document.createDocumentFragment();
-    var st = (S.stats || []).filter(Boolean);
+    if (S.about && (S.about.title || S.about.text)) {
+      var ab = el('div', 'imh-ab'); if (S.about.title) ab.appendChild(el('b', null, S.about.title));
+      if (S.about.text) ab.appendChild(document.createTextNode(S.about.text)); frag.appendChild(ab);
+    }
+    var st =(S.stats || []).filter(Boolean);
     if (st.length) {
       var r3 = el('div', 'imh-r3');
       st.forEach(function (s) { var d = el('div', 'imh-st'); d.appendChild(el('i', null, s[0])); d.appendChild(el('b', null, s[1] == null || s[1] === '' ? '–' : String(s[1]))); r3.appendChild(d); });
@@ -392,6 +419,8 @@
     button(x, function () { setDismissed(true, true); });
     r1.appendChild(x); box.appendChild(r1);
     r2 = el('div', 'imh-r2'); box.appendChild(r2);
+    id2 = el('div', 'imh-id2'); id2.hidden = true; box.appendChild(id2);
+    id3 = el('div', 'imh-id3'); id3.hidden = true; box.appendChild(id3);
     rowsEl = el('div', 'imh-rows'); box.appendChild(rowsEl);
     var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
     more.addEventListener('mouseenter', function () {
@@ -418,7 +447,8 @@
   }
   function apply(o) {
     if (!o) return;
-    ['context', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.about !== undefined) S.about = o.about && typeof o.about === 'object' ? { title: String(o.about.title || ''), text: String(o.about.text || '') } : null;
+    ['context', 'line1', 'line2', 'line2small', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
     if (o.signal !== undefined) S.signal = o.signal;
     if (o.stats) S.stats = [].concat(o.stats);
     if (o.tag !== undefined) S.tag = o.tag;
@@ -431,17 +461,31 @@
   // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
   function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  function xrHeight() { var L = idLines(); return 262 + (L[1] ? 42 : 0) + (L[2] ? 30 : 0); }
+  function xrResize(H) {   // two-line identity makes the panel taller: new canvas texture (GPU storage is fixed-size) + geometry
+    var T = xr.THREE, c = xr.canvas; c.height = H;
+    var tex = new T.CanvasTexture(c); if (T.SRGBColorSpace) tex.colorSpace = T.SRGBColorSpace;
+    xr.meshes.forEach(function (m) {
+      m.material.map = tex; m.material.needsUpdate = true;
+      var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / 512);
+    });
+    xr.tex.dispose(); xr.tex = tex;
+  }
   function drawXR() {
     if (!xr) return;
-    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height;
+    if (xr.canvas.height !== xrHeight()) xrResize(xrHeight());
+    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height, L = idLines();
     g.clearRect(0, 0, W, H);
     g.fillStyle = 'rgba(10,18,32,0.72)'; rr(g, 3, 3, W - 6, H - 6, 18); g.fill();   // a little denser in VR for legibility
     g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
     g.textBaseline = 'alphabetic';
     g.save(); g.fillStyle = 'rgba(255,255,255,0.3)'; g.font = '400 22px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '6px'; g.fillText("I'M HERE", 28, 46); g.restore();
-    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, line2(), W - 56), 28, 88);
+    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, L[0], W - 56), 28, 88);
+    var y = 140;
+    if (L[1]) { g.fillStyle = 'rgba(255,255,255,0.92)'; g.font = '500 30px ' + FONT; g.fillText(fit(g, L[1], W - 56), 28, 128); y += 42; }
+    if (L[2]) { g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + FONT; g.fillText(fit(g, L[2], W - 56), 28, 158); y += 30; }
     // labels: translucent fill in VR (a 0.5px outline aliases/shimmers at headset panel scale); values solid white
-    var R = rows(), lx = 28, vx = 0, y = 140;
+    var R = rows(), lx = 28, vx = 0;
     g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px';
     R.forEach(function (r) { vx = Math.max(vx, g.measureText(r[0] + ':').width); });
     vx += lx + 22;
@@ -459,12 +503,13 @@
   function xrPanel(THREE, o) {
     o = o || {};
     if (!xr) {
-      var c = document.createElement('canvas'); c.width = 512; c.height = 262;
+      var c = document.createElement('canvas'); c.width = 512; c.height = xrHeight();
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-      xr = { canvas: c, tex: tex };
+      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [] };
     }
     var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
-    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 262 / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * xr.canvas.height / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    m.userData.imhW = w; xr.meshes.push(m);
     m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
     m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
     m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
@@ -1061,17 +1106,39 @@ const PATH_KNOTS = [
   { p: [1.6, 7.0, -2.7] },
   { p: [2.6, 5.9, -5.0] },
 ];
+// Per stop: medical title (shown small as the term), plain-English line, LOC phrase, oxygen state, short on-demand text,
+// and the narration script (spoken and captioned word for word: calm, plain, scientifically accurate).
 const STOPS = {
-  svc: { title: 'Superior vena cava', text: 'Oxygen-poor blood from your head and arms flows down this large vein into the heart. Blood here is dark red - never actually blue.' },
-  ra: { title: 'Right atrium', text: 'A collecting chamber. Blood arrives from the upper body (above) and lower body (the inferior vena cava, below). A gentle squeeze tops up the ventricle.' },
-  rv: { title: 'Right ventricle', text: 'We passed the tricuspid valve - three leaflets held by cord-like "heart strings". This chamber pumps blood a short, low-pressure trip to the lungs.' },
-  pa: { title: 'Pulmonary artery', text: 'The pulmonary valve snaps shut behind us so blood cannot fall back. Unusually for an artery, it carries oxygen-poor blood - to the lungs.' },
-  lung: { title: 'Lungs (simplified)', text: 'In tiny vessels wrapped around air sacs, carbon dioxide leaves the blood and oxygen joins it. Watch the cells turn bright red.' },
-  pv: { title: 'Pulmonary vein', text: 'Fresh, oxygen-rich blood heads back to the heart. Four pulmonary veins enter the left atrium - with no valves at their openings.' },
-  la: { title: 'Left atrium', text: 'The left-side collecting chamber, sitting at the back of the heart. Ahead is the mitral valve, which has two leaflets.' },
-  lv: { title: 'Left ventricle', text: 'The main pump. Its wall is about 1 cm thick - roughly three times the right side - because it pushes blood around the whole body.' },
-  root: { title: 'Aortic valve & coronaries', text: 'Through the aortic valve. Just above it, two small openings lead to the coronary arteries, which feed the heart muscle itself.' },
-  arch: { title: 'Aortic arch', text: 'The body\'s largest artery. Branches overhead go to the head and arms; the rest curves down to feed every organ. End of the ride - each beat repeats it.' },
+  svc: { title: 'Superior vena cava', plain: 'Entering the heart from your upper body', term: 'superior vena cava', loc: 'Large vein just above the heart', oxy: 'poor',
+    text: 'Oxygen-poor blood from your head and arms flows down this large vein into the heart. Blood here is dark red - never actually blue.',
+    say: 'We are entering the heart from your upper body, through a large vein called the superior vena cava. This blood has already given its oxygen to your head and arms, so it is dark red. Blood is never actually blue.' },
+  ra: { title: 'Right atrium', plain: 'Top right chamber: collecting used blood', term: 'right atrium', loc: 'Inside the heart, right side', oxy: 'poor',
+    text: 'A collecting chamber. Blood arrives from the upper body (above) and lower body (the inferior vena cava, below). A gentle squeeze tops up the ventricle.',
+    say: 'This is the top right chamber, the right atrium. It collects used blood, low in oxygen, from the upper body above us and from the lower body below. A gentle squeeze tops up the chamber beneath it.' },
+  rv: { title: 'Right ventricle', plain: 'Bottom right chamber: pumping to the lungs', term: 'right ventricle', loc: 'Inside the heart, right side', oxy: 'poor',
+    text: 'We passed the tricuspid valve - three leaflets held by cord-like "heart strings". This chamber pumps blood a short, low-pressure trip to the lungs.',
+    say: 'We have passed the tricuspid valve, three thin flaps held in place by fine cords. This is the bottom right chamber, the right ventricle. It pumps blood a short distance, at low pressure, to the lungs.' },
+  pa: { title: 'Pulmonary artery', plain: 'Heading to the lungs for fresh oxygen', term: 'pulmonary artery', loc: 'Leaving the heart, toward the lungs', oxy: 'poor',
+    text: 'The pulmonary valve snaps shut behind us so blood cannot fall back. Unusually for an artery, it carries oxygen-poor blood - to the lungs.',
+    say: 'The pulmonary valve closes behind us, so blood cannot flow back. We are in the pulmonary artery, heading to the lungs. Unusually for an artery, it carries blood that is low in oxygen.' },
+  lung: { title: 'Lungs (simplified)', plain: 'In the lungs: picking up oxygen', term: 'lung capillaries (simplified)', loc: 'In the lungs', oxy: 'loading',
+    text: 'In tiny vessels wrapped around air sacs, carbon dioxide leaves the blood and oxygen joins it. Watch the cells turn bright red.',
+    say: 'In the lungs, blood flows through tiny vessels wrapped around air sacs. Carbon dioxide leaves the blood, and oxygen comes in. Watch the cells turn bright red.' },
+  pv: { title: 'Pulmonary vein', plain: 'Back from the lungs, full of oxygen', term: 'pulmonary vein', loc: 'Between the lungs and the heart', oxy: 'rich',
+    text: 'Fresh, oxygen-rich blood heads back to the heart. Four pulmonary veins enter the left atrium - with no valves at their openings.',
+    say: 'Now the blood is full of oxygen, and it returns to the heart through the pulmonary veins. There are usually four of them, and they have no valves where they enter the heart.' },
+  la: { title: 'Left atrium', plain: 'Top left chamber: collecting fresh blood', term: 'left atrium', loc: 'Inside the heart, left side', oxy: 'rich',
+    text: 'The left-side collecting chamber, sitting at the back of the heart. Ahead is the mitral valve, which has two leaflets.',
+    say: 'This is the top left chamber, the left atrium, at the back of the heart. It collects the fresh blood from the lungs. Ahead of us is the mitral valve, which has two flaps.' },
+  lv: { title: 'Left ventricle', plain: 'The main pump: left side, strongest muscle', term: 'left ventricle', loc: 'Inside the heart, left side', oxy: 'rich',
+    text: 'The main pump. Its wall is about 1 cm thick - roughly three times the right side - because it pushes blood around the whole body.',
+    say: 'This is the main pump, the left ventricle. Its wall is about one centimetre thick, roughly three times the right side, because it pushes blood around the whole body.' },
+  root: { title: 'Aortic valve & coronaries', plain: 'Leaving the heart through the aortic valve', term: 'aortic valve and coronary arteries', loc: 'Where the aorta leaves the heart', oxy: 'rich',
+    text: 'Through the aortic valve. Just above it, two small openings lead to the coronary arteries, which feed the heart muscle itself.',
+    say: 'We pass through the aortic valve and leave the heart. Just above the valve, two small openings lead to the coronary arteries. They feed the heart muscle itself.' },
+  arch: { title: 'Aortic arch', plain: 'Out to the whole body through the aorta', term: 'aortic arch', loc: 'Main artery, just above the heart', oxy: 'rich',
+    text: 'The body\'s largest artery. Branches overhead go to the head and arms; the rest curves down to feed every organ. End of the ride - each beat repeats it.',
+    say: 'This is the aortic arch, part of the largest artery in the body. Branches above us go to the head and arms. The rest curves down to feed every organ. That is one full trip, and every heartbeat repeats it.' },
 };
 const STOP_ORDER = ['svc', 'ra', 'rv', 'pa', 'lung', 'pv', 'la', 'lv', 'root', 'arch'];
 
@@ -1612,11 +1679,11 @@ async function main() {
   const marker = new THREE.Mesh(new THREE.SphereGeometry(0.35, 20, 14), new THREE.MeshBasicMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.9, depthTest: false }));
   marker.renderOrder = 999; heart.add(marker);
 
-  // VR caption (only shown inside a headset, where the HTML card is invisible)
-  const capCanvas = document.createElement('canvas'); capCanvas.width = 1024; capCanvas.height = 256;
+  // VR closed captions (only inside a headset, where the HTML strip is invisible): low, centred, fixed to your body, not your head
+  const capCanvas = document.createElement('canvas'); capCanvas.width = 1024; capCanvas.height = 160;
   const capTex = new THREE.CanvasTexture(capCanvas); capTex.colorSpace = THREE.SRGBColorSpace;
-  const caption = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({ map: capTex, transparent: true, depthTest: false }));
-  caption.position.set(0, -0.35, -1.3); caption.renderOrder = 1000; caption.visible = false;
+  const caption = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1 * 160 / 1024), new THREE.MeshBasicMaterial({ map: capTex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+  caption.position.set(0, -0.3, -1.3); caption.renderOrder = 1000; caption.visible = false; caption.frustumCulled = false;
   dolly.add(caption);
   // I'M HERE watermark + source card (shared/imhere-mark.js, inlined in the page). Nothing here is live.
   const MARK = window.ImHereMark;
@@ -1628,28 +1695,29 @@ async function main() {
     { kind: 'illustrative', label: 'Lungs', source: 'Shown as a single simplified loop' },
     { kind: 'simulated', label: 'ECG trace and heart sounds', source: 'Generated in the page to match the simulated beat; not recorded from a person' },
   ];
+  // Label: watermark, then identity line 1 (I'M HERE Health · what this is), identity line 2 (where you are, plain English)
+  // with the medical term small beneath it, then LOC / SIGNAL / VIEW. Nothing here is live, so "live" is never shown.
+  const OXY = { poor: 'Oxygen-poor', loading: 'Picking up oxygen', rich: 'Oxygen-rich' };
+  function where() {   // [plain line, medical term, LOC, short on-demand text, oxygen]
+    if (S.mode === 'ride') { const st = A.STOPS[ride.stopId];
+      return [st.plain, st.term, st.loc, 'Stop ' + (ride.i + 1) + ' of ' + A.STOP_ORDER.length + '. ' + st.text, OXY[st.oxy]]; }
+    if (dive) return ['Diving in from your upper body', 'superior vena cava', 'Just outside the heart', DIVE_TEXT, OXY.poor];
+    if (S.intro) return ['Your heart tour: the whole heart, from outside', 'heart and great vessels', 'Outside the heart', 'The tour starts here, then dives in through a large vein from the upper body.', '–'];
+    return S.xray
+      ? ['Outside the heart, seeing inside', 'X-ray view: chambers and valves', 'Outside the heart', 'Blue spaces carry oxygen-poor blood (right side), red spaces oxygen-rich blood (left side). Watch the valves open and close.', '–']
+      : ['Outside the heart', 'heart and great vessels', 'Outside the heart', 'Drag to turn the heart; pinch or scroll to zoom. The red vessels on the surface are the coronary arteries that feed the heart muscle.', '–'];
+  }
   function refreshMark() {
     if (!MARK) return;
-    const ride_ = S.mode === 'ride';
-    MARK.update({ context: 'Heart · ' + (ride_ ? 'stop ' + (ride.i + 1) + ' of ' + A.STOP_ORDER.length : dive ? 'diving in' : S.xray ? 'outside, X-ray' : 'outside view'),
-      loc: ride_ ? $('stopTitle').textContent : 'Outside the heart', signal: { text: 'Illustrative model' }, view: '3D render',
+    const w = where();
+    MARK.update({ line1: 'Health · Cardiovascular system', line2: w[0], line2small: w[1], about: { title: w[0], text: w[3] },
+      loc: w[2], signal: { text: 'Illustrative model' }, view: '3D render',
       tag: { text: 'Illustrative model', kind: 'illustrative' },
       sceneNote: 'Computer-rendered model: not AI-generated, and not a scan, medical image or video of any patient.',
-      stats: [['Rate', S.bpm + ' bpm'], ['Motion', S.slow ? 'Slow-mo' : 'Real speed'], ['Blood', ride_ ? (/(left|pulmonary vein|aort)/i.test($('stopTitle').textContent) ? 'Oxygen-rich' : 'Oxygen-poor') : '–']],
+      stats: [['Rate', S.bpm + ' bpm'], ['Motion', S.slow ? 'Slow-mo' : 'Real speed'], ['Blood', w[4]]],
       items: markItems(S.bpm) });
   }
-  if (MARK) MARK.init({ context: 'Heart', below: ['#top'] });
-  function drawCaption(title, text) {
-    const g = capCanvas.getContext('2d');
-    g.clearRect(0, 0, 1024, 256);
-    g.fillStyle = 'rgba(20,6,8,0.78)'; if (g.roundRect) { g.beginPath(); g.roundRect(8, 8, 1008, 240, 36); g.fill(); } else g.fillRect(8, 8, 1008, 240);
-    g.fillStyle = '#fff'; g.font = '600 54px system-ui, sans-serif'; g.fillText(title, 40, 84);
-    g.fillStyle = '#ead9d6'; g.font = '34px system-ui, sans-serif';
-    const words = text.split(' '); let line = '', y = 140;
-    for (const w of words) { if (g.measureText(line + w).width > 940) { g.fillText(line, 40, y); line = ''; y += 44; if (y > 230) break; } line += w + ' '; }
-    if (y <= 230) g.fillText(line, 40, y);
-    capTex.needsUpdate = true;
-  }
+  if (MARK) MARK.init({ line1: 'Health · Cardiovascular system', line2: 'Your heart tour', loc: 'Outside the heart', below: ['#top'] });
 
   // ---------------------------------------------------------------- state & UI
   const ride = new A.Ride(path);
@@ -1666,18 +1734,31 @@ async function main() {
   const dots = $('dots');
   A.STOP_ORDER.forEach((id, i) => {
     const b = document.createElement('button');
-    b.setAttribute('aria-label', 'Go to stop ' + (i + 1) + ': ' + A.STOPS[id].title); b.title = A.STOPS[id].title;
+    b.setAttribute('aria-label', 'Go to stop ' + (i + 1) + ': ' + A.STOPS[id].plain); b.title = A.STOPS[id].plain + ' (' + A.STOPS[id].term + ')';
     b.addEventListener('click', () => { flash(); ride.goto(i); });
     dots.appendChild(b);
   });
   let shownStop = null, spokenStop = null, dive = null;
+  // narration scripts (English; spoken and captioned word for word). Stop scripts live in A.STOPS[id].say.
   const INTRO_TEXT = 'This is your tour through the heart and the cardiovascular system. In front of you is a typical adult heart, ' +
-    'beating about seventy times a minute. In a moment we will dive in through the superior vena cava, the large vein that returns blood ' +
-    'from the upper body, and follow the blood through all four chambers, the lungs, and out into the aorta.';
-  const DIVE_TEXT = 'Entering the superior vena cava. Blood from the head and arms is carried down into the right atrium.';
+    'beating about seventy times a minute. Your heart has two sides. The right side sends blood to the lungs to pick up oxygen. ' +
+    'The left side sends that fresh blood to the rest of your body. In a moment, we will dive in through a large vein from your upper body, ' +
+    'and follow the blood through all four chambers, through the lungs, and out into the aorta, the main artery of the body.';
+  const DIVE_TEXT = 'Diving in now. Blood from your head and arms flows down this vein, into the heart.';
 
-  // ---------------------------------------------------------------- narration (Web Speech API; silent text-only fallback)
-  const NARR = { ok: 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function', on: true, voice: null, speaking: false, last: '', started: false };
+  // ---------------------------------------------------------------- narration + closed captions
+  // The same script is spoken (Web Speech API) and captioned, one short line at a time, bottom centre.
+  // Spoken sentence by sentence (some engines cut off long utterances). Captions follow the voice: word-boundary events where
+  // the voice sends them; otherwise each sentence's lines are timed by length from the moment that sentence starts.
+  // Muted, or no speech on this device: the captions run on a reading timer instead. The ride waits at a stop until the
+  // narration (voice, or captions when muted) has finished.
+  const CPS = 14.5;   // reading pace (about 150 words a minute at the narrator's calm rate)
+  const lineMax = () => Math.max(32, Math.min(62, Math.floor((Math.min(innerWidth, 720) - 44) / 8.7)));   // caption line fits one row
+  const NARR = { ok: 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function', voice: null,
+    voiceOn: true, cc: true, last: '', started: false, speaking: false,
+    sents: [], si: 0, li: 0, gen: 0, mode: 'idle', t0: 0, bnd: false, gotStart: false, reqAt: 0, holdUntil: 0, shown: null };
+  try { const p = JSON.parse(localStorage.getItem('imhere.heart.narr') || '{}'); if (p.voiceOn === false) NARR.voiceOn = false; if (p.cc === false) NARR.cc = false; } catch (e) { /* private mode */ }
+  const savePrefs = () => { try { localStorage.setItem('imhere.heart.narr', JSON.stringify({ voiceOn: NARR.voiceOn, cc: NARR.cc })); } catch (e) { /* private mode */ } };
   function pickVoice() {
     if (!NARR.ok) return null;
     const vs = speechSynthesis.getVoices().filter((v) => /^en([-_]|$)/i.test(v.lang));
@@ -1686,38 +1767,134 @@ async function main() {
     return vs.sort((x, y) => score(y) - score(x))[0] || null;
   }
   if (NARR.ok) { NARR.voice = pickVoice(); try { speechSynthesis.addEventListener('voiceschanged', () => { NARR.voice = pickVoice(); }); } catch (e) { /* old API */ } }
-  function say(text) {
-    NARR.last = text; NARR.started = false;
-    if (!NARR.ok || !NARR.on) return;
+  // script -> sentences -> caption lines (with character offsets inside the sentence, for boundary events)
+  function captionLines(sent) {
+    const LINE_MAX = lineMax(), words = sent.split(' '), out = []; let line = '', from = 0, pos = 0;
+    for (const w of words) {
+      if (line && (line.length + 1 + w.length > LINE_MAX || (/[,;:]$/.test(line) && line.length > LINE_MAX * 0.55))) { out.push({ text: line, a: from, b: pos - 1 }); line = ''; from = pos; }
+      line = line ? line + ' ' + w : w; pos += w.length + 1;
+    }
+    if (line) out.push({ text: line, a: from, b: sent.length });
+    if (out.length > 1 && out[out.length - 1].text.split(' ').length === 1) { const l = out.pop(), p = out[out.length - 1]; p.text += ' ' + l.text; p.b = l.b; }   // no orphan word
+    return out.map((l) => ({ ...l, dur: Math.max(1.3, l.text.length / CPS) }));
+  }
+  function script(text) {
+    return (text.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [text]).map((x) => x.trim()).filter(Boolean)
+      .map((t) => ({ text: t, lines: captionLines(t) }));
+  }
+  const now = () => performance.now() / 1000;
+  const sentDur = (i) => NARR.sents[i].lines.reduce((a, l) => a + l.dur, 0);
+  function narrate(text) {
+    NARR.last = text; NARR.sents = script(text); NARR.si = 0; NARR.li = 0; NARR.started = false;
+    if (NARR.ok && NARR.voiceOn) speakFrom(0); else timerFrom(0, 0);
+  }
+  function stopNarration() {
+    NARR.gen++; NARR.mode = 'idle'; NARR.speaking = false; NARR.holdUntil = 0; NARR.last = '';
+    if (NARR.ok) try { speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+    showCaption();
+  }
+  function finish() { NARR.mode = 'idle'; NARR.speaking = false; NARR.holdUntil = now() + 1.6; NARR.gen++; showCaption(); }
+  function timerFrom(si, li) {
+    NARR.gen++; NARR.mode = 'timer'; NARR.speaking = false; NARR.si = si; NARR.li = li; NARR.t0 = now();
+    if (si >= NARR.sents.length) finish(); else showCaption();
+  }
+  function speakFrom(si) {
+    if (si >= NARR.sents.length) { finish(); return; }
+    const g = ++NARR.gen;
+    NARR.mode = 'speech'; NARR.si = si; NARR.li = 0; NARR.t0 = now(); NARR.bnd = false; NARR.gotStart = false; NARR.reqAt = now(); NARR.speaking = false;
     try {
       speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      if (NARR.voice) { u.voice = NARR.voice; u.lang = NARR.voice.lang; } else u.lang = 'en-GB';
-      u.rate = 0.9; u.pitch = 0.95;   // calm, slightly slow
-      u.onstart = () => { NARR.speaking = true; NARR.started = true; };
-      u.onend = u.onerror = () => { NARR.speaking = false; };
-      speechSynthesis.speak(u);
-    } catch (e) { NARR.ok = false; }   // no speech here: text only
+      for (let i = si; i < NARR.sents.length; i++) {
+        const u = new SpeechSynthesisUtterance(NARR.sents[i].text);
+        if (NARR.voice) { u.voice = NARR.voice; u.lang = NARR.voice.lang; } else u.lang = 'en-GB';
+        u.rate = 0.9; u.pitch = 0.95;   // calm, slightly slow
+        u.onstart = () => { if (g !== NARR.gen) return; NARR.si = i; NARR.li = 0; NARR.t0 = now(); NARR.bnd = false; NARR.gotStart = true; NARR.speaking = true; NARR.started = true; showCaption(); };
+        u.onboundary = (e) => {
+          if (g !== NARR.gen || e.charIndex == null || i !== NARR.si) return;
+          NARR.bnd = true; const L = NARR.sents[i].lines; let k = 0;
+          while (k < L.length - 1 && e.charIndex >= L[k + 1].a) k++;
+          if (k > NARR.li) { NARR.li = k; showCaption(); }
+        };
+        u.onend = () => { if (g !== NARR.gen) return; if (i === NARR.sents.length - 1) finish(); };
+        u.onerror = (e) => {
+          if (g !== NARR.gen || (e && (e.error === 'interrupted' || e.error === 'canceled'))) return;
+          timerFrom(NARR.si, NARR.li);   // e.g. 'not-allowed' before the first tap: captions carry on by themselves
+        };
+        speechSynthesis.speak(u);
+      }
+    } catch (e) { NARR.ok = false; timerFrom(si, 0); }   // no speech here: captions only
   }
-  // browsers only allow speech after a tap/click: replay the current line on the first gesture if it never started
-  const unlock = () => { if (NARR.ok && NARR.on && !NARR.started && NARR.last) say(NARR.last); };
+  function narrTick() {   // called every frame
+    const t = now();
+    if (NARR.mode === 'timer') {
+      let changed = false;
+      while (NARR.mode === 'timer' && t - NARR.t0 >= NARR.sents[NARR.si].lines[NARR.li].dur + (NARR.li === NARR.sents[NARR.si].lines.length - 1 ? 0.35 : 0)) {
+        NARR.t0 += NARR.sents[NARR.si].lines[NARR.li].dur + (NARR.li === NARR.sents[NARR.si].lines.length - 1 ? 0.35 : 0);
+        changed = true; NARR.li++;
+        if (NARR.li >= NARR.sents[NARR.si].lines.length) { NARR.li = 0; NARR.si++; if (NARR.si >= NARR.sents.length) { finish(); return; } }
+      }
+      if (changed) showCaption();
+    } else if (NARR.mode === 'speech') {
+      if (!NARR.gotStart && t - NARR.reqAt > 2.5) { timerFrom(NARR.si, 0); return; }   // the voice never started: captions alone
+      if (NARR.gotStart && !NARR.bnd) {   // no word events from this voice: time-split the sentence by line length
+        const L = NARR.sents[NARR.si].lines, k = 1 / 0.9 * 0.95;   // speech at rate 0.9 runs a little slower than reading pace
+        let e = (t - NARR.t0) / k, j = 0; while (j < L.length - 1 && e >= L[j].dur) { e -= L[j].dur; j++; }
+        if (j > NARR.li) { NARR.li = j; showCaption(); }
+      }
+      if (NARR.gotStart && t - NARR.t0 > sentDur(NARR.si) * 2.5 + 5) timerFrom(NARR.si + 1, 0);   // engine stalled mid-script
+    } else if (NARR.holdUntil && t > NARR.holdUntil) { NARR.holdUntil = 0; showCaption(); }
+  }
+  const narrBusy = () => NARR.mode === 'speech' || (NARR.mode === 'timer' && NARR.cc);
+  function captionText() {
+    if (NARR.mode !== 'idle') { const s0 = NARR.sents[NARR.si]; return s0 ? s0.lines[Math.min(NARR.li, s0.lines.length - 1)].text : ''; }
+    return NARR.holdUntil ? NARR.shown || '' : '';
+  }
+  function showCaption() {
+    const txt = NARR.cc ? captionText() : '';
+    if (txt === NARR.shown && $('cc').hidden === !NARR.cc) return;
+    NARR.shown = txt; $('ccText').textContent = txt; $('cc').hidden = !NARR.cc;
+    drawCaption(txt);
+  }
+  function drawCaption(txt) {
+    const g = capCanvas.getContext('2d'), W = 1024, H = 160;
+    g.clearRect(0, 0, W, H);
+    caption.visible = renderer.xr.isPresenting && NARR.cc && !!txt;
+    if (!txt) { capTex.needsUpdate = true; return; }
+    g.font = '500 44px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const words = txt.split(' '), lines = []; let line = '';
+    for (const w of words) { if (line && g.measureText(line + ' ' + w).width > W - 80) { lines.push(line); line = w; } else line = line ? line + ' ' + w : w; }
+    lines.push(line);
+    const lh = 56, bw = Math.min(W - 8, Math.max(...lines.map((l) => g.measureText(l).width)) + 56), bh = lines.length * lh + 24;
+    g.fillStyle = 'rgba(0,0,0,0.78)'; g.beginPath(); g.roundRect ? g.roundRect((W - bw) / 2, (H - bh) / 2, bw, bh, 14) : g.rect((W - bw) / 2, (H - bh) / 2, bw, bh); g.fill();
+    g.fillStyle = '#fff'; lines.forEach((l, i) => g.fillText(l, W / 2, H / 2 + (i - (lines.length - 1) / 2) * lh));
+    capTex.needsUpdate = true;
+  }
+  // browsers only allow speech after a tap/click: pick the voice up at the current sentence on the first gesture
+  const unlock = () => { if (NARR.ok && NARR.voiceOn && !NARR.started && NARR.mode !== 'idle') speakFrom(NARR.si); };
   addEventListener('pointerdown', unlock, { once: true }); addEventListener('keydown', unlock, { once: true });
-  function setNarration(on) {
-    NARR.on = on; $('narr').classList.toggle('on', on); $('narr').setAttribute('aria-pressed', String(on)); $('narr').title = 'Narration (' + (on ? 'on' : 'off') + ')';
-    if (!on) { if (NARR.ok) speechSynthesis.cancel(); NARR.speaking = false; } else if (NARR.last) say(NARR.last);
+  function setVoice(on) {   // Mute: the voice stops, the captions carry on from the same line
+    NARR.voiceOn = on; savePrefs();
+    const b = $('mute'); b.textContent = on ? 'Mute' : 'Unmute'; b.classList.toggle('on', !on); b.setAttribute('aria-pressed', String(!on));
+    b.setAttribute('aria-label', on ? 'Mute narrator' : 'Unmute narrator'); b.title = on ? 'Mute the narrator (captions keep going)' : 'Turn the narrator back on';
+    if (!on && NARR.mode === 'speech') { if (NARR.ok) speechSynthesis.cancel(); timerFrom(NARR.si, NARR.li); }
+    else if (on && NARR.mode === 'timer' && NARR.ok) speakFrom(NARR.si);
   }
+  function setCC(on) {
+    NARR.cc = on; savePrefs();
+    const b = $('ccBtn'); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); b.title = 'Captions (' + (on ? 'on' : 'off') + ')';
+    NARR.shown = null; showCaption();
+  }
+  setVoice(NARR.voiceOn); setCC(NARR.cc);
   function refreshCard(force) {
     if (S.mode === 'outside') {
       const key0 = dive ? 'dive' : S.intro ? 'intro' : 'outside';
       if (shownStop === key0 && !force) return;
       shownStop = key0;
       $('stepNo').textContent = '';
-      if (dive) { $('stopTitle').textContent = 'Diving in'; $('stopText').textContent = DIVE_TEXT; return; }
-      if (S.intro) { $('stopTitle').textContent = 'Your heart tour'; $('stopText').textContent = INTRO_TEXT; say(INTRO_TEXT); return; }
-      $('stopTitle').textContent = 'Outside view';
-      $('stopText').textContent = S.xray
-        ? 'X-ray: blue spaces carry oxygen-poor blood (right side), red spaces oxygen-rich blood (left side). Watch the valves open and close.'
-        : 'Drag to turn the heart; pinch or scroll to zoom. The red vessels on the surface are the coronary arteries that feed the heart muscle.';
+      if (dive) { $('stopTitle').textContent = 'Diving in from your upper body'; refreshMark(); return; }
+      if (S.intro) { $('stopTitle').textContent = 'Your heart tour'; refreshMark(); narrate(INTRO_TEXT); return; }
+      $('stopTitle').textContent = S.xray ? 'Outside the heart, X-ray view' : 'Outside the heart';
+      refreshMark();
       return;
     }
     const id = ride.stopId;
@@ -1725,12 +1902,11 @@ async function main() {
     if (key2 === shownStop && !force) return;
     shownStop = key2;
     const st = A.STOPS[id];
-    $('stopTitle').textContent = st.title;
-    $('stepNo').textContent = 'Stop ' + (ride.i + 1) + ' of ' + A.STOP_ORDER.length;
-    $('stopText').textContent = st.text + (ride.atEnd ? ' Press next to ride again.' : '');
+    $('stopTitle').textContent = st.plain + ' (' + st.term + ')';
+    $('stepNo').textContent = 'Stop ' + (ride.i + 1) + ' of ' + A.STOP_ORDER.length + (ride.atEnd ? '. Press next to ride again.' : '');
     [...dots.children].forEach((b, i) => { b.className = i === ride.i ? 'on' : i < ride.i ? 'done' : ''; });
-    drawCaption(st.title, st.text);
-    if (ride.state === 'dwell' && spokenStop !== id) { spokenStop = id; say(st.title + '. ' + st.text); }   // same words as on screen
+    refreshMark();
+    if (ride.state === 'dwell' && spokenStop !== id) { spokenStop = id; narrate(st.say); }   // spoken and captioned word for word
   }
   function setPlayIcon() {
     $('playPath').setAttribute('d', ride.paused ? 'M7 5v14l11-7z' : 'M6 5h4v14H6zm8 0h4v14h-4z');
@@ -1750,8 +1926,9 @@ async function main() {
   $('lbl').addEventListener('click', () => { S.labels = !S.labels; $('lbl').classList.toggle('on', S.labels); });
   $('infoBtn').addEventListener('click', () => { const d = $('info'); if (d.showModal) d.showModal(); else d.setAttribute('open', ''); d.scrollTop = 0; });
   $('mRide').addEventListener('click', () => { if (S.mode === 'outside') startDive(); });
-  $('mOut').addEventListener('click', () => { dive = null; S.intro = false; setMode('outside'); });
-  $('narr').addEventListener('click', () => setNarration(!NARR.on));
+  $('mOut').addEventListener('click', () => { dive = null; S.intro = false; stopNarration(); setMode('outside'); });
+  $('mute').addEventListener('click', () => setVoice(!NARR.voiceOn));
+  $('ccBtn').addEventListener('click', () => setCC(!NARR.cc));
   addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'INPUT') return;
     if (e.key === ' ') { e.preventDefault(); $('play').click(); }
@@ -1827,7 +2004,7 @@ async function main() {
     headlamp.intensity = ride_ ? 10 : 0;
     hemi.intensity = ride_ ? 1.1 : 0.7;
     camera.fov = ride_ ? 72 : 40; camera.updateProjectionMatrix();
-    caption.visible = ride_ && xr;
+    caption.visible = xr && NARR.cc && !!NARR.shown;
     if (xr) {
       scene.background = new THREE.Color(ride_ ? 0x2a0507 : 0x140607);
       if (ride_) { heart.scale.setScalar(1); heart.position.set(0, 0, 0); }
@@ -1932,7 +2109,7 @@ async function main() {
     dive = { t: 0, T: xr ? 16 : 10, xr, p0: camera.position.clone(), q0: camera.quaternion.clone(),
       approach: v3(P0).addScaledVector(tan0, -9), hs0: heart.scale.x, hp0: heart.position.clone(), hr0: heart.rotation.y,
       svc0: v3(P0).applyMatrix4(heart.matrixWorld) };
-    shownStop = null; say(DIVE_TEXT);
+    shownStop = null; narrate(DIVE_TEXT);
   }
   function diveStep(dt) {
     dive.t += dt; const u = Math.min(1, dive.t / dive.T), e = ease(u);
@@ -1954,18 +2131,19 @@ async function main() {
   function introStep(dt) {
     if (S.mode !== 'outside' || !S.intro || dive) return;
     introT += dt;
-    if (introT > 9 && (!NARR.speaking || introT > 40)) startDive();
+    if (introT > 9 && (!narrBusy() || introT > 45)) startDive();
   }
 
   // ---------------------------------------------------------------- VR console (point a controller / pinch at a button)
   function setupVRConsole() {
-    const W = 1024, H = 160, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const W = 1280, H = 160, c = document.createElement('canvas'); c.width = W; c.height = H;
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
     const btns = [
-      [() => (S.mode === 'ride' ? 'Back outside' : 'Dive in'), () => { if (S.mode === 'ride') { dive = null; S.intro = false; setMode('outside'); } else startDive(); }],
+      [() => (S.mode === 'ride' ? 'Back outside' : 'Dive in'), () => { if (S.mode === 'ride') { dive = null; S.intro = false; stopNarration(); setMode('outside'); } else startDive(); }],
       [() => 'Previous', () => { if (S.mode === 'ride') { flash(); ride.prev(); } }],
       [() => 'Next', () => { if (S.mode === 'ride') $('next').click(); }],
-      [() => 'Narration: ' + (NARR.on ? 'on' : 'off'), () => setNarration(!NARR.on)],
+      [() => (NARR.voiceOn ? 'Mute' : 'Unmute'), () => setVoice(!NARR.voiceOn)],
+      [() => 'CC: ' + (NARR.cc ? 'on' : 'off'), () => setCC(!NARR.cc)],
     ];
     let hover = -1, sig = '';
     function draw() {
@@ -1976,10 +2154,10 @@ async function main() {
       btns.forEach((b, i) => { const x = 20 + i * bw;
         g.fillStyle = i === hover ? 'rgba(255,90,95,0.45)' : 'rgba(255,255,255,0.1)';
         g.beginPath(); g.roundRect ? g.roundRect(x + 6, 20, bw - 12, 120, 18) : g.rect(x + 6, 20, bw - 12, 120); g.fill();
-        g.fillStyle = '#fff'; g.font = '600 34px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(b[0](), x + bw / 2, 80); });
+        g.fillStyle = '#fff'; g.font = '600 32px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(b[0](), x + bw / 2, 80); });
       tex.needsUpdate = true;
     }
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6 * H / W), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7 * H / W), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     panel.renderOrder = 9000; panel.frustumCulled = false; panel.visible = false;
     panel.position.set(0, -0.45, -0.6); panel.rotation.x = -0.75;   // a console you glance down at; travels with you, not with your head
     dolly.add(panel); draw();
@@ -2033,7 +2211,8 @@ async function main() {
     }
     // ride
     // the ride waits at a stop until the narrator has finished reading it
-    if (S.mode === 'ride' && !(NARR.speaking && ride.state === 'dwell' && !ride.paused)) ride.update(dt, ctx(rawDt));
+    narrTick();
+    if (S.mode === 'ride' && !(narrBusy() && ride.state === 'dwell' && !ride.paused)) ride.update(dt, ctx(rawDt));
     if (dive) diveStep(rawDt); else introStep(rawDt);
     const sCam = ride.s;
     const pCam = A.deform(path.at(sCam), st);
