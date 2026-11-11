@@ -36,6 +36,9 @@
   #cc span { display:inline; padding:3px 10px; line-height:1.55; font-size:17px; font-weight:500; color:#fff; background:rgba(0,0,0,.72); border-radius:6px;
     -webkit-box-decoration-break:clone; box-decoration-break:clone; text-shadow:0 1px 2px rgba(0,0,0,.6); }
   #cc[hidden], #cc span:empty { display:none; }
+  /* one-time notice when this browser has no speech voice (e.g. Meta Quest): captions carry the narration */
+  #vnote { font:600 12.5px system-ui, sans-serif; color:#fff; background:rgba(40,16,18,.88); border:1px solid var(--line); border-radius:999px; padding:5px 12px; pointer-events:none !important; }
+  #vnote[hidden] { display:none; }
   .sr { position:absolute !important; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; }
   .txt { width:auto; min-width:40px; padding:0 10px; font-size:12.5px; font-weight:700; letter-spacing:.04em; }
   #rhythm { display:flex; align-items:center; gap:8px; background:var(--glass); border:1px solid var(--line); border-radius:999px; padding:4px 12px; min-height:38px; font-size:12px; color:var(--dim); }
@@ -101,6 +104,7 @@
 </div>
 <div id="bottom">
   <div class="sr" aria-live="polite"><span id="stopTitle">Loading...</span> <span id="stepNo"></span></div>
+  <div id="vnote" role="status" hidden></div>
   <div id="cc" aria-hidden="true"><span id="ccText"></span></div>
   <div id="controls">
     <div class="ride-only">
@@ -138,7 +142,7 @@
     <li><b>Ride:</b> drag to look around; play/pause, previous/next stop; change the heart rate or use slow motion.</li>
     <li><b>Narrator and captions:</b> <b>Mute</b> silences the voice (captions keep going); <b>CC</b> turns the captions on or off. Where you are, in plain words, is on the I'M HERE label: tap it to show it again.</li>
     <li><b>Outside:</b> drag to turn, pinch or scroll to zoom. X-ray shows the chambers (blue = oxygen-poor, red = oxygen-rich).</li>
-    <li><b>VR:</b> open in a headset browser and press Enter VR. Mute and CC are on the console below you.</li>
+    <li><b>VR:</b> open in a headset browser and press Enter VR. You start outside, with the whole heart in front of you. Push the thumbstick forward to move closer; pull it back, or press <b>Back up</b>, to back away. <b>Ride</b>, <b>Back outside</b>, Mute and CC are on the console low in front of you: point and pull the trigger. If the browser has no voice, the captions carry the narration.</li>
   </ul>
   <p class="note">For education only - not for diagnosis or treatment decisions.</p>
   <form method="dialog" style="text-align:right;margin-top:12px"><button>Close</button></form>
@@ -1683,8 +1687,21 @@ async function main() {
   const capCanvas = document.createElement('canvas'); capCanvas.width = 1024; capCanvas.height = 160;
   const capTex = new THREE.CanvasTexture(capCanvas); capTex.colorSpace = THREE.SRGBColorSpace;
   const caption = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1 * 160 / 1024), new THREE.MeshBasicMaterial({ map: capTex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
-  caption.position.set(0, -0.3, -1.3); caption.renderOrder = 1000; caption.visible = false; caption.frustumCulled = false;
+  caption.position.set(0, -0.4, -1.35); caption.renderOrder = 1000; caption.visible = false; caption.frustumCulled = false;
   dolly.add(caption);
+  // VR copy of the one-time "no voice" notice, just above the captions
+  const noteCanvas = document.createElement('canvas'); noteCanvas.width = 1024; noteCanvas.height = 96;
+  const noteTex = new THREE.CanvasTexture(noteCanvas); noteTex.colorSpace = THREE.SRGBColorSpace;
+  const vrNote = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.8 * 96 / 1024), new THREE.MeshBasicMaterial({ map: noteTex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+  vrNote.position.set(0, -0.29, -1.35); vrNote.renderOrder = 1001; vrNote.visible = false; vrNote.frustumCulled = false;
+  dolly.add(vrNote);
+  // VR outside view: the whole heart about 2 m away, a little below eye level, sized to fit comfortably in view.
+  // You can move closer / back away (thumbstick, grip-and-pull, "Back up"), within comfort limits.
+  gEpi.computeBoundingSphere();
+  const bsC = gEpi.boundingSphere ? gEpi.boundingSphere.center.clone() : new THREE.Vector3();
+  const bsR = (gEpi.boundingSphere && +gEpi.boundingSphere.radius) || 10;
+  const VRV = { D0: 2.0, Y: -0.25, R: 0.42, dist: 2.0, vel: 0, goal: null, grab: null, max: 4.0 };
+  VRV.scale = VRV.R / bsR; VRV.min = VRV.R + 0.3;
   // I'M HERE watermark + source card (shared/imhere-mark.js, inlined in the page). Nothing here is live.
   const MARK = window.ImHereMark;
   const markItems = (bpm) => [
@@ -1756,7 +1773,8 @@ async function main() {
   const lineMax = () => Math.max(32, Math.min(62, Math.floor((Math.min(innerWidth, 720) - 44) / 8.7)));   // caption line fits one row
   const NARR = { ok: 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function', voice: null,
     voiceOn: true, cc: true, last: '', started: false, speaking: false,
-    sents: [], si: 0, li: 0, gen: 0, mode: 'idle', t0: 0, bnd: false, gotStart: false, reqAt: 0, holdUntil: 0, shown: null };
+    sents: [], si: 0, li: 0, gen: 0, mode: 'idle', t0: 0, bnd: false, gotStart: false, reqAt: 0, holdUntil: 0, shown: null,
+    gestured: false, reqGest: false, noVoice: false, noticed: false };
   try { const p = JSON.parse(localStorage.getItem('imhere.heart.narr') || '{}'); if (p.voiceOn === false) NARR.voiceOn = false; if (p.cc === false) NARR.cc = false; } catch (e) { /* private mode */ }
   const savePrefs = () => { try { localStorage.setItem('imhere.heart.narr', JSON.stringify({ voiceOn: NARR.voiceOn, cc: NARR.cc })); } catch (e) { /* private mode */ } };
   function pickVoice() {
@@ -1786,7 +1804,36 @@ async function main() {
   const sentDur = (i) => NARR.sents[i].lines.reduce((a, l) => a + l.dur, 0);
   function narrate(text) {
     NARR.last = text; NARR.sents = script(text); NARR.si = 0; NARR.li = 0; NARR.started = false;
-    if (NARR.ok && NARR.voiceOn) speakFrom(0); else timerFrom(0, 0);
+    if (!NARR.ok && NARR.voiceOn) voiceNotice();
+    if (NARR.ok && NARR.voiceOn && !NARR.noVoice) speakFrom(0); else timerFrom(0, 0);
+  }
+  // No voice on this browser (e.g. Meta Quest has speechSynthesis but often no voices, so nothing is heard):
+  // say so once, small, and let the captions carry the narration. No network speech service is used.
+  let noteTimer = 0;
+  function voiceNotice() {
+    if (NARR.noticed) return;
+    NARR.noticed = true;
+    const msg = 'Voice not supported in this browser, captions on';
+    const el = $('vnote'); el.textContent = msg; el.hidden = false;
+    const g = noteCanvas.getContext('2d'), W = 1024, H = 96;
+    g.clearRect(0, 0, W, H); g.font = '600 38px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const bw = Math.min(W - 8, g.measureText(msg).width + 60);
+    g.fillStyle = 'rgba(40,16,18,0.9)'; g.beginPath(); g.roundRect ? g.roundRect((W - bw) / 2, 10, bw, H - 20, 38) : g.rect((W - bw) / 2, 10, bw, H - 20); g.fill();
+    g.fillStyle = '#fff'; g.fillText(msg, W / 2, H / 2); noteTex.needsUpdate = true;
+    if (renderer.xr.isPresenting) showVRNote();
+    if (!NARR.cc) setCC(true);
+    clearTimeout(noteTimer); noteTimer = setTimeout(() => { el.hidden = true; }, 9000);
+  }
+  let vrNoteShown = false;
+  function showVRNote() {   // once in the headset too (the page notice is not visible there)
+    if (vrNoteShown) return; vrNoteShown = true; vrNote.visible = true;
+    setTimeout(() => { vrNote.visible = false; }, 9000);
+  }
+  function noVoiceHere() {   // speech was asked for after a tap but never started (or failed): captions only from here
+    try { speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+    let n = 0; try { n = speechSynthesis.getVoices().length; } catch (e) { /* ignore */ }
+    if (!n) NARR.noVoice = true;   // no voices at all: stop trying; otherwise later lines may still speak
+    voiceNotice();
   }
   function stopNarration() {
     NARR.gen++; NARR.mode = 'idle'; NARR.speaking = false; NARR.holdUntil = 0; NARR.last = '';
@@ -1802,6 +1849,7 @@ async function main() {
     if (si >= NARR.sents.length) { finish(); return; }
     const g = ++NARR.gen;
     NARR.mode = 'speech'; NARR.si = si; NARR.li = 0; NARR.t0 = now(); NARR.bnd = false; NARR.gotStart = false; NARR.reqAt = now(); NARR.speaking = false;
+    NARR.reqGest = NARR.gestured;
     try {
       speechSynthesis.cancel();
       for (let i = si; i < NARR.sents.length; i++) {
@@ -1818,6 +1866,7 @@ async function main() {
         u.onend = () => { if (g !== NARR.gen) return; if (i === NARR.sents.length - 1) finish(); };
         u.onerror = (e) => {
           if (g !== NARR.gen || (e && (e.error === 'interrupted' || e.error === 'canceled'))) return;
+          if (NARR.reqGest) noVoiceHere();
           timerFrom(NARR.si, NARR.li);   // e.g. 'not-allowed' before the first tap: captions carry on by themselves
         };
         speechSynthesis.speak(u);
@@ -1835,7 +1884,10 @@ async function main() {
       }
       if (changed) showCaption();
     } else if (NARR.mode === 'speech') {
-      if (!NARR.gotStart && t - NARR.reqAt > 2.5) { timerFrom(NARR.si, 0); return; }   // the voice never started: captions alone
+      if (!NARR.gotStart && t - NARR.reqAt > (NARR.reqGest ? 1.5 : 2.5)) {   // the voice never started: captions alone
+        if (NARR.reqGest) noVoiceHere();
+        timerFrom(NARR.si, 0); return;
+      }
       if (NARR.gotStart && !NARR.bnd) {   // no word events from this voice: time-split the sentence by line length
         const L = NARR.sents[NARR.si].lines, k = 1 / 0.9 * 0.95;   // speech at rate 0.9 runs a little slower than reading pace
         let e = (t - NARR.t0) / k, j = 0; while (j < L.length - 1 && e >= L[j].dur) { e -= L[j].dur; j++; }
@@ -1870,14 +1922,33 @@ async function main() {
     capTex.needsUpdate = true;
   }
   // browsers only allow speech after a tap/click: pick the voice up at the current sentence on the first gesture
-  const unlock = () => { if (NARR.ok && NARR.voiceOn && !NARR.started && NARR.mode !== 'idle') speakFrom(NARR.si); };
-  addEventListener('pointerdown', unlock, { once: true }); addEventListener('keydown', unlock, { once: true });
+  let unlocked = false;
+  const unlock = () => {
+    NARR.gestured = true; resumeAudio();
+    if (unlocked) return; unlocked = true;
+    if (NARR.ok && NARR.voiceOn && !NARR.noVoice && !NARR.started && NARR.mode !== 'idle') speakFrom(NARR.si);
+    setTimeout(checkVoices, 1500);   // voices load asynchronously; give them 1.5 s after the first gesture
+  };
+  addEventListener('pointerdown', unlock); addEventListener('keydown', unlock);
+  // No speech voices at all (e.g. Meta Quest Browser): captions only, with the one small notice
+  function checkVoices() {
+    if (!NARR.voiceOn || NARR.noVoice) return;
+    let n = 0; try { n = NARR.ok ? speechSynthesis.getVoices().length : 0; } catch (e) { /* ignore */ }
+    if (n) return;
+    NARR.noVoice = true;
+    if (NARR.mode === 'speech') { try { speechSynthesis.cancel(); } catch (e) { /* ignore */ } timerFrom(NARR.si, NARR.li); }
+    voiceNotice();
+  }
+  renderer.xr.addEventListener('sessionstart', () => {
+    setTimeout(checkVoices, 1500);
+    if ((NARR.noVoice || !NARR.ok) && !NARR.cc) setCC(true);   // captions stay on in VR when there is no voice
+  });
   function setVoice(on) {   // Mute: the voice stops, the captions carry on from the same line
     NARR.voiceOn = on; savePrefs();
     const b = $('mute'); b.textContent = on ? 'Mute' : 'Unmute'; b.classList.toggle('on', !on); b.setAttribute('aria-pressed', String(!on));
     b.setAttribute('aria-label', on ? 'Mute narrator' : 'Unmute narrator'); b.title = on ? 'Mute the narrator (captions keep going)' : 'Turn the narrator back on';
     if (!on && NARR.mode === 'speech') { if (NARR.ok) speechSynthesis.cancel(); timerFrom(NARR.si, NARR.li); }
-    else if (on && NARR.mode === 'timer' && NARR.ok) speakFrom(NARR.si);
+    else if (on && NARR.mode === 'timer' && NARR.ok && !NARR.noVoice) speakFrom(NARR.si);
   }
   function setCC(on) {
     NARR.cc = on; savePrefs();
@@ -1941,9 +2012,14 @@ async function main() {
   $('snd').addEventListener('click', () => {
     S.sound = !S.sound;
     $('snd').classList.toggle('on', S.sound); $('snd').setAttribute('aria-pressed', S.sound); $('snd').title = 'Heart sounds (' + (S.sound ? 'on' : 'off') + ')';
-    if (S.sound && !actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
-    if (actx && actx.state === 'suspended') actx.resume();
+    resumeAudio();
   });
+  // Heart sounds need a user gesture: create / resume the AudioContext on any tap, key, or VR select / squeeze
+  // (a WebXR session can leave it suspended or interrupted).
+  function resumeAudio() {
+    if (S.sound && !actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) try { actx = new AC(); } catch (e) { /* no audio */ } }
+    if (actx && actx.state !== 'running' && actx.state !== 'closed') { const p = actx.resume(); if (p && p.catch) p.catch(() => {}); }
+  }
   function thump(f, dur, gain) {
     if (!actx || actx.state !== 'running') return;
     const now = actx.currentTime;
@@ -2008,7 +2084,7 @@ async function main() {
     if (xr) {
       scene.background = new THREE.Color(ride_ ? 0x2a0507 : 0x140607);
       if (ride_) { heart.scale.setScalar(1); heart.position.set(0, 0, 0); }
-      else { heart.scale.setScalar(0.03); heart.position.set(-0.4 * 0.03, -0.1, -0.75); }
+      else { heart.scale.setScalar(VRV.scale); placeVRHeart(); }
     } else { scene.background = null; heart.scale.setScalar(1); heart.position.set(0, 0, 0); heart.rotation.set(0, 0, 0); }
   }
   function setMode(m) {
@@ -2019,6 +2095,7 @@ async function main() {
     $('mRide').setAttribute('aria-selected', m === 'ride'); $('mOut').setAttribute('aria-selected', m === 'outside');
     if (m === 'outside') {
       dolly.position.set(0, 0, 0); dolly.quaternion.identity();
+      VRV.dist = VRV.D0; VRV.vel = 0; VRV.goal = null; VRV.grab = null;   // VR: back to the comfortable default distance
       camera.rotation.set(0, 0, 0);
       const dist = 30 / Math.min(1, (innerWidth / innerHeight) * 1.25);
       camera.position.set(controls.target.x + dist * 0.18, controls.target.y + dist * 0.12, controls.target.z + dist);
@@ -2034,7 +2111,14 @@ async function main() {
   if (markXR) { markXR.visible = false; camera.add(markXR); }
   renderer.xr.addEventListener('sessionstart', () => { if (markXR) markXR.visible = true; });
   renderer.xr.addEventListener('sessionend', () => { if (markXR) markXR.visible = false; });
-  renderer.xr.addEventListener('sessionstart', () => { controls.enabled = false; camera.position.set(0, 0, 0); applyMode(); });
+  // Entering VR always starts outside, with the whole heart in front of you (never inside it). In VR the dive waits for "Ride".
+  renderer.xr.addEventListener('sessionstart', () => {
+    controls.enabled = false; camera.position.set(0, 0, 0);
+    VRV.dist = VRV.D0; VRV.vel = 0; VRV.goal = null; VRV.grab = null;
+    if (S.mode !== 'outside' || dive) { dive = null; S.intro = false; stopNarration(); setMode('outside'); } else applyMode();
+    resumeAudio();
+    if (NARR.noticed) showVRNote();
+  });
   renderer.xr.addEventListener('sessionend', () => { setMode(S.mode); });
 
   // WebXR button only when the browser has WebXR at all (otherwise it would be a link away from the page)
@@ -2062,6 +2146,37 @@ async function main() {
     eg.stroke();
     const x = (t / T.RR) * W;
     eg.fillStyle = '#fff'; eg.beginPath(); eg.arc(x, Hh * 0.68 - A.ecg(t, T) * Hh * 0.58, 2.6 * devicePixelRatio, 0, Math.PI * 2); eg.fill();
+  }
+
+  // ---------------------------------------------------------------- VR outside view: heart placement and moving closer / back
+  const Y_AXIS = new THREE.Vector3(0, 1, 0), vPl = new THREE.Vector3();
+  function placeVRHeart() {   // heart's centre stays put while it turns; you (the dolly) move along the line to it
+    vPl.copy(bsC).multiplyScalar(VRV.scale).applyAxisAngle(Y_AXIS, heart.rotation.y);
+    heart.position.set(-vPl.x, VRV.Y - vPl.y, -VRV.D0 - vPl.z);
+    dolly.position.set(0, 0, VRV.dist - VRV.D0); dolly.quaternion.identity();
+  }
+  const vrOutside = () => renderer.xr.isPresenting && S.mode === 'outside' && !dive;
+  function backUp() { if (!vrOutside()) return; VRV.goal = Math.min(VRV.max, Math.max(VRV.dist, VRV.goal || 0) + 0.75); }
+  function vrMove(dt) {   // thumbstick forward = closer, back = away; smooth, speed-capped, soft stop at the limits
+    let y = 0;
+    const ses = renderer.xr.getSession && renderer.xr.getSession();
+    if (ses) for (const src of ses.inputSources) {
+      const ax = src.gamepad && src.gamepad.axes; if (!ax || !ax.length) continue;
+      const v = ax.length >= 4 ? ax[3] : ax[1]; if (Math.abs(v) > Math.abs(y)) y = v;
+    }
+    if (Math.abs(y) < 0.2) y = 0; else y = (y - Math.sign(y) * 0.2) / 0.8;
+    if (VRV.grab) {   // grip and pull: pull your hand in to bring the heart closer, push out to send it away
+      VRV.dist = A.clamp(VRV.grab.d0 - (VRV.grab.ctrl.position.z - VRV.grab.z0) * 1.5, VRV.min, VRV.max); VRV.vel = 0; VRV.goal = null;
+    } else if (y || Math.abs(VRV.vel) > 0.005) {
+      if (y) VRV.goal = null;
+      VRV.vel += (y * 0.9 - VRV.vel) * (1 - Math.exp(-dt * 6));   // up to 0.9 m/s, eased in and out
+      const room = VRV.vel < 0 ? VRV.dist - VRV.min : VRV.max - VRV.dist;
+      VRV.vel *= A.clamp(room / 0.35, 0, 1);   // slow down near the limits
+      VRV.dist = A.clamp(VRV.dist + VRV.vel * dt, VRV.min, VRV.max);
+    } else if (VRV.goal != null) {
+      VRV.dist += (VRV.goal - VRV.dist) * (1 - Math.exp(-dt * 2.5));
+      if (Math.abs(VRV.goal - VRV.dist) < 0.01) { VRV.dist = VRV.goal; VRV.goal = null; }
+    }
   }
 
   // ---------------------------------------------------------------- per-frame update
@@ -2106,8 +2221,9 @@ async function main() {
     if (dive || S.mode !== 'outside') return;
     const xr = renderer.xr.isPresenting;
     S.intro = false; controls.enabled = false;
-    dive = { t: 0, T: xr ? 16 : 10, xr, p0: camera.position.clone(), q0: camera.quaternion.clone(),
-      approach: v3(P0).addScaledVector(tan0, -9), hs0: heart.scale.x, hp0: heart.position.clone(), hr0: heart.rotation.y,
+    dive = { t: 0, T: xr ? 16 : 10, xr, p0: camera.position.clone(), q0: camera.quaternion.clone(), eye: dolly.position.clone(),
+      approach: v3(P0).addScaledVector(tan0, -9), hs0: heart.scale.x, hp0: heart.position.clone(),
+      hr0: Math.atan2(Math.sin(heart.rotation.y), Math.cos(heart.rotation.y)),   // shortest way back (no extra spins)
       svc0: v3(P0).applyMatrix4(heart.matrixWorld) };
     shownStop = null; narrate(DIVE_TEXT);
   }
@@ -2121,7 +2237,7 @@ async function main() {
       const s = dive.hs0 * Math.pow(1 / dive.hs0, e);
       heart.rotation.y = dive.hr0 * (1 - ease(Math.min(1, u * 2)));
       heart.scale.setScalar(s); heart.updateMatrixWorld(true);
-      const target = dive.svc0.clone().lerp(new THREE.Vector3(0, 0, 0), e);          // where the vein opening should be
+      const target = dive.svc0.clone().lerp(dive.eye, e);          // where the vein opening should be (ends at you)
       const now = v3(P0).applyMatrix4(heart.matrixWorld);
       heart.position.add(target.sub(now));
     }
@@ -2129,57 +2245,91 @@ async function main() {
   }
   let introT = 0;   // auto-dive once the intro has been on screen (and spoken) for a while
   function introStep(dt) {
-    if (S.mode !== 'outside' || !S.intro || dive) return;
+    if (S.mode !== 'outside' || !S.intro || dive || renderer.xr.isPresenting) return;   // in VR you choose when to ride
     introT += dt;
     if (introT > 9 && (!narrBusy() || introT > 45)) startDive();
   }
 
   // ---------------------------------------------------------------- VR console (point a controller / pinch at a button)
+  // Big "Ride" / "Back outside" / "Back up" on top, smaller Previous / Next / Mute / CC below. It sits low in front of you,
+  // within arm's reach, and travels with you (not with your head). Grip and pull also moves you closer / farther outside.
+  function goOutside() {
+    if (S.mode !== 'ride' && !dive) return;
+    dive = null; S.intro = false; stopNarration();
+    VRV.dist = VRV.D0; VRV.vel = 0; VRV.goal = null; VRV.grab = null;
+    setMode('outside');
+  }
   function setupVRConsole() {
-    const W = 1280, H = 160, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const W = 1280, H = 520, c = document.createElement('canvas'); c.width = W; c.height = H;
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const riding = () => S.mode === 'ride' || !!dive;
+    // [label, action, enabled, primary, x, y, w, h]
+    const big = 64, small = 40, gap = 16, top = 20, bh = 270, sh = 190;
     const btns = [
-      [() => (S.mode === 'ride' ? 'Back outside' : 'Dive in'), () => { if (S.mode === 'ride') { dive = null; S.intro = false; stopNarration(); setMode('outside'); } else startDive(); }],
-      [() => 'Previous', () => { if (S.mode === 'ride') { flash(); ride.prev(); } }],
-      [() => 'Next', () => { if (S.mode === 'ride') $('next').click(); }],
-      [() => (NARR.voiceOn ? 'Mute' : 'Unmute'), () => setVoice(!NARR.voiceOn)],
-      [() => 'CC: ' + (NARR.cc ? 'on' : 'off'), () => setCC(!NARR.cc)],
+      { label: () => (riding() ? 'Riding' : 'Ride'), act: () => { if (!riding()) startDive(); }, on: () => !riding(), main: () => !riding(), font: big },
+      { label: () => 'Back outside', act: goOutside, on: riding, main: riding, font: big },
+      { label: () => 'Back up', act: backUp, on: () => vrOutside(), main: () => false, font: big },
+      { label: () => 'Previous', act: () => { if (S.mode === 'ride') { flash(); ride.prev(); } }, on: () => S.mode === 'ride', font: small },
+      { label: () => 'Next', act: () => { if (S.mode === 'ride') $('next').click(); }, on: () => S.mode === 'ride', font: small },
+      { label: () => (NARR.voiceOn ? 'Mute' : 'Unmute'), act: () => setVoice(!NARR.voiceOn), on: () => true, font: small },
+      { label: () => 'CC: ' + (NARR.cc ? 'on' : 'off'), act: () => setCC(!NARR.cc), on: () => true, font: small },
     ];
+    const bw3 = (W - 2 * gap - 2 * gap) / 3, bw4 = (W - 2 * gap - 3 * gap) / 4;
+    btns.forEach((b, i) => {
+      if (i < 3) Object.assign(b, { x: gap + i * (bw3 + gap), y: top, w: bw3, h: bh });
+      else Object.assign(b, { x: gap + (i - 3) * (bw4 + gap), y: top + bh + gap, w: bw4, h: sh });
+    });
     let hover = -1, sig = '';
     function draw() {
-      const ns = btns.map((b) => b[0]()).join('|') + hover; if (ns === sig) return; sig = ns;
+      const ns = btns.map((b) => b.label() + b.on() + (b.main ? b.main() : '')).join('|') + hover; if (ns === sig) return; sig = ns;
       const g = c.getContext('2d'); g.clearRect(0, 0, W, H);
-      g.fillStyle = 'rgba(24,10,12,0.85)'; g.beginPath(); g.roundRect ? g.roundRect(0, 0, W, H, 26) : g.rect(0, 0, W, H); g.fill();
-      const bw = (W - 40) / btns.length;
-      btns.forEach((b, i) => { const x = 20 + i * bw;
-        g.fillStyle = i === hover ? 'rgba(255,90,95,0.45)' : 'rgba(255,255,255,0.1)';
-        g.beginPath(); g.roundRect ? g.roundRect(x + 6, 20, bw - 12, 120, 18) : g.rect(x + 6, 20, bw - 12, 120); g.fill();
-        g.fillStyle = '#fff'; g.font = '600 32px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(b[0](), x + bw / 2, 80); });
+      const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
+      g.fillStyle = 'rgba(24,10,12,0.88)'; rr(0, 0, W, H, 30); g.fill();
+      btns.forEach((b, i) => {
+        const on = b.on(), main = b.main && b.main();
+        g.fillStyle = !on ? 'rgba(255,255,255,0.05)' : i === hover ? 'rgba(255,120,125,0.75)' : main ? 'rgba(214,48,56,0.9)' : 'rgba(255,255,255,0.16)';
+        rr(b.x, b.y, b.w, b.h, 22); g.fill();
+        if (on && (main || i === hover)) { g.lineWidth = 6; g.strokeStyle = '#fff'; rr(b.x + 3, b.y + 3, b.w - 6, b.h - 6, 20); g.stroke(); }
+        g.fillStyle = on ? '#fff' : 'rgba(255,255,255,0.35)';
+        g.font = `700 ${b.font}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(b.label(), b.x + b.w / 2, b.y + b.h / 2);
+      });
       tex.needsUpdate = true;
     }
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7 * H / W), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    const PW = 0.66, PH = PW * H / W;   // about 66 x 27 cm; the big buttons are about 21 x 14 cm
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     panel.renderOrder = 9000; panel.frustumCulled = false; panel.visible = false;
-    panel.position.set(0, -0.45, -0.6); panel.rotation.x = -0.75;   // a console you glance down at; travels with you, not with your head
+    panel.position.set(0, -0.42, -0.5); panel.rotation.x = -0.6;   // low in front of you, tilted up toward your eyes, in reach
     dolly.add(panel); draw();
     const ray = new THREE.Raycaster(), m4 = new THREE.Matrix4();
     const hit = (ctrl) => {
+      if (!panel.visible) return -1;
       m4.identity().extractRotation(ctrl.matrixWorld);
       ray.ray.origin.setFromMatrixPosition(ctrl.matrixWorld); ray.ray.direction.set(0, 0, -1).applyMatrix4(m4);
       const h = ray.intersectObject(panel)[0]; if (!h || !h.uv) return -1;
-      const i = Math.floor((h.uv.x * W - 20) / ((W - 40) / btns.length)); return i >= 0 && i < btns.length ? i : -1;
+      return uvButton(h.uv.x, h.uv.y);
     };
+    const uvButton = (u, v) => { const x = u * W, y = (1 - v) * H; return btns.findIndex((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h); };
+    const press = (i) => { if (i >= 0 && btns[i].on()) btns[i].act(); sig = ''; draw(); };
     const ctrls = [0, 1].map((i) => {
       const ctrl = renderer.xr.getController(i); dolly.add(ctrl);
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
         new THREE.LineBasicMaterial({ color: 0xff8f93, transparent: true, opacity: 0.6, depthTest: false, fog: false }));
       line.renderOrder = 9001; line.frustumCulled = false; ctrl.add(line);
-      ctrl.addEventListener('select', () => { const b = hit(ctrl); if (b >= 0) btns[b][1](); sig = ''; draw(); });
+      // the first trigger / pinch / grip also unlocks sound (heartbeat AudioContext, and the voice where there is one)
+      ctrl.addEventListener('selectstart', unlock);
+      ctrl.addEventListener('select', () => press(hit(ctrl)));
+      ctrl.addEventListener('squeezestart', () => {
+        unlock();
+        if (vrOutside()) VRV.grab = { ctrl, z0: ctrl.position.z, d0: VRV.dist };
+      });
+      ctrl.addEventListener('squeezeend', () => { if (VRV.grab && VRV.grab.ctrl === ctrl) VRV.grab = null; });
       return ctrl;
     });
-    renderer.xr.addEventListener('sessionstart', () => { panel.visible = true; });
-    renderer.xr.addEventListener('sessionend', () => { panel.visible = false; });
+    renderer.xr.addEventListener('sessionstart', () => { panel.visible = true; sig = ''; draw(); });
+    renderer.xr.addEventListener('sessionend', () => { panel.visible = false; VRV.grab = null; });
     setInterval(() => { if (!renderer.xr.isPresenting) return; let h = -1; for (const ct of ctrls) if (h < 0) h = hit(ct); hover = h; draw(); }, 100);
-    return { panel, btns, hit, ctrls };
+    return { panel, btns, hit, uvButton, press, draw, ctrls };
   }
   const vrConsole = setupVRConsole();
 
@@ -2248,7 +2398,7 @@ async function main() {
       renderer.setClearColor(0x000000, 0);
       if (dive) { /* the dive drives the camera / heart */ }
       else if (!renderer.xr.isPresenting) controls.update();
-      else heart.rotation.y += rawDt * 0.12;   // slow turntable in VR (comfortable: the object turns, not you)
+      else { heart.rotation.y += rawDt * 0.12; vrMove(rawDt); placeVRHeart(); }   // slow turntable in VR (the object turns, not you)
       marker.position.set(pCam[0], pCam[1], pCam[2]);
       marker.scale.setScalar(1 + 0.25 * Math.sin(S.time * 6));
     }
