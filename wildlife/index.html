@@ -178,6 +178,15 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
 //  - Watchdog: frames over 50 ms for most of 2 s -> onQuality(1), then 2.5 s later onQuality(2) (the page lightens its scene).
 //    Frames over 1 s (twice within 10 s), or no frame at all for 2.5 s -> the session ends and the page says why.
 //  - No allocations per frame (beyond what WebXR itself returns for poses).
+//  Per-page options (all optional; leaving them out keeps the behaviour above):
+//    panel: false        no big red Exit VR panel (the page offers its own exit target instead; B / Y still exit)
+//    exitTargets: [obj]  page meshes that exit like the panel (ray + trigger / pinch, fingertip poke). Each one's
+//                        obj.userData.exitRect = { cx, cy, w, h } is the hot area in the mesh's local plane (facing +z);
+//                        obj.userData.exitIgnore = 'left' ignores that hand (a wrist panel on that hand); hover calls
+//                        obj.userData.onExitHover(bool). Only counted while the object and its parents are visible.
+//                        api.exitTargets is the live array (push more later).
+//    exitButtons: [5]    gamepad buttons that exit (default [4, 5] = A/X and B/Y; [5] = B and Y only, so A/X stay free)
+//    hint: 'text'        a small hint shown ahead of you for ~4 s each time VR starts (fades out)
 (function () {
   'use strict';
   if (window.ImHereXR) return;
@@ -230,11 +239,27 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
       var l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]), rayMat);
       l.visible = false; l.frustumCulled = false; l.renderOrder = 99998; l.matrixAutoUpdate = false; return l;
     });
+    var usePanel = o.panel !== false;
+    var exitBtns = o.exitButtons || [4, 5];
+    api.exitTargets = (o.exitTargets || []).slice();
+    // ---- optional entry hint (canvas drawn once; opacity fades)
+    var hint = null, hintAt = 0, hintPlaced = false;
+    if (o.hint) {
+      var hc = document.createElement('canvas'); hc.width = 512; hc.height = 72;
+      var hg = hc.getContext('2d');
+      hg.fillStyle = 'rgba(10,18,32,0.78)'; hg.beginPath(); if (hg.roundRect) hg.roundRect(2, 2, 508, 68, 34); else hg.rect(2, 2, 508, 68); hg.fill();
+      hg.fillStyle = '#fff'; hg.textAlign = 'center'; hg.textBaseline = 'middle'; hg.font = '500 30px system-ui, sans-serif';
+      hg.fillText(String(o.hint), 256, 37);
+      var htex = new THREE.CanvasTexture(hc); if (THREE.SRGBColorSpace) htex.colorSpace = THREE.SRGBColorSpace;
+      hint = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3 * 72 / 512), new THREE.MeshBasicMaterial({ map: htex, transparent: true, opacity: 1, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+      hint.name = 'imhere-exit-hint'; hint.renderOrder = 99997; hint.frustumCulled = false; hint.visible = false; hint.matrixAutoUpdate = false;
+      api.hint = hint;
+    }
     var holder = null;   // the camera's parent (the rig / dolly): WebXR poses are in its space
     function attach() {
       var p = (o.camera && o.camera.parent) || o.scene;
       if (!p || holder === p) return; holder = p;
-      p.add(btn); if (o.rays) rays.forEach(function (l) { p.add(l); });
+      p.add(btn); if (hint) p.add(hint); if (o.rays) rays.forEach(function (l) { p.add(l); });
     }
 
     // ---- exit
@@ -255,35 +280,74 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
     api.exit = exit;
 
     // ---- per-frame: button placement, input, hit testing (all in the rig's local space; preallocated temporaries)
-    var Minv = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), d = new THREE.Vector3(),
+    var Minv = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(),
       lo = new THREE.Vector3(), ld = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), sc = new THREE.Vector3(), e3 = new THREE.Euler();
+    var TM = new THREE.Matrix4(), TMinv = new THREE.Matrix4();
     var PL = { right: 0.24, down: 0.24, ahead: 0.6 }; if (o.place) for (var k in o.place) PL[k] = o.place[k];
     var anchorYaw = null, prevDown = [false, false, false, false], hovered = false, invOk = false;
     function refSpace() { try { return xr.getReferenceSpace(); } catch (e) { return null; } }
     function inv() { if (!invOk) { Minv.copy(btn.matrix).invert(); invOk = true; } return Minv; }
-    function rayHit(frame, src, ref) {   // distance along the pointing ray to the Exit button, or -1
+    function shown(obj) { for (var x = obj; x; x = x.parent) { if (!x.visible) return false; if (x === holder) return true; } return true; }
+    function targetInv(obj) {   // a page target's matrix in the rig's space (from its last rendered matrixWorld), inverted
+      TM.copy(holder.matrixWorld).invert().multiply(obj.matrixWorld); return TMinv.copy(TM).invert();
+    }
+    // distance (rig units) along the pointing ray to the rectangle (cx, cy, hw, hh) in the plane of Mi's space, or -1
+    function rayHitIn(frame, src, ref, Mi, cx, cy, hw, hh) {
       var pose = frame.getPose(src.targetRaySpace, ref); if (!pose) return -1;
       var p = pose.transform.position, r = pose.transform.orientation;
       q.set(r.x, r.y, r.z, r.w);
-      lo.set(p.x, p.y, p.z).applyMatrix4(inv());
-      ld.set(0, 0, -1).applyQuaternion(q).transformDirection(Minv);
-      if (Math.abs(ld.z) < 1e-6) return -1;
+      lo.set(p.x, p.y, p.z); ld.set(0, 0, -1).applyQuaternion(q).add(lo);
+      lo.applyMatrix4(Mi); ld.applyMatrix4(Mi).sub(lo);   // unnormalised: t stays in rig units
+      if (Math.abs(ld.z) < 1e-9) return -1;
       var t = -lo.z / ld.z; if (t <= 0 || t > 6) return -1;
-      var x = lo.x + ld.x * t, y = lo.y + ld.y * t;
-      return Math.abs(x) <= BW / 2 + 0.01 && Math.abs(y) <= BH / 2 + 0.01 ? t : -1;
+      var x = lo.x + ld.x * t - cx, y = lo.y + ld.y * t - cy;
+      return Math.abs(x) <= hw + 0.01 && Math.abs(y) <= hh + 0.01 ? t : -1;
     }
-    function poke(frame, src, ref) {   // index fingertip pressed into the button (hand tracking)
+    function pokeIn(frame, src, ref, Mi, cx, cy, hw, hh) {   // index fingertip pressed into the rectangle (hand tracking)
       if (!src.hand || !frame.getJointPose) return false;
       var j = src.hand.get && src.hand.get('index-finger-tip'); if (!j) return false;
       var jp = frame.getJointPose(j, ref); if (!jp) return false;
-      var p = jp.transform.position; lo.set(p.x, p.y, p.z).applyMatrix4(inv());
-      return Math.abs(lo.x) <= BW / 2 && Math.abs(lo.y) <= BH / 2 && lo.z < 0.015 && lo.z > -0.04;
+      var p = jp.transform.position; lo.set(p.x, p.y, p.z).applyMatrix4(Mi);
+      return Math.abs(lo.x - cx) <= hw && Math.abs(lo.y - cy) <= hh && lo.z < 0.015 && lo.z > -0.04;
+    }
+    // what this input source points at / pokes: { t, obj } (obj null = the big panel); hit.t = -1 when nothing
+    var hit = { t: -1, obj: null, poke: false };
+    function probe(frame, src, ref) {
+      hit.t = -1; hit.obj = null; hit.poke = false;
+      if (usePanel && btn.visible) {
+        if (pokeIn(frame, src, ref, inv(), 0, 0, BW / 2, BH / 2)) { hit.poke = true; hit.t = 0.01; return hit; }
+        var t0 = rayHitIn(frame, src, ref, inv(), 0, 0, BW / 2, BH / 2); if (t0 > 0) { hit.t = t0; }
+      }
+      for (var i = 0; i < api.exitTargets.length && holder; i++) {
+        var ob = api.exitTargets[i], R = ob && ob.userData && ob.userData.exitRect;
+        if (!R || !shown(ob) || (ob.userData.exitIgnore && ob.userData.exitIgnore === src.handedness)) continue;
+        var Mi = targetInv(ob);
+        if (pokeIn(frame, src, ref, Mi, R.cx, R.cy, R.w / 2, R.h / 2)) { hit.poke = true; hit.t = 0.01; hit.obj = ob; return hit; }
+        var t1 = rayHitIn(frame, src, ref, Mi, R.cx, R.cy, R.w / 2, R.h / 2);
+        if (t1 > 0 && (hit.t < 0 || t1 < hit.t)) { hit.t = t1; hit.obj = ob; }
+      }
+      return hit;
+    }
+    function setTargetHover(ob, on) {
+      if (!!ob.userData._exitHov === on) return; ob.userData._exitHov = on;
+      if (ob.userData.onExitHover) try { ob.userData.onExitHover(on); } catch (e) { logErr('onExitHover', e); }
     }
     function placeButton(frame, ref) {   // follows the head's yaw lazily: about 0.6 m ahead, low and to the right
       var vp = frame.getViewerPose(ref); if (!vp) return;
       var tp = vp.transform.position, to = vp.transform.orientation;
       e3.setFromQuaternion(q.set(to.x, to.y, to.z, to.w), 'YXZ');
       var yaw = e3.y;
+      if (hint && !hintPlaced) {   // the entry hint: fixed in the rig, ahead of where you look when VR starts
+        hintPlaced = true; hintAt = performance.now();
+        v.set(tp.x - Math.sin(yaw) * 0.8, tp.y - 0.12, tp.z - Math.cos(yaw) * 0.8);
+        hint.matrix.compose(v, q.setFromEuler(e3.set(0.15, yaw, 0, 'YXZ')), one); hint.matrixWorldNeedsUpdate = true;
+        hint.material.opacity = 1; hint.visible = true;
+      }
+      if (hint && hint.visible) {
+        var age = performance.now() - hintAt;
+        if (age > 4000) hint.visible = false; else hint.material.opacity = age < 3000 ? 1 : 1 - (age - 3000) / 1000;
+      }
+      if (!usePanel) return;
       if (anchorYaw === null) anchorYaw = yaw;
       var dy = Math.atan2(Math.sin(yaw - anchorYaw), Math.cos(yaw - anchorYaw));
       if (Math.abs(dy) > 0.45) anchorYaw += dy - (dy > 0 ? 0.45 : -0.45);   // never more than ~26 deg from where you look
@@ -298,17 +362,18 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
       var s = frame.session, ref = refSpace(); if (!ref) return;
       attach();
       placeButton(frame, ref);
-      var hov = false, ri = 0, srcs = s.inputSources;
+      var hov = false, ri = 0, srcs = s.inputSources, hovObj = null;
       for (var i = 0; i < srcs.length; i++) {
         var src = srcs[i];
-        // B / Y on xr-standard controllers (gamepad buttons 4 and 5): exit on press
+        // B / Y on xr-standard controllers (gamepad buttons 5, and 4 = A / X unless the page chose exitButtons): exit on press
         var gp = src.gamepad, down = false;
-        if (gp && !src.hand && gp.buttons) down = !!((gp.buttons[4] && gp.buttons[4].pressed) || (gp.buttons[5] && gp.buttons[5].pressed));
+        if (gp && !src.hand && gp.buttons) for (var b = 0; b < exitBtns.length; b++) { var gb = gp.buttons[exitBtns[b]]; if (gb && gb.pressed) down = true; }
         var was = i < 4 ? prevDown[i] : false; if (i < 4) prevDown[i] = down;
         if (down && !was) { exit('B/Y button'); return; }
-        if (btn.visible && poke(frame, src, ref)) { exit('fingertip on Exit VR'); return; }
-        var t = btn.visible ? rayHit(frame, src, ref) : -1;
-        if (t > 0) hov = true;
+        var h = probe(frame, src, ref);
+        if (h.poke) { exit('fingertip on Exit VR'); return; }
+        var t = h.t;
+        if (t > 0) { if (h.obj) hovObj = h.obj; else hov = true; }
         if (o.rays && ri < 2) {
           var l = rays[ri++], pose = frame.getPose(src.targetRaySpace, ref);
           if (pose) {
@@ -320,11 +385,12 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
       }
       for (; ri < 2; ri++) rays[ri].visible = false;
       if (hov !== hovered) { hovered = hov; btn.material.color.setHex(hov ? 0xffd0d0 : 0xffffff); }
+      for (var k2 = 0; k2 < api.exitTargets.length; k2++) if (api.exitTargets[k2]) setTargetHover(api.exitTargets[k2], api.exitTargets[k2] === hovObj);
     }
-    function onSelectStart(ev) {   // trigger or pinch while pointing at Exit VR
+    function onSelectStart(ev) {   // trigger or pinch while pointing at Exit VR (the panel or a page exit target)
       try {
-        var ref = refSpace(); if (!ref || !ev.frame || !btn.visible) return;
-        if (rayHit(ev.frame, ev.inputSource, ref) > 0) exit('Exit VR pressed');
+        var ref = refSpace(); if (!ref || !ev.frame) return;
+        if (probe(ev.frame, ev.inputSource, ref).t > 0) exit('Exit VR pressed');
       } catch (e) { logErr('selectstart', e); }
     }
 
@@ -384,7 +450,7 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
     function onVis() { resetHist(); W.big1 = 0; }
     xr.addEventListener('sessionstart', function () {
       var s = xr.getSession();
-      api.level = 0; anchorYaw = null; hovered = false; prevDown[0] = prevDown[1] = prevDown[2] = prevDown[3] = false;
+      api.level = 0; anchorYaw = null; hovered = false; hintPlaced = false; prevDown[0] = prevDown[1] = prevDown[2] = prevDown[3] = false;
       W.start = performance.now(); resetHist(); W.big0 = W.big1 = 0; W.levelAt = 0; W.errRun = 0;
       try { xr.setFoveation(1); } catch (e) { /* ignore */ }
       api.shadow = renderer.shadowMap.enabled; renderer.shadowMap.enabled = false;
@@ -400,7 +466,8 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
     });
     xr.addEventListener('sessionend', function () {
       clearInterval(W.timer); clearTimeout(ending);
-      btn.visible = false; rays.forEach(function (l) { l.visible = false; });
+      btn.visible = false; if (hint) hint.visible = false; rays.forEach(function (l) { l.visible = false; });
+      api.exitTargets.forEach(function (t) { if (t) setTargetHover(t, false); });
       if (api.shadow) renderer.shadowMap.enabled = true;
       if (api.level && o.onQuality) try { o.onQuality(0); } catch (e) { logErr('onQuality', e); }
       api.level = 0;
@@ -459,7 +526,10 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
                   kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
         below     CSS selector(s): the label sits just under the lowest visible one (e.g. the page header)
      ImHereMark.setLive(true|false)   "live" (green) in SIGNAL. Only while the data is really fresh.
-     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh panel, kept up to date
+     ImHereMark.xrPanel(THREE, { width, x, y, z, exitRow })  -> small THREE.Mesh panel, kept up to date
+        exitRow: true adds a last row "Exit VR" under LOC / SIGNAL / VIEW (opt-in; default off). Its hot area is
+        mesh.userData.exitRect = { cx, cy, w, h } (mesh-local metres) for the VR safety layer's exitTargets;
+        ImHereMark.xrExitHover(bool) highlights it.
      ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
    CSS variable --imh-h on <html>: height taken by the label (or the corner mark) + gap, so a page can push its
    own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
@@ -731,13 +801,18 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
   // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
   function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
-  function xrHeight() { var L = idLines(); return 262 + (L[1] ? 42 : 0) + (L[2] ? 30 : 0); }
+  var XR_EXIT_H = 58;
+  function xrHeight() { var L = idLines(); return 262 + (L[1] ? 42 : 0) + (L[2] ? 30 : 0) + (xr && xr.exitRow ? XR_EXIT_H : 0); }
+  function exitRect(m) {   // the Exit VR row's hot area in the mesh's plane (metres), from the canvas layout
+    var w = m.userData.imhW, H = xr.canvas.height, s = w / 512, top = H - 6 - XR_EXIT_H, bot = H - 6;
+    m.userData.exitRect = xr.exitRow ? { cx: 0, cy: (H / 2 - (top + bot) / 2) * s, w: (512 - 12) * s, h: XR_EXIT_H * s } : null;
+  }
   function xrResize(H) {   // two-line identity makes the panel taller: new canvas texture (GPU storage is fixed-size) + geometry
     var T = xr.THREE, c = xr.canvas; c.height = H;
     var tex = new T.CanvasTexture(c); if (T.SRGBColorSpace) tex.colorSpace = T.SRGBColorSpace;
     xr.meshes.forEach(function (m) {
       m.material.map = tex; m.material.needsUpdate = true;
-      var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / 512);
+      var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / 512); exitRect(m);
     });
     xr.tex.dispose(); xr.tex = tex;
   }
@@ -768,6 +843,15 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
       else g.fillText(fit(g, r[1], W - 28 - vx), vx, y);
       y += 46;
     });
+    if (xr.exitRow) {   // last row: Exit VR (small, under the data rows; brighter while a ray points at it)
+      var ty = H - 6 - XR_EXIT_H;
+      g.save(); rr(g, 3, ty, W - 6, XR_EXIT_H + 3, 16); g.clip();
+      g.fillStyle = xr.exitHover ? 'rgba(200,32,42,0.75)' : 'rgba(200,32,42,0.22)'; g.fillRect(0, ty, W, XR_EXIT_H + 6); g.restore();
+      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(3, ty, W - 6, 2);
+      if ('letterSpacing' in g) g.letterSpacing = '0px';
+      g.fillStyle = xr.exitHover ? '#fff' : '#ffb3b6'; g.font = '600 28px ' + FONT; g.fillText('Exit VR', lx, ty + 39);
+      g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + FONT; g.textAlign = 'right'; g.fillText('or press B / Y', W - 28, ty + 38); g.textAlign = 'left';
+    }
     xr.tex.needsUpdate = true;
   }
   function xrPanel(THREE, o) {
@@ -775,15 +859,16 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
     if (!xr) {
       var c = document.createElement('canvas'); c.width = 512; c.height = xrHeight();
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [] };
+      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [], exitRow: false, exitHover: false };
     }
+    if (o.exitRow && !xr.exitRow) { xr.exitRow = true; xrResize(xrHeight()); }
     var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
     var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * xr.canvas.height / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     m.userData.imhW = w; xr.meshes.push(m);
     m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
     m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
     m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
-    drawXR(); return m;
+    exitRect(m); drawXR(); return m;
   }
 
   window.ImHereMark = {
@@ -796,6 +881,7 @@ setTimeout(function(){ if(!window.__wlReady){ var f=document.getElementById('fat
     dismiss: function () { if (S.mounted) setDismissed(true, false); },
     expand: function () { if (S.mounted) expand(); },
     label: label, xrPanel: xrPanel,
+    xrExitHover: function (on) { on = !!on; if (xr && xr.exitRow && on !== xr.exitHover) { xr.exitHover = on; drawXR(); } },
     items: function () { return S.items.slice(); }
   };
 })();
@@ -1218,11 +1304,13 @@ $('#stage').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 90000);
 const rig = new THREE.Group(); rig.add(camera); scene.add(rig);
-// VR safety (shared/xr-safety.js): Exit VR button (point and pull the trigger / pinch, or poke it), B / Y to exit,
-// crash-proof frame loop, frame-cost watchdog. This page has no other VR pointer, so the module draws the rays.
+// VR safety (shared/xr-safety.js): B / Y to exit, crash-proof frame loop, frame-cost watchdog. No big red Exit panel on
+// this page: Exit VR is the last row of the I'M HERE label (registered below as an exit target: point and pull the
+// trigger / pinch, or poke it). Only B and Y exit (buttons 5): X cycles the label placement. The module draws the rays.
 // Watchdog level 1: a third of the snow, coarser Google tiles; level 2: no snow, no drawn trees, coarsest tiles.
 let xrLevel = 0;
-const XRS = window.ImHereXR ? window.ImHereXR.install({ THREE, renderer, scene, camera, scale: 0.9, rays: true, onQuality: (n) => {
+const XRS = window.ImHereXR ? window.ImHereXR.install({ THREE, renderer, scene, camera, scale: 0.9, rays: true,
+  panel: false, exitButtons: [5], hint: 'Press B or Y to exit', onQuality: (n) => {
   xrLevel = n;
   if (!n) { cedars.visible = cedars.count > 0; hards.visible = hards.count > 0; }   // back to normal (tiles logic re-hides them if needed)
 } }) : null;
@@ -1760,9 +1848,94 @@ if (WL_DEBUG) import('./google-scenery.js').then((gs) => gs.debugOverlay(() => g
   'drawn terrain': (terrain.mesh ? (terrain.mesh.visible ? 'visible' : 'HIDDEN') : 'not built') + ' · trees ' + (cedars.visible ? 'visible' : 'hidden') + ' · mode ' + (world ? world.mode : '?'),
   host: HERE.hostname + (renderer.xr.isPresenting ? ' · in VR' : ''),
 }), { bottom: 74 })).catch(() => {});
-const markXR = MARK ? MARK.xrPanel(THREE) : null;   // the I'M HERE card: small HUD tag low in the corner of view in VR
-if (markXR) { markXR.visible = false; camera.add(markXR);
-  renderer.xr.addEventListener('sessionstart', () => { markXR.visible = true; }); renderer.xr.addEventListener('sessionend', () => { markXR.visible = false; }); }
+// The I'M HERE label in VR, with Exit VR as its last row. Placement test (the founder picks one in the headset):
+//   dash  A "Dashboard":   ~30 deg below the eye line, slightly left, ~0.9 m, tilted to face the eye
+//   high  B "High corner": ~25 deg above the eye line, up and left, in the periphery
+//   wrist C "Wrist":       on the left controller / hand like a watch, shown when you raise it toward your eyes
+// A and B live in the rig (the rider's body / vehicle frame): their yaw follows the ride's smoothed heading, never the
+// head; they follow the head's position only slowly. Left thumbstick click or X cycles A -> B -> C (remembered);
+// ?label=dash|high|wrist picks one.
+const markXR = MARK ? MARK.xrPanel(THREE, { exitRow: true }) : null;
+const LABEL_MODES = ['dash', 'high', 'wrist'];
+const LABEL_NAMES = { dash: 'Label A: Dashboard', high: 'Label B: High corner', wrist: 'Label C: Wrist (raise left hand)' };
+const LABEL_PLACE = { dash: { el: -30 * Math.PI / 180, az: 8 * Math.PI / 180, d: 0.9 }, high: { el: 25 * Math.PI / 180, az: 32 * Math.PI / 180, d: 1.0 } };
+let labelMode = 'dash';
+{ const qp = new URLSearchParams(HERE.search).get('label'); let saved = null;
+  try { saved = localStorage.getItem('imhere.wildlife.label'); } catch (e) { /* private mode */ }
+  labelMode = LABEL_MODES.includes(qp) ? qp : LABEL_MODES.includes(saved) ? saved : 'dash'; }
+const labelXR = { head: new THREE.Vector3(), eye: new THREE.Vector3(), eyeQ: new THREE.Quaternion(), init: false, wristOn: false, v: new THREE.Vector3(), q: new THREE.Quaternion(), f: new THREE.Vector3() };
+const labelToastXR = (() => {   // tiny toast naming the placement, ~1.5 s
+  const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 96;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4 * 96 / 1024), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+  m.renderOrder = 10001; m.visible = false; m.frustumCulled = false; m.name = 'imhere-label-toast'; rig.add(m);
+  return { cv, tex, m, until: 0, txt: '' };
+})();
+function labelToast(txt) {
+  const P = labelToastXR, g = P.cv.getContext('2d'); P.txt = txt; P.until = performance.now() + 1500;
+  g.clearRect(0, 0, 1024, 96); g.font = '500 40px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const w = g.measureText(txt).width + 56; g.fillStyle = 'rgba(10,18,32,0.82)'; g.beginPath();
+  g.roundRect ? g.roundRect((1024 - w) / 2, 6, w, 84, 42) : g.rect((1024 - w) / 2, 6, w, 84); g.fill();
+  g.fillStyle = '#fff'; g.fillText(txt, 512, 50); P.tex.needsUpdate = true;
+}
+function setLabelMode(m, announce) {
+  if (!LABEL_MODES.includes(m)) return;
+  labelMode = m; labelXR.init = false; labelXR.wristOn = false;
+  if (markXR) markXR.userData.exitIgnore = m === 'wrist' ? 'left' : '';   // the hand wearing the watch cannot point at it
+  try { localStorage.setItem('imhere.wildlife.label', m); } catch (e) { /* private mode */ }
+  if (announce) labelToast(LABEL_NAMES[m]);
+}
+const cycleLabel = () => setLabelMode(LABEL_MODES[(LABEL_MODES.indexOf(labelMode) + 1) % LABEL_MODES.length], true);
+if (markXR) {
+  markXR.visible = false; rig.add(markXR);
+  markXR.userData.exitIgnore = labelMode === 'wrist' ? 'left' : '';
+  markXR.userData.onExitHover = (on) => MARK.xrExitHover(on);
+  if (XRS && XRS.exitTargets) XRS.exitTargets.push(markXR);
+  renderer.xr.addEventListener('sessionstart', () => { labelXR.init = false; labelXR.wristOn = false; });
+  renderer.xr.addEventListener('sessionend', () => { markXR.visible = false; labelToastXR.m.visible = false; });
+}
+function labelXRStep(dt, xr) {
+  if (!markXR) return;
+  const T = labelToastXR, H = labelXR;
+  if (!xr) { markXR.visible = T.m.visible = false; H.init = false; return; }
+  // the head in the rig's space, from the WebXR viewer pose (the reference space is the rig's local space). Not
+  // camera.position: three's combined stereo camera shifts when the head turns.
+  const frame = renderer.xr.getFrame && renderer.xr.getFrame(), ref = renderer.xr.getReferenceSpace && renderer.xr.getReferenceSpace();
+  const vp = frame && ref ? frame.getViewerPose(ref) : null;
+  if (vp) { const tp = vp.transform.position, to = vp.transform.orientation; H.eye.set(tp.x, tp.y, tp.z); H.eyeQ.set(to.x, to.y, to.z, to.w); }
+  else { H.eye.copy(camera.position); H.eyeQ.copy(camera.quaternion); }
+  // the anchor: where the head is, followed slowly (head rotation is ignored)
+  if (!H.init) { H.head.copy(H.eye); H.init = true; } else H.head.lerp(H.eye, 1 - Math.exp(-dt * 2));
+  T.m.visible = performance.now() < T.until;
+  if (T.m.visible) { T.m.position.set(H.head.x, H.head.y - 0.2, H.head.z - 1.0); T.m.rotation.set(-0.2, 0, 0, 'YXZ'); }
+  if (labelMode !== 'wrist') {
+    const P = LABEL_PLACE[labelMode], ce = Math.cos(P.el);
+    markXR.position.set(H.head.x - Math.sin(P.az) * ce * P.d, H.head.y + Math.sin(P.el) * P.d, H.head.z - Math.cos(P.az) * ce * P.d);
+    markXR.rotation.set(P.el, P.az, 0, 'YXZ');   // faces the eye
+    markXR.scale.setScalar(1); markXR.visible = true; return;
+  }
+  // C: wrist. Poses come in the reference space, which is the rig's local space here.
+  const ses = renderer.xr.getSession && renderer.xr.getSession();
+  let pose = null;
+  if (frame && ref && ses) for (const src of ses.inputSources) {
+    if (!src || src.handedness !== 'left') continue;
+    if (src.hand) { const j = src.hand.get && src.hand.get('wrist'); pose = j && frame.getJointPose ? frame.getJointPose(j, ref) : null; }
+    else if (src.gripSpace) pose = frame.getPose(src.gripSpace, ref);
+    break;
+  }
+  if (!pose) { markXR.visible = false; H.wristOn = false; return; }
+  const p = pose.transform.position, o = pose.transform.orientation;
+  H.q.set(o.x, o.y, o.z, o.w);
+  H.v.set(0, 0.06, 0.03).applyQuaternion(H.q).add(H.f.set(p.x, p.y, p.z));   // just above the back of the wrist
+  markXR.position.copy(H.v); markXR.scale.setScalar(0.5);                      // ~12 cm wide, like a watch face
+  const dx = H.eye.x - H.v.x, dy = H.eye.y - H.v.y, dz = H.eye.z - H.v.z, dist = Math.hypot(dx, dy, dz);
+  markXR.rotation.set(Math.atan2(-dy, Math.hypot(dx, dz)), Math.atan2(dx, dz), 0, 'YXZ');   // faces the eye
+  // shown when raised: near the face, not far below the eyes, and roughly where you look (with hysteresis)
+  H.f.set(0, 0, -1).applyQuaternion(H.eyeQ);
+  const look = dist > 0 ? -(H.f.x * dx + H.f.y * dy + H.f.z * dz) / dist : 0;
+  const on = dist < (H.wristOn ? 0.8 : 0.7) && dy < (H.wristOn ? 0.55 : 0.45) && look > (H.wristOn ? 0.5 : 0.65);
+  H.wristOn = on; markXR.visible = on;
+}
 function refreshMark() {
   if (!MARK || !cur || !world) return;
   const tr = cur, ocean = world.mode === 'ocean', animal = ocean ? 'Shark' : 'Eagle';
@@ -2160,19 +2333,23 @@ function setDist(d) {
 }
 const stepDist = (k) => { if (view === 'map') return; const i = DISTS.indexOf(camDist[view]); setDist(DISTS[clamp(i + k, 0, DISTS.length - 1)]); };
 $('#dist').querySelectorAll('button').forEach((b) => b.onclick = () => setDist(b.dataset.dist));
-// VR: thumbstick forward = closer, back = wider; thumbstick click shows or hides the animal card. Read-only polling:
-// nothing is captured or prevented, so the system buttons and the Exit VR controls work as before.
-const xrPad = { armed: true, press: false };
+// VR: thumbstick forward = closer, back = wider; right thumbstick click shows or hides the animal card; left thumbstick
+// click or X cycles the I'M HERE label placement (A -> B -> C). Read-only polling: nothing is captured or prevented, so
+// the system buttons and the exits (B / Y, the label's Exit VR row) work as before.
+const xrPad = { armed: true, press: false, cycle: false };
 function xrPadStep() {
   const ses = renderer.xr.getSession && renderer.xr.getSession(); if (!ses || !ses.inputSources) return;
-  let y = 0, press = false;
-  for (const src of ses.inputSources) { const gp = src && src.gamepad; if (!gp) continue;
+  let y = 0, press = false, cycle = false;
+  for (const src of ses.inputSources) { const gp = src && src.gamepad; if (!gp || src.hand) continue;
     const ay = gp.axes && gp.axes.length > 3 ? gp.axes[3] : 0; if (Math.abs(ay) > Math.abs(y)) y = ay;
-    if (gp.buttons && gp.buttons[3] && gp.buttons[3].pressed) press = true; }
+    const b = gp.buttons || [], left = src.handedness === 'left';
+    if (b[3] && b[3].pressed) { if (left) cycle = true; else press = true; }
+    if (left && b[4] && b[4].pressed) cycle = true; }   // X
   if (xrPad.armed && Math.abs(y) > 0.7) { xrPad.armed = false; stepDist(y < 0 ? 1 : -1); }
   else if (Math.abs(y) < 0.3) xrPad.armed = true;
   if (press && !xrPad.press) cardXR.on = !cardXR.on;
-  xrPad.press = press;
+  if (cycle && !xrPad.cycle) cycleLabel();
+  xrPad.press = press; xrPad.cycle = cycle;
 }
 
 function renderTrackList() {
@@ -2456,7 +2633,7 @@ function frame() {
 
     const now = performance.now();
     if (xr) xrPadStep();
-    narrTick(); guideFrame(now); guideXRStep(xr); cardXRStep(dt, xr);
+    narrTick(); guideFrame(now); guideXRStep(xr); cardXRStep(dt, xr); labelXRStep(dt, xr);
     if (now - cardT > 1000) { cardT = now; drawCardMap(); if (++cardN % 30 === 0) renderCard(false); }
     if (now - markT > 1000) { markT = now; refreshMark(); }
     if (now - infoT > 250) { infoT = now; updateInfo(); if (!sliding) slider.value = String(Math.round((simT - cur.t0) / Math.max(1, cur.t1 - cur.t0) * 10000)); }
