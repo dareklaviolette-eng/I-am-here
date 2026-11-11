@@ -46,6 +46,10 @@
   #liveList button { text-align: left; font-size: 11px; padding: 5px 7px; line-height: 1.3; }
   #liveList button small { display: block; color: #9fb6c6; font-size: 10px; }
   #liveList button.no737 { opacity: .55; cursor: not-allowed; }
+  #typeNote { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 6px 12px; border-radius: 14px;
+    background: #07131ee0; border: 1px solid #ffc24a88; color: #f3e6c8; font-size: 12px; pointer-events: none; text-align: center; }
+  #typeNote[hidden] { display: none; }
+  #toGlobe { display: inline-block; margin-top: 6px; color: #9fd8c4; font-size: 11px; }
   #liveQ { flex: 1; min-width: 0; }
   #realRow { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; color: #93a8b8; }
   #realRow input[type=range] { flex: 1; min-width: 0; accent-color: #6cdbb4; }
@@ -67,6 +71,7 @@
 <body>
 <div id="view"></div>
 <header><div id="brand">737-800 <small>flight deck</small></div></header>
+<div id="typeNote" hidden></div>
 
 <aside id="panel">
   <div class="lbl">Seat</div>
@@ -96,6 +101,7 @@
   <div class="row" style="margin-top:5px"><input id="liveQ" placeholder="Flight or tail (SWA1234, N8501V)" spellcheck="false" autocomplete="off" aria-label="Search a live flight by flight number or tail"><button id="liveGo">Find</button></div>
   <div id="liveList"></div>
   <div class="src" id="liveStatus">Live ADS-B within 150 nm of the airport. 737s first.</div>
+  <a id="toGlobe" href="../globe/">Pick any flight on the globe</a>
   <div class="lbl">Scenery</div>
   <div class="row"><button id="scenery">Real scenery (Google 3D)</button></div>
   <div class="src" id="sceneryNote"></div>
@@ -759,7 +765,7 @@ import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { buildAirport } from './airport-kit.js';
 import { loadOurAirport, defaultEnd, nearestAirport } from './ourairports.js';
-import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit } from './live-flights.js';
+import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit, COCKPIT_737 } from './live-flights.js';
 import { toLocal } from './airport-kit.js';
 import { fetchMetar, isLive as wxIsLive, summary as wxSummary, windComponents } from './weather.js';
 import { createGoogleScenery, debugOverlay, debugLines } from './google-scenery.js';
@@ -1300,16 +1306,53 @@ async function findLive(q) {
   } catch (e) { liveStatus('Live flights not reachable from here: ' + e.message.slice(0, 140)); }
   finally { $('liveFind').disabled = false; }
 }
+// The cockpit is a 737-800. A flight of another type can still be ridden (opened from the globe with ?flight=),
+// with a small honest note: "Cockpit shown is a 737-800; this flight is a <type>."
+const TYPE_LABEL = { B736: '737-600', B737: '737-700', B738: '737-800', B739: '737-900', B37M: '737 MAX 7', B38M: '737 MAX 8', B39M: '737 MAX 9', B3XM: '737 MAX 10',
+  A319: 'A319', A320: 'A320', A321: 'A321', A20N: 'A320neo', A21N: 'A321neo', B752: '757-200', B763: '767-300', B772: '777-200', B77W: '777-300ER',
+  B788: '787-8', B789: '787-9', B78X: '787-10', E75L: 'E175', CRJ9: 'CRJ-900', CRJ7: 'CRJ-700', BCS3: 'A220-300', BCS1: 'A220-100', A333: 'A330-300', A359: 'A350-900' };
+function typeNoteText(f) {
+  if (!f || COCKPIT_737.test(f.type || '')) return '';
+  const name = TYPE_LABEL[f.type] || f.type;
+  return f.type ? `Cockpit shown is a 737-800; this flight is ${/^[AEFHILMNORSX8]/i.test(name) ? 'an' : 'a'} ${name}.` : "Cockpit shown is a 737-800; this flight's aircraft type is not in the feed.";
+}
+function showTypeNote(f) { const t = typeNoteText(f); $('typeNote').textContent = t; $('typeNote').hidden = !t; }
 function joinFlight(f) {
+  showTypeNote(f);
   JOIN.hex = f.hex; JOIN.info = f; JOIN.tracker = new Tracker(); JOIN.tracker.onFix(f); JOIN.prevTrack = null; JOIN.landed = false; JOIN.groundT = 0;
   live = true; demo = false; feedAt = f.fixAt; viewHdg = null;
   F.flight = (f.flight || f.reg || f.hex).slice(0, 24);
   $('liveLeave').hidden = false; $('liveList').textContent = '';
-  liveStatus(`Riding ${f.flight || f.reg} (${f.type}) · live ADS-B from ${JOIN.src}`);
+  liveStatus(`Riding ${f.flight || f.reg || f.hex.toUpperCase()} (${f.type || 'type not reported'}) · live ADS-B from ${JOIN.src}`);
   refreshMark();
 }
+// ?flight=<hex | callsign | tail> (from the globe; optional cs, lat, lon hints): find it, load the nearest airport, ride it live.
+async function findFlightForJoin(q, hint) {
+  const hex = /^[0-9a-f]{6}$/i.test(q) ? q.toLowerCase() : '';
+  if (hex) { try { const r = await fetchHex(hex); return r; } catch (e) { /* try the area below */ } }
+  if (hint.lat != null && hint.lon != null) {
+    const r = await fetchNearby(hint.lat, hint.lon, 60);
+    const want = [q, hint.cs].filter(Boolean);
+    const f = r.flights.find((x) => x.hex === hex) || want.map((w) => searchFlights(r.flights, w)[0]).find(Boolean);
+    if (f) return { source: r.source, flight: f };
+  }
+  throw new Error(`${(hint.cs || q).toUpperCase()} is not in the live feeds right now`);
+}
+async function autoJoin(q) {
+  const num = (k) => (params.get(k) !== null && Number.isFinite(+params.get(k)) ? +params.get(k) : null);
+  const hint = { cs: params.get('cs') || '', lat: num('lat'), lon: num('lon') };
+  liveStatus(`Finding flight ${(hint.cs || q).toUpperCase()}…`);
+  let r = null;
+  try { r = await findFlightForJoin(q, hint); } catch (e) { liveStatus('Could not join: ' + e.message.slice(0, 160) + '. Showing the demo.'); }
+  let apt = params.get('apt') || 'KBNA';
+  if (r) { const a = await nearestAirport(r.flight.lat, r.flight.lon).catch(() => null); if (a && a.ident) apt = a.ident; }
+  await loadAirport(apt, params.get('rwy'));
+  if (!r || !airport) return;
+  JOIN.src = r.source;
+  joinFlight({ ...r.flight, is737: COCKPIT_737.test(r.flight.type || '') });
+}
 function leaveFlight() {
-  JOIN.hex = null; JOIN.tracker = null; $('liveLeave').hidden = true; liveStatus('Left the live flight. Back to the demo.');
+  JOIN.hex = null; JOIN.tracker = null; $('liveLeave').hidden = true; showTypeNote(null); liveStatus('Left the live flight. Back to the demo.');
   ORG.lat = airport.data.arp[0]; ORG.lon = airport.data.arp[1]; orgOff = [0, 0]; if (scenery) placeScenery();
   F.flight = 'DEMO'; setMode(mode);
 }
@@ -1400,12 +1443,12 @@ function refreshMark() {
   else items.push({ kind: 'estimated', label: 'Weather', source: WX.err ? 'METAR not reachable: ' + WX.err : 'Loading the METAR…' });
   items.push({ kind: 'illustrative', label: `Time of day: ${todName}`, source: 'Chosen with the Day/Dusk/Night buttons, not the real time at the airport' });
   items.push({ kind: 'illustrative', label: '737-800 flight deck', source: '3D model "Boeing 737-800 Cockpit" by hakai315 (Sketchfab, CC BY 4.0), optimized', href: COCKPIT_URL,
-    note: 'Cockpit displays are drawn from the flight data above (737NG-style, simplified).' });
+    note: (JOIN.hex && typeNoteText(JOIN.info) ? typeNoteText(JOIN.info) + '\n' : '') + 'Cockpit displays are drawn from the flight data above (737NG-style, simplified).' });
   const jst = JOIN.hex && JOIN.tracker ? JOIN.tracker.state(Date.now()) : null;
   const awayNm = jst && d ? Math.hypot(...toLocal(d.arp, jst.lat, jst.lon)) / 1852 : 0;
   const apt = d ? shortName(d) : '', near = awayNm < 30;
   // two-line identity: line1 = airline · type, line2 = flight number · tail; LOC = a plain place phrase
-  const typ = JOIN.hex && JOIN.info && JOIN.info.type ? ({ B738: '737-800', B737: '737-700', B739: '737-900', B38M: '737 MAX 8', B39M: '737 MAX 9', B736: '737-600' }[JOIN.info.type] || JOIN.info.type) : '737-800';
+  const typ = JOIN.hex && JOIN.info && JOIN.info.type ? ({ B738: '737-800', B737: '737-700', B739: '737-900', B38M: '737 MAX 8', B39M: '737 MAX 9', B736: '737-600' }[JOIN.info.type] || JOIN.info.type) : JOIN.hex ? 'type not reported' : '737-800';
   const town = (x) => x ? [x.municipality || placeName(x), (x.region || '').replace(/^[A-Z]{2}-/, '')].filter(Boolean).join(', ') : '';
   const city = (x) => x ? x.municipality || placeName(x) : '', at = d ? city(d) + ' (' + apt + ')' : '';
   const over = (x) => x ? US_STATE[(x.region || '').replace(/^US-/, '')] || city(x) : 'open country';
@@ -1806,7 +1849,7 @@ const att = new THREE.Euler(0, 0, 0, 'YXZ');
 let viewHdg = null;   // comfort-smoothed heading used for the view (see the loop)
 let last = performance.now(), dispClock = 1, uiClock = 1, efbClock = 1;
 setTOD('day'); setSeat('captain');
-loadAirport(params.get('apt') || 'KBNA', params.get('rwy'));
+if (params.get('flight')) autoJoin(params.get('flight').trim()); else loadAirport(params.get('apt') || 'KBNA', params.get('rwy'));
 renderer.setAnimationLoop((now) => {
   // XR frames use the headset's clock: never let dt go negative or huge (that froze the flight and displays in VR)
   const dt = Math.max(0, Math.min((now - last) / 1000, 0.1)); last = now;

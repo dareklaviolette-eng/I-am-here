@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>I'M HERE · Be there</title>
+<style>
+  :root { --bg: rgba(10,18,32,.86); --line: rgba(255,255,255,.14); --ink: #e8eef7; --dim: #9fb0c0; --gold: #ffc24a; --green: #5DCAA5; --ship: #4fd1e8; --wild: #ff8a3d; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a1424; color: var(--ink); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #map { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+  #map:active { cursor: grabbing; }
+  button, input, a { font: inherit; color: inherit; }
+  #panel { position: fixed; left: 10px; top: calc(10px + var(--imh-h, 0px)); width: 310px; max-height: calc(100% - 20px - var(--imh-h, 0px)); overflow: auto;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; backdrop-filter: blur(6px); z-index: 10; }
+  #searchWrap { position: relative; }
+  #q { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); font-size: 16px; outline: none; }
+  #q:focus { border-color: var(--green); }
+  #q::placeholder { color: #b8c4d2; }
+  #sugg { list-style: none; margin: 6px 0 0; padding: 0; }
+  #sugg li button { display: block; width: 100%; text-align: left; padding: 9px 10px; margin: 2px 0; border: 0; border-radius: 8px; background: rgba(255,255,255,.06); cursor: pointer; }
+  #sugg li button:hover, #sugg li button:focus { background: rgba(255,255,255,.14); }
+  #sugg small { display: block; color: var(--dim); font-size: 12px; }
+  #searchNote { min-height: 0; font-size: 12px; color: var(--dim); margin-top: 6px; }
+  #searchNote:empty { display: none; }
+  h2 { font-size: 11px; letter-spacing: .18em; font-weight: 600; color: var(--dim); margin: 16px 0 6px; text-transform: uppercase; }
+  .layers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .layer { display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255,255,255,.04); cursor: pointer; text-align: left; min-height: 44px; }
+  .layer i { width: 10px; height: 10px; border-radius: 50%; background: #445; flex: none; }
+  .layer.on { border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.12); }
+  .layer.on i { background: var(--c, var(--green)); box-shadow: 0 0 8px var(--c, var(--green)); }
+  .layer[disabled] { opacity: .45; cursor: not-allowed; }
+  .layer small { display: block; font-size: 11px; color: var(--dim); }
+  .layer span { flex: 1; }
+  .layer b { font-weight: 500; }
+  #status { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  #status div { margin: 2px 0; }
+  .shelf a { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; margin: 5px 0; border-radius: 9px; background: rgba(255,255,255,.06); text-decoration: none; min-height: 44px; }
+  .shelf a small { color: var(--dim); font-size: 12px; }
+  #panelToggle { display: none; }
+  #card { position: fixed; right: 12px; bottom: 46px; width: 340px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 16px; z-index: 11; backdrop-filter: blur(6px); }
+  #card[hidden] { display: none; }
+  #card .x { position: absolute; right: 8px; top: 6px; border: 0; background: none; font-size: 22px; color: var(--dim); cursor: pointer; padding: 6px 10px; }
+  #card .kind { font-size: 11px; letter-spacing: .16em; color: var(--dim); text-transform: uppercase; }
+  #card .title { font-size: 24px; font-weight: 600; margin: 2px 0 0; padding-right: 30px; }
+  #card .sub { color: var(--dim); font-size: 13px; }
+  #card dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 10px 0; font-size: 14px; }
+  #card dt { color: var(--dim); }
+  #card dd { margin: 0; }
+  #card .age { font-size: 13px; color: var(--dim); }
+  #card .age .live { color: var(--green); font-weight: 600; }
+  #card .note { font-size: 12.5px; color: #d5dde7; background: rgba(255,194,74,.12); border-left: 3px solid var(--gold); padding: 6px 8px; border-radius: 4px; margin: 8px 0 0; }
+  #card .go { display: block; text-align: center; margin-top: 12px; padding: 15px; font-size: 20px; font-weight: 700; letter-spacing: .02em; border-radius: 12px; background: #2f9e78; color: #fff; text-decoration: none; }
+  #card .go:hover { background: #36b388; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 9px; background: rgba(255,194,74,.2); color: var(--gold); margin-left: 6px; vertical-align: middle; }
+  #hint { position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 9; padding: 12px 18px; border-radius: 24px; border: 1px solid rgba(79,209,232,.6);
+    background: rgba(10,18,32,.88); color: var(--ink); text-decoration: none; font-size: 15px; }
+  #hint[hidden] { display: none; }
+  #zoom { position: fixed; right: 12px; top: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 9; }
+  #zoom button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 22px; cursor: pointer; }
+  #credits { position: fixed; right: 0; bottom: 0; z-index: 9; font-size: 11px; color: #cfd8e3; background: rgba(10,18,32,.7); padding: 3px 8px; border-top-left-radius: 6px; max-width: 100%; }
+  #credits a { color: #cfd8e3; }
+  @media (max-width: 720px) {
+    #panel { left: 8px; right: 8px; width: auto; padding: 10px; max-height: calc(100% - 16px - var(--imh-h, 0px)); }
+    #panel .more { display: none; }
+    #panel.open .more { display: block; }
+    #panelToggle { display: block; width: 100%; margin-top: 8px; padding: 9px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255,255,255,.06); cursor: pointer; }
+    #card { left: 8px; right: 8px; width: auto; bottom: 30px; }
+    #zoom { top: auto; bottom: 120px; }
+    #credits { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="map" aria-label="Map of live flights, ships, the space station and animal tracks"></canvas>
+
+<aside id="panel">
+  <div id="searchWrap">
+    <input id="q" type="search" placeholder="Where do you want to be?" aria-label="Where do you want to be? Flight number, callsign, tail, ship, animal or place" spellcheck="false" autocomplete="off" enterkeyhint="go">
+    <ul id="sugg"></ul>
+    <div id="searchNote"></div>
+  </div>
+  <button id="panelToggle" aria-expanded="false">Layers &amp; more</button>
+  <div class="more">
+    <h2>Layers</h2>
+    <div class="layers">
+      <button class="layer" data-layer="flights" style="--c:var(--gold)"><i></i><span><b>Flights</b><small id="nFlights">live</small></span></button>
+      <button class="layer" data-layer="ships" style="--c:var(--ship)"><i></i><span><b>Ships</b><small id="nShips">live</small></span></button>
+      <button class="layer" data-layer="space" style="--c:#fff"><i></i><span><b>Space</b><small id="nSpace">ISS</small></span></button>
+      <button class="layer" data-layer="wildlife" style="--c:var(--wild)"><i></i><span><b>Wildlife</b><small>sample tracks</small></span></button>
+      <button class="layer" data-layer="cameras" disabled title="Live webcams need a server-side key first"><i></i><span><b>Cameras</b><small>coming soon</small></span></button>
+      <button class="layer" disabled title="Coming"><i></i><span><b>My people</b><small>coming</small></span></button>
+      <button class="layer" disabled title="Coming"><i></i><span><b>Sports</b><small>coming</small></span></button>
+    </div>
+    <div id="status"><div id="stFlights"></div><div id="stShips"></div><div id="stSpace"></div></div>
+    <h2>More experiences</h2>
+    <div class="shelf">
+      <a href="../heart/">Heart <small>Tour through the heart</small></a>
+      <a href="../737/">737 cockpit <small>Demo approach, Nashville</small></a>
+      <a href="../home.html">All prototypes <small>Home</small></a>
+    </div>
+  </div>
+</aside>
+
+<div id="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button></div>
+<a id="hint" hidden href="../boats/">Live ships aren't on this map yet: open live ships</a>
+<section id="card" hidden aria-live="polite"></section>
+<div id="credits">Imagery &copy; <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics, and the GIS User Community · Labels &copy; Esri · <span id="dataCredit"></span></div>
+
+<!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; edit there, then run shared/sync-mark.mjs) -->
+<script id="imhere-mark">
+/* I'M HERE experience label, v4 (founder-approved final design). SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
+   Pasted inline into every prototype page between the IMHERE-MARK markers by
+   node /home/claude/shared/sync-mark.mjs <files...>  (artifact pages cannot share files).
+   Edit here, then re-run the sync. Self-contained: no network, no dependencies.
+
+   Layout (top-left on screens; panel rgba(10,18,32,.55), 1px border white 18%, 8px radius):
+       I'M HERE                                   (i)  ×     <- watermark: 9-11px, .25em spacing, white 30%
+       SWA 444 · 737-800 · approach BNA                      <- context line: 11px, white 60%, no headline
+       LOC:      Nashville, TN                               <- labels: outlined caps (transparent fill, 0.5px stroke,
+       SIGNAL:   airplanes.live, live                           white 65%, 11px); values: solid white 13px, one column
+       VIEW:     Google 3D + render
+   Only the word "live" is coloured (green #5DCAA5), and only while setLive(true): pages drive it from real data freshness;
+   demo/simulated data never sets it. After ~6 s the label collapses to a small "I'M HERE" corner mark; tap to re-expand.
+   (i) opens the details: live stats + provenance (source, last update, live vs recorded/simulated, render vs real imagery).
+   In VR, xrPanel(THREE) draws the same label on a canvas (row labels use a 50% white fill there: hairline outlines
+   alias and shimmer at headset panel scale).
+
+   Optional two-line identity (v4.1; pages that pass only `context` look exactly as before):
+       I'M HERE                                   (i)  ×
+       Health · Cardiovascular system                        <- line1: provider · type (11px, white 60%)
+       Entering the heart from your upper body               <- line2: where you are, plain English (13px, white 92%)
+       superior vena cava                                    <- line2small: the technical term (10px, white 45%)
+       LOC / SIGNAL / VIEW rows as above
+
+   API
+     ImHereMark.init({ context, line1, line2, line2small, about, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
+     ImHereMark.update({ ...same keys })
+        context   e.g. 'SWA 444 · 737-800 · approach BNA', 'ISS · over Pacific Ocean', 'Heart · stop 1 of 10'
+        line1     optional identity line 1 (provider · type); replaces `context` when given
+        line2     optional identity line 2: where you are, in plain English
+        line2small optional smaller, dimmer line under line2 (e.g. the medical or technical term)
+        about     optional { title, text } shown at the top of the (i) details (e.g. the current stop, in plain words)
+        loc       place, e.g. 'Nashville, TN'
+        signal    { source, time }  -> "source, live" while setLive(true), else "source, 3 hrs ago"
+                  { source, date }  -> "GPS track, 3 May 2008"      { text } -> 'Demo data', 'Fixed camera', ...
+        view      what you are seeing: 'Google 3D + render', '3D render', 'Live video', 'Video, Nov 9'
+        stats     [[label, value], ...] shown in the (i) details
+        tag       { text } status line for the details ("Now: ...")
+        sceneNote sentence in the details: AI-created/rendered vs actual imagery
+        items     provenance list: { kind, label, source, age, time, timeLabel, note, href, list: [{ text, time | age }] }
+                  kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
+        below     CSS selector(s): the label sits just under the lowest visible one (e.g. the page header)
+     ImHereMark.setLive(true|false)   "live" (green) in SIGNAL. Only while the data is really fresh.
+     ImHereMark.xrPanel(THREE, { width, x, y, z })  -> small THREE.Mesh panel, kept up to date
+     ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
+   CSS variable --imh-h on <html>: height taken by the label (or the corner mark) + gap, so a page can push its
+   own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
+*/
+(function () {
+  'use strict';
+  if (window.ImHereMark) return;
+  var KINDS = {
+    live: ['LIVE', '#1f9d55'], recorded: ['RECORDED', '#3d82c9'], data: ['REAL DATA', '#2e8f5e'],
+    computed: ['CALCULATED', '#2b7f8c'], estimated: ['ESTIMATED', '#6f7f8f'], assumed: ['ASSUMED', '#6f7f8f'],
+    simulated: ['SIMULATED', '#c47a12'], sample: ['SAMPLE', '#c47a12'], illustrative: ['ILLUSTRATIVE', '#7d5cc4'], ai: ['AI-GENERATED', '#b44a8a']
+  };
+  var NAVY = 'rgba(10,18,32,0.55)', GREY = '#9fb0c0', VALUE = '#ffffff', GREEN = '#5DCAA5';
+  var FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  var COLLAPSE_MS = 6000;
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var CSS =
+    '.imh-box,.imh-mini{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imh-z,1500);' +
+    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.18);' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);font:11px/1.25 ' + FONT + ';' +
+    'letter-spacing:normal;text-align:left;text-shadow:none;pointer-events:auto;-webkit-tap-highlight-color:transparent}' +
+    '.imh-box[hidden],.imh-mini[hidden],.imh-src[hidden],.imh-box [hidden]{display:none}' +
+    '.imh-box{width:min(190px,45vw);padding:8px}' +
+    '.imh-box.imh-wide{width:min(300px,calc(100vw - 20px))}' +
+    '.imh-r1{display:flex;align-items:center;gap:5px;min-height:18px}' +
+    '.imh-brand{font-weight:400;font-size:10px;letter-spacing:.25em;flex:none;color:rgba(255,255,255,.3)}' +   /* watermark */
+    '.imh-i,.imh-x{flex:none;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;' +
+    'color:#dfe7ee;user-select:none;-webkit-user-select:none;position:relative}' +
+    '.imh-i::after,.imh-x::after{content:"";position:absolute;inset:-7px}' +   /* bigger touch target */
+    '.imh-i{margin-left:auto;font:italic 700 10.5px/1 Georgia,serif;border:1.3px solid rgba(255,255,255,.55)}' +
+    '.imh-x{font-size:14px;line-height:1;background:rgba(255,255,255,.1)}' +
+    '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
+    '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
+    '.imh-r2{margin-top:1px;font-weight:400;font-size:11px;color:rgba(255,255,255,.6);overflow-wrap:anywhere}' +   /* context line */
+    '.imh-id2{margin-top:2px;font-weight:500;font-size:13px;line-height:1.25;color:rgba(255,255,255,.92);overflow-wrap:anywhere}' +   /* identity line 2 */
+    '.imh-id3{margin-top:1px;font-size:10px;line-height:1.2;color:rgba(255,255,255,.45);overflow-wrap:anywhere}' +   /* its technical term */
+    '.imh-ab{margin-top:5px;font-size:11.5px;line-height:1.35;color:#e8eef4}.imh-ab b{display:block;font-size:12px;color:#fff;margin-bottom:1px}' +
+    '.imh-rows{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;margin:5px 0 0}' +
+    '.imh-l{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:transparent;' +
+    '-webkit-text-stroke:.5px rgba(255,255,255,.65);text-stroke:.5px rgba(255,255,255,.65);white-space:nowrap}' +
+    '@supports not ((-webkit-text-stroke:.5px #fff) or (text-stroke:.5px #fff)){.imh-l{color:rgba(255,255,255,.5)}}' +
+    '.imh-v{font-size:13px;line-height:1.3;color:' + VALUE + ';overflow-wrap:anywhere}.imh-v .imh-g{color:' + GREEN + ';font-weight:600}' +
+    '.imh-src{margin-top:5px;max-height:min(46vh,360px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;' +
+    'border-top:1px solid rgba(255,255,255,.14);font-size:11px;line-height:1.3}' +
+    '.imh-ph{font-weight:700;font-size:11px;margin-top:5px;color:#fff}' +
+    '.imh-r3{display:flex;flex-wrap:wrap;gap:3px 12px;margin:4px 0 2px}' +
+    '.imh-st{display:flex;flex-direction:column;min-width:0}' +
+    '.imh-st i{font-style:normal;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:' + GREY + '}' +
+    '.imh-st b{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}' +
+    '.imh-it{border-bottom:1px solid rgba(255,255,255,.08);padding:5px 0 4px}' +
+    '.imh-k{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;padding:0 4px;border-radius:3px;color:#fff;margin-right:5px;vertical-align:1px}' +
+    '.imh-lb{font-weight:600}' +
+    '.imh-d{color:' + GREY + ';font-size:10.5px;margin-top:2px;white-space:pre-line}' +
+    '.imh-ls{margin:2px 0 0;padding:0;list-style:none;color:' + GREY + ';font-size:10.5px}' +
+    '.imh-ls li{display:flex;justify-content:space-between;gap:8px;margin:0;padding:0}.imh-ls li span:last-child{flex:none;font-variant-numeric:tabular-nums}' +
+    '.imh-ft{padding-top:5px;color:' + GREY + ';font-size:10px}' +
+    '.imh-box a{color:#a9d3ff}' +
+    '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
+    '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
+
+  var S = { context: '', line1: '', line2: '', line2small: '', about: null, loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
+    sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
+  var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
+  var box, mini, miniLive, r2, id2, id3, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function fmtAge(ms) {   // "3 s ago", "14 min ago", "3 hrs ago", "5 days ago", "7 yrs ago"
+    if (!(ms >= 0)) return ms < 0 ? 'just now' : '';
+    var s = Math.round(ms / 1000), n;
+    if (s < 2) return 'just now';
+    if (s < 90) return s + ' s ago';
+    if (s < 5400) return Math.round(s / 60) + ' min ago';
+    if (s < 172800) { n = Math.round(s / 3600); return n + (n === 1 ? ' hr' : ' hrs') + ' ago'; }
+    if (s < 63072000) { n = Math.round(s / 86400); return n.toLocaleString('en-US') + ' days ago'; }
+    return Math.round(s / 31557600) + ' yrs ago';
+  }
+  function fmtDate(ms) { var d = new Date(ms); return MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear(); }
+  function credText(c) { return typeof c === 'string' ? c : (c && c.text) || ''; }
+  function link(text, href) {
+    if (!href) return document.createTextNode(text);
+    var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
+  }
+  function line2() { return S.line1 || S.context || ''; }   // identity line 1 (historically "line 2" of the card, under the watermark)
+  function idLines() { return [line2(), S.line2 || '', S.line2 ? S.line2small || '' : '']; }
+  function fmtDay(ms) { var d = new Date(ms); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
+  // SIGNAL value as [text, liveWordShown]: "source, live" only while setLive(true)
+  function signalParts() {
+    var g = S.signal || {};
+    if (typeof g === 'string') return [g, false];
+    if (g.source && S.live) return [g.source + ', ', true];
+    if (g.source && g.time) return [g.source + ', ' + fmtAge(Date.now() - g.time), false];
+    if (g.source && g.date) return [g.source + ', ' + fmtDay(g.date), false];
+    return [g.text || g.source || 'None', false];
+  }
+  function rows() { var sp = signalParts(); return [['LOC', S.loc || 'None'], ['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]; }
+  function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
+  function label() {
+    var L = idLines(), id = L[0] + '. ' + (L[1] ? L[1] + (L[2] ? ' (' + L[2] + ')' : '') + '. ' : '');
+    return "I'M HERE. " + id + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
+
+  function render() {
+    if (!S.mounted) return;
+    var R = rows();
+    var L = idLines();
+    var sig = JSON.stringify([L, R, S.dismissed, S.srcOpen, S.live]);
+    if (sig !== lastSig) {
+      lastSig = sig;
+      box.hidden = S.dismissed; mini.hidden = !S.dismissed; miniLive.hidden = !S.live;
+      box.classList.toggle('imh-wide', S.srcOpen);
+      r2.textContent = L[0]; r2.hidden = !L[0]; r2.title = L[0];
+      id2.textContent = L[1]; id2.hidden = !L[1];
+      id3.textContent = L[2]; id3.hidden = !L[2];
+      rowsEl.textContent = '';
+      R.forEach(function (r) {
+        rowsEl.appendChild(el('span', 'imh-l', r[0] + ':'));
+        var v = el('span', 'imh-v');
+        if (r[2]) { v.appendChild(document.createTextNode(r[2][0])); if (r[2][1]) v.appendChild(el('span', 'imh-g', 'live')); }
+        else v.textContent = r[1];
+        rowsEl.appendChild(v);
+      });
+      more.classList.toggle('imh-on', S.srcOpen);
+      more.setAttribute('aria-expanded', String(S.srcOpen));
+      box.setAttribute('aria-label', label());
+      src.hidden = !S.srcOpen;
+      drawXR();
+    }
+    renderSources(); place();
+  }
+  function renderSources() {
+    if (!S.mounted || !S.srcOpen) return;
+    var now = Date.now(), frag = document.createDocumentFragment();
+    if (S.about && (S.about.title || S.about.text)) {
+      var ab = el('div', 'imh-ab'); if (S.about.title) ab.appendChild(el('b', null, S.about.title));
+      if (S.about.text) ab.appendChild(document.createTextNode(S.about.text)); frag.appendChild(ab);
+    }
+    var st =(S.stats || []).filter(Boolean);
+    if (st.length) {
+      var r3 = el('div', 'imh-r3');
+      st.forEach(function (s) { var d = el('div', 'imh-st'); d.appendChild(el('i', null, s[0])); d.appendChild(el('b', null, s[1] == null || s[1] === '' ? '–' : String(s[1]))); r3.appendChild(d); });
+      frag.appendChild(r3);
+    }
+    frag.appendChild(el('div', 'imh-ph', 'Where this comes from'));
+    var sc = el('div', 'imh-d'); sc.appendChild(el('b', null, 'Scene: ')); sc.appendChild(document.createTextNode(S.sceneNote || SCENE_NOTE_DEFAULT)); frag.appendChild(sc);
+    if (statusText()) frag.appendChild(el('div', 'imh-d', 'Now: ' + statusText()));
+    S.items.forEach(function (it) {
+      if (!it) return;
+      var k = KINDS[it.kind] || [String(it.kind || 'INFO').toUpperCase(), '#6f7f8f'];
+      var d = el('div', 'imh-it'), h = el('div'), kb = el('span', 'imh-k', k[0]);
+      kb.style.background = k[1]; h.appendChild(kb); h.appendChild(el('span', 'imh-lb', it.label || '')); d.appendChild(h);
+      var lines = [];
+      if (it.source) lines.push('Source: ' + it.source);
+      var age = it.time ? fmtAge(now - it.time) : it.age;
+      if (age) lines.push((it.time ? (it.timeLabel || 'Updated') + ' ' : '') + age);
+      if (it.note) lines.push(it.note);
+      if (lines.length) d.appendChild(el('div', 'imh-d', lines.join('\n')));
+      if (it.href) { var lk = el('div', 'imh-d'); lk.appendChild(link('More about this source', it.href)); d.appendChild(lk); }
+      if (it.list && it.list.length) {
+        var ul = el('ul', 'imh-ls'), max = 30;
+        it.list.slice(0, max).forEach(function (r) {
+          var li = el('li'); li.appendChild(el('span', null, r.text || ''));
+          li.appendChild(el('span', null, r.time ? fmtAge(now - r.time) : (r.age || ''))); ul.appendChild(li);
+        });
+        if (it.list.length > max) { var m = el('li'); m.appendChild(el('span', null, '+ ' + (it.list.length - max) + ' more')); ul.appendChild(m); }
+        d.appendChild(ul);
+      }
+      frag.appendChild(d);
+    });
+    var cr = S.credits.filter(credText);
+    if (cr.length) {
+      var ft = el('div', 'imh-ft'); ft.appendChild(document.createTextNode('Credits: '));
+      cr.forEach(function (c, i) { if (i) ft.appendChild(document.createTextNode(' · ')); ft.appendChild(link(credText(c), c.href)); });
+      frag.appendChild(ft);
+    }
+    var tmp = el('div'); tmp.appendChild(frag.cloneNode(true));
+    if (tmp.innerHTML === lastSrcSig) return;
+    lastSrcSig = tmp.innerHTML; src.textContent = ''; src.appendChild(frag);
+  }
+  function visible(e) {
+    if (!e || !e.getClientRects().length) return false;
+    var cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none';
+  }
+  var lastTop = null, lastH = null;
+  function place() {
+    if (!S.mounted) return;
+    var top = null;
+    S.below.forEach(function (sel) {
+      var list; try { list = document.querySelectorAll(sel); } catch (e) { return; }
+      for (var i = 0; i < list.length; i++) {
+        if (!visible(list[i])) continue;
+        var b = list[i].getBoundingClientRect();
+        if (b.bottom > 0 && b.bottom < innerHeight * 0.5) top = Math.max(top || 0, b.bottom + 6);
+      }
+    });
+    var t = top == null ? '' : Math.round(top) + 'px';
+    if (t !== lastTop) { lastTop = t; box.style.top = t; mini.style.top = t; }
+    // pages push their own top-left panels down by the compact card height (not the opened detail, which overlays)
+    var r = (S.dismissed ? mini : box).getBoundingClientRect(), h = S.srcOpen ? lastH : Math.round(r.height + 12) + 'px';   // +12: clear gap to any panel below
+    if (h && h !== lastH) { lastH = h; document.documentElement.style.setProperty('--imh-h', h); }
+  }
+  function expand() { collapseAt = Date.now() + COLLAPSE_MS; if (S.dismissed) { S.dismissed = false; render(); } }
+  function setDismissed(d, focus) {
+    S.dismissed = !!d; if (d) S.srcOpen = false; else collapseAt = Date.now() + COLLAPSE_MS;
+    render();
+    if (focus) try { (d ? mini : box).focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  }
+  function tick() {   // auto-collapse ~6 s after showing, unless the detail is open or the pointer/focus is on the card
+    if (!S.mounted || S.dismissed || S.srcOpen || hovering || box.contains(document.activeElement)) { collapseAt = Math.max(collapseAt, Date.now() + 1500); return; }
+    if (Date.now() >= collapseAt) setDismissed(true, false);
+  }
+  function stop(e) { e.stopPropagation(); }
+  function button(e, fn) {
+    e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0');
+    e.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); });
+    e.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fn(); } });
+  }
+  function mount() {
+    if (S.mounted) return;
+    if (!document.body) { document.addEventListener('DOMContentLoaded', mount); return; }
+    if (!document.getElementById('imh-style')) { var st = el('style', null, CSS); st.id = 'imh-style'; document.head.appendChild(st); }
+    box = el('div', 'imh-box'); box.id = 'imh-card'; box.setAttribute('role', 'region'); box.setAttribute('tabindex', '-1');
+    var r1 = el('div', 'imh-r1');
+    r1.appendChild(el('span', 'imh-brand', "I'M HERE"));
+    more = el('span', 'imh-i', 'i'); more.setAttribute('aria-label', 'Details: live stats, sources, last update, live or recorded'); more.title = 'Details and sources';
+    button(more, function () { S.srcOpen = !S.srcOpen; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); });
+    r1.appendChild(more);
+    var x = el('span', 'imh-x', '×'); x.setAttribute('aria-label', 'Hide the I\'M HERE card'); x.title = 'Hide';
+    button(x, function () { setDismissed(true, true); });
+    r1.appendChild(x); box.appendChild(r1);
+    r2 = el('div', 'imh-r2'); box.appendChild(r2);
+    id2 = el('div', 'imh-id2'); id2.hidden = true; box.appendChild(id2);
+    id3 = el('div', 'imh-id3'); id3.hidden = true; box.appendChild(id3);
+    rowsEl = el('div', 'imh-rows'); box.appendChild(rowsEl);
+    var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
+    more.addEventListener('mouseenter', function () {
+      if (!S.srcOpen && window.matchMedia && matchMedia('(hover: hover)').matches) { hoverOpen = true; S.srcOpen = true; lastSrcSig = ''; render(); }
+    });
+    more.addEventListener('click', function (e) { if (hoverOpen) { hoverOpen = false; e.stopImmediatePropagation(); e.stopPropagation(); } }, true);   // pin, don't close
+    box.addEventListener('mouseenter', function () { hovering = true; });
+    box.addEventListener('mouseleave', function () { hovering = false; collapseAt = Math.max(collapseAt, Date.now() + 3000); if (hoverOpen) { hoverOpen = false; S.srcOpen = false; render(); } });
+    src = el('div', 'imh-src'); src.hidden = true; box.appendChild(src);
+    mini = el('div', 'imh-mini', "I'M HERE"); mini.id = 'imh-mark'; mini.hidden = true;
+    miniLive = el('span', 'imh-g', 'Live'); miniLive.hidden = true; mini.appendChild(miniLive);
+    mini.setAttribute('aria-label', "I'M HERE: show the info card"); mini.title = 'Show info';
+    button(mini, function () { setDismissed(false, true); });
+    ['pointerdown', 'pointermove', 'touchstart', 'touchmove', 'wheel', 'mousedown'].forEach(function (ev) {   // keep taps/scrolls off the 3D view underneath
+      box.addEventListener(ev, stop, { passive: true }); mini.addEventListener(ev, stop, { passive: true });
+    });
+    box.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.srcOpen) { S.srcOpen = false; render(); } });
+    document.body.appendChild(box); document.body.appendChild(mini);
+    S.mounted = true; collapseAt = Date.now() + COLLAPSE_MS;
+    document.documentElement.style.setProperty('--imh-z', String(S.z));
+    render();
+    addEventListener('resize', place);
+    setInterval(function () { render(); tick(); }, 1000);   // keeps "x ago" values current
+  }
+  function apply(o) {
+    if (!o) return;
+    if (o.about !== undefined) S.about = o.about && typeof o.about === 'object' ? { title: String(o.about.title || ''), text: String(o.about.text || '') } : null;
+    ['context', 'line1', 'line2', 'line2small', 'loc', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.signal !== undefined) S.signal = o.signal;
+    if (o.stats) S.stats = [].concat(o.stats);
+    if (o.tag !== undefined) S.tag = o.tag;
+    if (o.items) S.items = [].concat(o.items);
+    if (o.credits) S.credits = [].concat(o.credits);
+    if (o.below) S.below = [].concat(o.below);
+    if (o.zIndex != null) S.z = +o.zIndex || 1500;
+  }
+
+  // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
+  function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  function xrHeight() { var L = idLines(); return 262 + (L[1] ? 42 : 0) + (L[2] ? 30 : 0); }
+  function xrResize(H) {   // two-line identity makes the panel taller: new canvas texture (GPU storage is fixed-size) + geometry
+    var T = xr.THREE, c = xr.canvas; c.height = H;
+    var tex = new T.CanvasTexture(c); if (T.SRGBColorSpace) tex.colorSpace = T.SRGBColorSpace;
+    xr.meshes.forEach(function (m) {
+      m.material.map = tex; m.material.needsUpdate = true;
+      var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / 512);
+    });
+    xr.tex.dispose(); xr.tex = tex;
+  }
+  function drawXR() {
+    if (!xr) return;
+    if (xr.canvas.height !== xrHeight()) xrResize(xrHeight());
+    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height, L = idLines();
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = 'rgba(10,18,32,0.72)'; rr(g, 3, 3, W - 6, H - 6, 18); g.fill();   // a little denser in VR for legibility
+    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
+    g.textBaseline = 'alphabetic';
+    g.save(); g.fillStyle = 'rgba(255,255,255,0.3)'; g.font = '400 22px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '6px'; g.fillText("I'M HERE", 28, 46); g.restore();
+    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, L[0], W - 56), 28, 88);
+    var y = 140;
+    if (L[1]) { g.fillStyle = 'rgba(255,255,255,0.92)'; g.font = '500 30px ' + FONT; g.fillText(fit(g, L[1], W - 56), 28, 128); y += 42; }
+    if (L[2]) { g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + FONT; g.fillText(fit(g, L[2], W - 56), 28, 158); y += 30; }
+    // labels: translucent fill in VR (a 0.5px outline aliases/shimmers at headset panel scale); values solid white
+    var R = rows(), lx = 28, vx = 0;
+    g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px';
+    R.forEach(function (r) { vx = Math.max(vx, g.measureText(r[0] + ':').width); });
+    vx += lx + 22;
+    R.forEach(function (r) {
+      g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px'; g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillText(r[0] + ':', lx, y);
+      if ('letterSpacing' in g) g.letterSpacing = '0px';
+      g.font = '400 30px ' + FONT; g.fillStyle = VALUE;
+      if (r[2]) { var t = fit(g, r[2][0], W - 28 - vx - (r[2][1] ? 60 : 0)); g.fillText(t, vx, y);
+        if (r[2][1]) { var w = g.measureText(t).width; g.fillStyle = GREEN; g.font = '600 30px ' + FONT; g.fillText('live', vx + w, y); } }
+      else g.fillText(fit(g, r[1], W - 28 - vx), vx, y);
+      y += 46;
+    });
+    xr.tex.needsUpdate = true;
+  }
+  function xrPanel(THREE, o) {
+    o = o || {};
+    if (!xr) {
+      var c = document.createElement('canvas'); c.width = 512; c.height = xrHeight();
+      var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [] };
+    }
+    var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * xr.canvas.height / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    m.userData.imhW = w; xr.meshes.push(m);
+    m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
+    m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
+    m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
+    drawXR(); return m;
+  }
+
+  window.ImHereMark = {
+    init: function (o) { apply(o); mount(); lastSig = ''; render(); return this; },
+    update: function (o) { apply(o); render(); return this; },
+    setLive: function (on) { on = !!on; if (on !== S.live) { S.live = on; render(); } return this; },
+    isLive: function () { return S.live; },
+    open: function () { if (!S.mounted) return; S.dismissed = false; S.srcOpen = true; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); },
+    close: function () { if (!S.mounted) return; S.srcOpen = false; render(); },
+    dismiss: function () { if (S.mounted) setDismissed(true, false); },
+    expand: function () { if (S.mounted) expand(); },
+    label: label, xrPanel: xrPanel,
+    items: function () { return S.items.slice(); }
+  };
+})();
+</script>
+<!-- IMHERE-MARK:END -->
+<script type="module" src="app.js"></script>
+</body>
+</html>
