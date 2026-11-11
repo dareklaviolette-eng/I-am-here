@@ -19,13 +19,21 @@
   .pc{position:absolute;right:4px;bottom:3px;font-size:9px;color:rgba(255,255,255,.8);text-shadow:0 0 3px #000;text-decoration:none}
   .cap{display:flex;justify-content:space-between;align-items:flex-start;padding:5px 11px 0;font-size:11px;color:rgba(255,255,255,.55);line-height:1.35}
   .fb{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:40px}
-  .fl{width:18px;height:11px;opacity:.85;background:repeating-linear-gradient(#b22234 0 1.57px,#fff 1.57px 3.14px)}
+  .fl{width:24px;height:15px;opacity:.85;background:repeating-linear-gradient(#b22234 0 1.15px,#fff 1.15px 2.3px)}
   .ln{border-top:.5px solid rgba(255,255,255,.2);margin-top:5px;padding:3px 0 4px}
   .r{display:grid;grid-template-columns:38px 1fr;padding:1px 11px;align-items:baseline}
-  .l{font-size:11px;color:rgba(110,220,235,.7)}.v{font-size:13px}
+  .l{font-size:11px;color:rgba(110,220,235,.8)}.v{font-size:13px}
   .s .l{color:rgba(110,220,235,.55)}.s .v{font-size:11px;color:rgba(255,255,255,.7)}
   .g{color:#7ef0a2}
   .cr{display:flex;justify-content:space-between;border-top:.5px solid rgba(255,255,255,.2);padding:4px 11px;font-size:11px;color:rgba(255,255,255,.55)}
+  .cd{cursor:pointer;transition:width .2s}
+  .mini{display:none;align-items:center;gap:9px;padding:2px 9px 8px}
+  .mini .t{width:66px;aspect-ratio:3/2;border:.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);overflow:hidden;flex:none}
+  .mini .t img{width:100%;height:100%;object-fit:cover;display:block}
+  .mini .a{font-size:13px;line-height:1.35}.mini .b{font-size:11px;color:rgba(255,255,255,.7)}
+  .cd.min{width:230px}.cd.min .wm{font-size:17px;padding:6px 9px 3px}
+  .cd.min .ph,.cd.min .cap,.cd.min .ln,.cd.min .cr{display:none}.cd.min .mini{display:flex}
+  .hint{font-size:12px;color:#123}
   .note{font-size:12px;color:#123;max-width:290px;text-align:center}
 </style>
 </head>
@@ -38,8 +46,10 @@
   <button style="background:#0b0f1a" data-bg="#0b0f1a" aria-label="Night"></button>
 </div>
 
-<div class="cd">
+<p class="hint" id="hint">Tap the card to expand or collapse</p>
+<div class="cd min" id="card">
   <div class="wm">i'm here</div>
+  <div class="mini"><div class="t" id="mt"></div><div><div class="a">Santa Ana, CA</div><div class="b">SWA2588 · <span class="g">LIVE</span></div></div></div>
   <div class="ph" id="ph">loading photo…</div>
   <div class="cap"><div class="fb"><span class="fl"></span><span>USA</span></div><div style="text-align:right">REG <span id="regv">N8771D</span><br>737 MAX 8</div></div>
   <div class="ln">
@@ -78,14 +88,17 @@ async function load(reg) {
   }
   if (!p) { ph.textContent = "no photo found for " + reg; return; }
   const src = (p.large && p.large.src) || (p.thumb && p.thumb.src);
+  const mt = document.getElementById("mt"); mt.innerHTML = ""; const im2 = new Image(); im2.alt = reg; im2.src = src; mt.appendChild(im2);
   ph.innerHTML = "";
   const img = new Image(); img.alt = reg; img.src = src; ph.appendChild(img);
   const a = document.createElement("a"); a.className = "pc"; a.href = p.link; a.target = "_blank"; a.rel = "noopener";
+  a.onclick = (e) => e.stopPropagation();
   a.textContent = "© " + (p.photographer || "unknown") + " / Planespotters.net"; ph.appendChild(a);
 }
 document.getElementById("go").onclick = () => load(document.getElementById("reg").value);
 document.getElementById("reg").addEventListener("keydown", e => { if (e.key === "Enter") load(e.target.value); });
 document.querySelectorAll(".bgs button").forEach(b => b.onclick = () => document.body.style.background = b.dataset.bg);
+document.getElementById("card").onclick = () => document.getElementById("card").classList.toggle("min");
 load("N8771D");
 </script>
 </body>
