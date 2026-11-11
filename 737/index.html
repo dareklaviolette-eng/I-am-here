@@ -1950,6 +1950,7 @@ let last = performance.now(), dispClock = 1, uiClock = 1, efbClock = 1;
 // Flight deck by aircraft type: A320 family -> Airbus cockpit, everything else -> 737. ?cockpit=airbus forces it for tests.
 COCKPIT = createCockpitSwitch({ THREE, GLTFLoader, aircraft, S, SEATS, displays, mounts: efb.mounts, force: params.get('cockpit'),
   onChange: () => { efbZoomed = null; setSeat(seat); if (renderer.xr.isPresenting) placeRig(); efbDirty = true; showCredit(); showTypeNote(JOIN.hex ? JOIN.info : null); refreshMark(); } });
+JOIN.onType = (t) => COCKPIT && COCKPIT.forType(t);   // Flightradar24 reports (or changes) the aircraft type
 function showCredit() {
   const ab = COCKPIT && COCKPIT.isAirbus(), el = $('credit'); if (!el) return;
   const a = document.createElement('a'); a.target = '_blank'; a.rel = 'noopener';
