@@ -9,7 +9,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="imhere-build" content="fccf2745">
+<meta name="imhere-build" content="b449fec0">
 <style>
   :root { --bg:#0e1a24; --panel:rgba(12,22,34,.86); --line:rgba(255,255,255,.16); --text:#e8f1f7; --muted:#9db3c4; --live:#5DCAA5; --err:#ff9d92; }
   * { box-sizing: border-box; }
@@ -31,12 +31,12 @@
   /* one menu button, top right */
   #menuBtn { position:fixed; top:calc(10px + env(safe-area-inset-top)); right:calc(10px + env(safe-area-inset-right)); z-index:1600; background:var(--panel); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); font-weight:600; }
   /* plain-words feed message (errors are never silent) */
-  #feedMsg { position:fixed; left:50%; transform:translateX(-50%); top:calc(62px + env(safe-area-inset-top)); z-index:1550; max-width:min(94vw,560px); padding:9px 14px; border-radius:10px; font-size:14px;
+  #feedMsg { position:fixed; left:50%; transform:translateX(-50%); top:calc(8px + var(--imc-h, 90px)); z-index:1550; max-width:min(94vw,560px); padding:9px 14px; border-radius:10px; font-size:14px;
              background:rgba(12,22,34,.92); border:1px solid var(--line); box-shadow:0 4px 18px rgba(0,0,0,.35); }
   #feedMsg.error { border-color:rgba(231,76,60,.7); color:#ffd0ca; }
   #feedMsg.hint { color:#dfe9f1; }
   /* "Ride a ship" list */
-  #ships { position:fixed; z-index:1400; left:calc(10px + env(safe-area-inset-left)); top:calc(150px + env(safe-area-inset-top)); max-height:calc(100dvh - 240px); width:min(230px, 34vw);
+  #ships { position:fixed; z-index:1400; left:calc(10px + env(safe-area-inset-left)); top:calc(64px + var(--imc-h, 90px)); max-height:calc(100dvh - 240px); width:min(230px, 34vw);
            display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line); border-radius:12px; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); overflow:hidden; }
   #ships h2 { margin:0; padding:8px 10px 0; font-size:13px; letter-spacing:.02em; }
   #shipsSub { padding:0 10px 6px; font-size:11px; color:var(--muted); border-bottom:1px solid var(--line); }
@@ -56,7 +56,7 @@
   #aboard .cams button { padding:8px 10px; }
   #vrBtn { position:fixed; top:calc(10px + env(safe-area-inset-top)); right:calc(104px + env(safe-area-inset-right)); z-index:1600; background:var(--panel); font-weight:600; }
   /* desktop: a band across the top (like an aviation instrument strip), clear of the console screens below the window */
-  #helm { position:fixed; z-index:1390; left:calc(230px + env(safe-area-inset-left)); right:calc(230px + env(safe-area-inset-right)); top:calc(10px + env(safe-area-inset-top));
+  #helm { position:fixed; z-index:1390; left:calc(10px + var(--imc-w, 240px)); right:calc(230px + env(safe-area-inset-right)); top:calc(10px + env(safe-area-inset-top));
           display:flex; gap:8px; align-items:center; padding:6px 8px; background:rgba(6,16,26,.82); border:1px solid var(--line); border-radius:12px;
           -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); font-variant-numeric:tabular-nums; }
   #helmCompass { width:56px; height:56px; flex:none; }
@@ -66,7 +66,7 @@
   #helmCells dd { margin:0; font-size:13px; font-weight:600; white-space:nowrap; }
   #helmCells .wide dd { white-space:normal; font-weight:500; font-size:12px; color:#cfe0ec; }
   /* narrower screens: under the Menu button, over the sky, so the console screens stay visible low in the view */
-  @media (max-width:900px) { #helm { top:calc(60px + env(safe-area-inset-top)); left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right)); } }
+  @media (max-width:900px) { #helm { top:calc(8px + var(--imc-h, 90px)); left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right)); } }
   @media (max-width:640px) { #helm { max-height:30dvh; overflow:auto; padding:4px 6px; } #helmCompass { width:44px; height:44px; } #helmCells { gap:2px 10px; } #helmCells dd { font-size:12px; } }
   #aboardInfo b { display:block; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* menu + about */
@@ -94,7 +94,7 @@
   .vpop .mmsi { color:#667; font-size:11px; }
   .vpop .ridebtn { margin-top:6px; background:#1d3346; color:#fff; border-radius:6px; padding:6px 10px; min-height:34px; }
   @media (max-width:640px) {
-    #ships { width:min(200px, 52vw); top:calc(140px + env(safe-area-inset-top)); max-height:38dvh; }
+    #ships { width:min(200px, 52vw); max-height:38dvh; }
   }
   /* Leaflet 1.9.4 essential layout rules, inlined (the external leaflet.css is not needed; without these rules tiles
      fall into a jumble of squares). Subset of leaflet.css (BSD-2-Clause, (c) Vladimir Agafonkin, CloudMade). */
@@ -143,7 +143,7 @@
 </style>
 <script type="importmap">
 { "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js?v=fccf2745",
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js?v=b449fec0",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
 } }
 </script>
@@ -175,8 +175,8 @@
   <button id="backBtn" type="button">&larr; Ships</button>
   <div id="aboardInfo"></div>
   <div class="cams" role="group" aria-label="View">
-    <button id="camCaptain" type="button" aria-pressed="true">Captain</button>
-    <button id="camDeck" type="button" aria-pressed="false">On deck</button>
+    <button id="camCaptain" type="button" aria-pressed="true">Helm</button>
+    <button id="camDeck" type="button" aria-pressed="false">Bow</button>
     <button id="camChase" type="button" aria-pressed="false">Chase</button>
   </div>
 </div>
@@ -209,15 +209,15 @@
 <div id="info" class="overlay" hidden>
   <div class="card" role="dialog" aria-labelledby="infoTitle">
     <h2 id="infoTitle">About this prototype</h2>
-    <p>Real ships report their position by radio (AIS). This page shows those reports live from <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>, relayed by the I'M HERE server. Pick a ship from the list to go aboard. You start at the helm (Captain): the bridge windows ahead, and two screens on the console in front of you, a chart and the instruments (heading, course, speed, rate of turn, status, draft, destination and ETA, position). You can also stand on deck or follow the ship with the chase cam. In VR: A changes seat, the right thumbstick click goes to the next ship, X moves the I'M HERE label, B or Y (or the label's Exit VR row) leaves VR.</p>
+    <p>Real ships report their position by radio (AIS). This page shows those reports live from <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>, relayed by the I'M HERE server. Pick a ship from the list to go aboard. You start at the helm: the bridge windows ahead, and two screens on the console in front of you, a chart and the instruments (heading, course, speed, rate of turn, status, draft, destination and ETA, position). You can also stand at the bow or follow the ship with the chase cam. In VR: A changes seat, the right thumbstick click goes to the next ship, X moves the I'M HERE card, B or Y (or the card's Exit VR row) leaves VR.</p>
     <h3>Depth, wind and tide</h3>
     <p>AIS does not report water depth, so the screens say "charted depth coming soon" instead of a number. Charted depth and wind / tide will come from NOAA in a later version. The bridge screens are not for navigation.</p>
     <h3>Old Hickory Lake &amp; small boats</h3>
     <p>Most small pleasure boats &ndash; bass boats, pontoons, jet skis &ndash; do <b>not</b> carry AIS, so they never show up. On the Cumberland River / Old Hickory you will mostly see commercial barge tows and workboats, and sometimes nothing for a while. Busy ports (Los Angeles, New York, Houston, Gibraltar) show far more traffic.</p>
     <h3>Simulated sample</h3>
-    <p>Menu &rarr; <b>Simulated sample</b> plays three made-up tows/tugs moving along an approximate Cumberland River path near Old Hickory Dam. They are not real vessels or real positions: they never show "live", and the I'M HERE label's <b>(i)</b> details say SIMULATED SAMPLE.</p>
+    <p>Menu &rarr; <b>Simulated sample</b> plays three made-up tows/tugs moving along an approximate Cumberland River path near Old Hickory Dam. They are not real vessels or real positions: they never show LIVE: the I'M HERE card's signal reads SIM (amber) and its <b>&#9432; Details</b> say SIMULATED SAMPLE.</p>
     <h3>What is real and what is estimated</h3>
-    <p>Tap <b>(i)</b> on the I'M HERE label (top left) for what is live, estimated or simulated right now, where it comes from and how old each vessel's last report is. Ships are drawn as a typical vessel of their reported type (not the real ship's look), sized and turned from what each ship reports; the sea, waves, wakes and rocking are simulated; movement between reports is estimated.</p>
+    <p>The I'M HERE card (top left) starts small; tap it to expand or minimize it. Its signal row says LIVE (green) only while fresh AIS reports arrive, otherwise HIST and the age of the last report; <b>&#9432; Details</b> has the full IMO and MMSI, sources and credits. The card's picture is an icon of the ship type, not a photo of the ship. Ships are drawn as a typical vessel of their reported type (not the real ship's look), sized and turned from what each ship reports; the sea, waves, wakes and rocking are simulated; movement between reports is estimated.</p>
     <h3>Colours (map)</h3>
     <p class="legend small"><span style="background:#3d7fd9"></span>Cargo<span style="background:#c0392b"></span>Tanker<span style="background:#f0a020"></span>Tug / tow<span style="background:#8e44ad"></span>Passenger<span style="background:#e84393"></span>Pleasure<span style="background:#16a085"></span>Fishing<span style="background:#d35400"></span>Special<span style="background:#95a5a6"></span>Unknown</p>
     <p class="small">Imagery &copy; Esri, Maxar, Earthstar Geographics; OpenStreetMap as fallback. AIS data: aisstream.io.</p>
@@ -542,413 +542,356 @@
   window.ImHereXR = { install: install, showMessage: showMsg };
 })();
 </script>
-<!-- IMHERE-MARK:BEGIN (generated from shared/imhere-mark.js; this copy adds an optional ROUTE row: update({ route })) -->
-<script id="imhere-mark">
-/* I'M HERE experience label, v4 (founder-approved final design). SOURCE OF TRUTH: /home/claude/shared/imhere-mark.js
-   Pasted inline into every prototype page between the IMHERE-MARK markers by
-   node /home/claude/shared/sync-mark.mjs <files...>  (artifact pages cannot share files).
-   Edit here, then re-run the sync. Self-contained: no network, no dependencies.
+<!-- IMHERE-CARD (inlined by tools/build.js from src/imhere-card.js = iah-proto/shared/imhere-card.js) -->
+<script id="imhere-card">
+/* I'M HERE card v1 (spec: card_spec_v1.md, reference look: card-test.html). SOURCE OF TRUTH: iah-proto/shared/imhere-card.js
+   (mirrored in v_maritime/src/imhere-card.js; the boats build inlines it). Self-contained, no dependencies; the only network
+   use is the flag image (flag-icons on jsdelivr) when the page passes flag.iso2.
 
-   Layout (top-left on screens; panel rgba(10,18,32,.55), 1px border white 18%, 8px radius):
-       I'M HERE                                   (i)  ×     <- watermark: 9-11px, .25em spacing, white 30%
-       SWA 444 · 737-800 · approach BNA                      <- context line: 11px, white 60%, no headline
-       LOC:      Nashville, TN                               <- labels: outlined caps (transparent fill, 0.5px stroke,
-       SIGNAL:   airplanes.live, live                           white 65%, 11px); values: solid white 13px, one column
-       VIEW:     Google 3D + render
-   Only the word "live" is coloured (green #5DCAA5), and only while setLive(true): pages drive it from real data freshness;
-   demo/simulated data never sets it. After ~6 s the label collapses to a small "I'M HERE" corner mark; tap to re-expand.
-   (i) opens the details: live stats + provenance (source, last update, live vs recorded/simulated, render vs real imagery).
-   In VR, xrPanel(THREE) draws the same label on a canvas (row labels use a 50% white fill there: hairline outlines
-   alias and shimmer at headset panel scale).
-
-   Optional two-line identity (v4.1; pages that pass only `context` look exactly as before):
-       I'M HERE                                   (i)  ×
-       Health · Cardiovascular system                        <- line1: provider · type (11px, white 60%)
-       Entering the heart from your upper body               <- line2: where you are, plain English (13px, white 92%)
-       superior vena cava                                    <- line2small: the technical term (10px, white 45%)
-       LOC / SIGNAL / VIEW rows as above
+   Top-left, inside the safe area. Collapsed by default: the hollow lowercase "i'm here" mark, a small thumbnail, LOC, route,
+   and "<id> · LIVE" (green, only while setLive(true)) or "<id> · HIST <age>". Tap the card to expand / collapse. Expanded:
+   photo slot, caption row (flag + country | REG + type), the line, LOC / ORG / <ID> / RTE / POV / SIG / DATE / TIME (rows with
+   no value are hidden, order never changes), footer (imagery credit | "ⓘ Details"). Details opens a small panel inside the
+   card and does NOT collapse it.
 
    API
-     ImHereMark.init({ context, line1, line2, line2small, about, loc, signal, view, stats, tag, sceneNote, items, credits, below, zIndex })
-     ImHereMark.update({ ...same keys })
-        context   e.g. 'SWA 444 · 737-800 · approach BNA', 'ISS · over Pacific Ocean', 'Heart · stop 1 of 10'
-        line1     optional identity line 1 (provider · type); replaces `context` when given
-        line2     optional identity line 2: where you are, in plain English
-        line2small optional smaller, dimmer line under line2 (e.g. the medical or technical term)
-        about     optional { title, text } shown at the top of the (i) details (e.g. the current stop, in plain words)
-        loc       place, e.g. 'Nashville, TN'
-        signal    { source, time }  -> "source, live" while setLive(true), else "source, 3 hrs ago"
-                  { source, date }  -> "GPS track, 3 May 2008"      { text } -> 'Demo data', 'Fixed camera', ...
-        view      what you are seeing: 'Google 3D + render', '3D render', 'Live video', 'Video, Nov 9'
-        stats     [[label, value], ...] shown in the (i) details
-        tag       { text } status line for the details ("Now: ...")
-        sceneNote sentence in the details: AI-created/rendered vs actual imagery
-        items     provenance list: { kind, label, source, age, time, timeLabel, note, href, list: [{ text, time | age }] }
-                  kind live | recorded | data | computed | estimated | assumed | simulated | sample | illustrative | ai
-        below     CSS selector(s): the label sits just under the lowest visible one (e.g. the page header)
-     ImHereMark.setLive(true|false)   "live" (green) in SIGNAL. Only while the data is really fresh.
-     ImHereMark.xrPanel(THREE, { width, x, y, z, exitRow })  -> small THREE.Mesh panel, kept up to date
-        exitRow: true adds a last row "Exit VR" under LOC / SIGNAL / VIEW (opt-in; default off). Its hot area is
-        mesh.userData.exitRect = { cx, cy, w, h } (mesh-local metres) for the VR safety layer's exitTargets;
-        ImHereMark.xrExitHover(bool) highlights it.
-     ImHereMark.open() / close() / dismiss() / expand() / isLive() / label() / items()
-   CSS variable --imh-h on <html>: height taken by the label (or the corner mark) + gap, so a page can push its
-   own top-left panel down: top: calc(60px + var(--imh-h, 0px)).
-*/
+     ImHereCard.init({ zIndex, ...data })   ImHereCard.update({ ...data })
+       data: thumb    { icon: { d, w, h }, label } (an SVG path, drawn as a line icon) or { src, alt }
+             photo    same shape as thumb (defaults to thumb); photoNote: small text in the photo slot
+             flag     { iso2, name }       reg   'IMO 9811000' (shown after "REG"; numbers over 10 chars -> "…" + last 8)
+             type     'Container ship'     loc   'San Pedro, CA'      org   'Mediterranean Shipping Co.'
+             id       { label: 'NAME', value: 'MSC ANNA' }     rte  '→ Long Beach · Underway'    pov  'Helm'
+             route    collapsed route line ('→ Long Beach')    sig  { source: 'AIS', tag: 'SIM' (optional, amber) }
+             time     ms of the data (DATE / TIME and the HIST age; DATE / TIME show now while live)
+             footer   { text, href }      details { rows: [[k, v]], notes: [text], credits: [{ text, href }] }
+     ImHereCard.setLive(bool) / isLive() / expand() / collapse() / toggle() / isExpanded()
+     ImHereCard.openDetails() / closeDetails() / detailsOpen() / text()   (text(): the card as plain text)
+     ImHereCard.xrPanel(THREE, { width, exitRow }) -> THREE.Mesh of the COLLAPSED card for VR (canvas, kept up to date);
+       mesh.userData.exitRect = { cx, cy, w, h } for the VR safety layer's exitTargets; ImHereCard.xrExitHover(bool).
+   CSS variables on <html> (pages keep their own panels clear of the card):
+     --imc-hc / --imc-wc  bottom edge / right edge of the COLLAPSED card (px from the top / left of the viewport)
+     --imc-h  / --imc-w   the same for the card as it is now (expanded or not) */
 (function () {
   'use strict';
-  if (window.ImHereMark) return;
-  var KINDS = {
-    live: ['LIVE', '#1f9d55'], recorded: ['RECORDED', '#3d82c9'], data: ['REAL DATA', '#2e8f5e'],
-    computed: ['CALCULATED', '#2b7f8c'], estimated: ['ESTIMATED', '#6f7f8f'], assumed: ['ASSUMED', '#6f7f8f'],
-    simulated: ['SIMULATED', '#c47a12'], sample: ['SAMPLE', '#c47a12'], illustrative: ['ILLUSTRATIVE', '#7d5cc4'], ai: ['AI-GENERATED', '#b44a8a']
-  };
-  var NAVY = 'rgba(10,18,32,0.55)', GREY = '#9fb0c0', VALUE = '#ffffff', GREEN = '#5DCAA5';
-  var FONT = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
-  var COLLAPSE_MS = 6000;
-  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  if (window.ImHereCard) return;
+  var MONO = 'ui-monospace,"SF Mono",Menlo,Consolas,"DejaVu Sans Mono","Liberation Mono",monospace';
+  var MARKF = '"Arial Black","Helvetica Neue",Arial,sans-serif';
+  var GREEN = '#7ef0a2', AMBER = '#ffbf47';
+  var MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  var FLAG_URL = 'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/';
   var CSS =
-    '.imh-box,.imh-mini{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imh-z,1500);' +
-    'box-sizing:border-box;margin:0;background:' + NAVY + ';color:#fff;border-radius:8px;border:1px solid rgba(255,255,255,.18);' +
-    'box-shadow:0 2px 10px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);font:11px/1.25 ' + FONT + ';' +
-    'letter-spacing:normal;text-align:left;text-shadow:none;pointer-events:auto;-webkit-tap-highlight-color:transparent}' +
-    '.imh-box[hidden],.imh-mini[hidden],.imh-src[hidden],.imh-box [hidden]{display:none}' +
-    '.imh-box{width:min(190px,45vw);padding:8px}' +
-    '.imh-box.imh-wide{width:min(300px,calc(100vw - 20px))}' +
-    '.imh-r1{display:flex;align-items:center;gap:5px;min-height:18px}' +
-    '.imh-brand{font-weight:400;font-size:10px;letter-spacing:.25em;flex:none;color:rgba(255,255,255,.3)}' +   /* watermark */
-    '.imh-i,.imh-x{flex:none;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;' +
-    'color:#dfe7ee;user-select:none;-webkit-user-select:none;position:relative}' +
-    '.imh-i::after,.imh-x::after{content:"";position:absolute;inset:-7px}' +   /* bigger touch target */
-    '.imh-i{margin-left:auto;font:italic 700 10.5px/1 Georgia,serif;border:1.3px solid rgba(255,255,255,.55)}' +
-    '.imh-x{font-size:14px;line-height:1;background:rgba(255,255,255,.1)}' +
-    '.imh-i:hover,.imh-i.imh-on,.imh-x:hover{background:rgba(255,255,255,.22)}' +
-    '.imh-i:focus-visible,.imh-x:focus-visible,.imh-mini:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
-    '.imh-r2{margin-top:1px;font-weight:400;font-size:11px;color:rgba(255,255,255,.6);overflow-wrap:anywhere}' +   /* context line */
-    '.imh-id2{margin-top:2px;font-weight:500;font-size:13px;line-height:1.25;color:rgba(255,255,255,.92);overflow-wrap:anywhere}' +   /* identity line 2 */
-    '.imh-id3{margin-top:1px;font-size:10px;line-height:1.2;color:rgba(255,255,255,.45);overflow-wrap:anywhere}' +   /* its technical term */
-    '.imh-ab{margin-top:5px;font-size:11.5px;line-height:1.35;color:#e8eef4}.imh-ab b{display:block;font-size:12px;color:#fff;margin-bottom:1px}' +
-    '.imh-rows{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;margin:5px 0 0}' +
-    '.imh-l{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:transparent;' +
-    '-webkit-text-stroke:.5px rgba(255,255,255,.65);text-stroke:.5px rgba(255,255,255,.65);white-space:nowrap}' +
-    '@supports not ((-webkit-text-stroke:.5px #fff) or (text-stroke:.5px #fff)){.imh-l{color:rgba(255,255,255,.5)}}' +
-    '.imh-v{font-size:13px;line-height:1.3;color:' + VALUE + ';overflow-wrap:anywhere}.imh-v .imh-g{color:' + GREEN + ';font-weight:600}' +
-    '.imh-src{margin-top:5px;max-height:min(46vh,360px);overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;' +
-    'border-top:1px solid rgba(255,255,255,.14);font-size:11px;line-height:1.3}' +
-    '.imh-ph{font-weight:700;font-size:11px;margin-top:5px;color:#fff}' +
-    '.imh-r3{display:flex;flex-wrap:wrap;gap:3px 12px;margin:4px 0 2px}' +
-    '.imh-st{display:flex;flex-direction:column;min-width:0}' +
-    '.imh-st i{font-style:normal;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:' + GREY + '}' +
-    '.imh-st b{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}' +
-    '.imh-it{border-bottom:1px solid rgba(255,255,255,.08);padding:5px 0 4px}' +
-    '.imh-k{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;padding:0 4px;border-radius:3px;color:#fff;margin-right:5px;vertical-align:1px}' +
-    '.imh-lb{font-weight:600}' +
-    '.imh-d{color:' + GREY + ';font-size:10.5px;margin-top:2px;white-space:pre-line}' +
-    '.imh-ls{margin:2px 0 0;padding:0;list-style:none;color:' + GREY + ';font-size:10.5px}' +
-    '.imh-ls li{display:flex;justify-content:space-between;gap:8px;margin:0;padding:0}.imh-ls li span:last-child{flex:none;font-variant-numeric:tabular-nums}' +
-    '.imh-ft{padding-top:5px;color:' + GREY + ';font-size:10px}' +
-    '.imh-box a{color:#a9d3ff}' +
-    '.imh-mini{padding:5px 8px;font-weight:800;font-size:10px;letter-spacing:.1em;cursor:pointer;opacity:.9;user-select:none;-webkit-user-select:none}' +
-    '.imh-mini:hover{opacity:1}.imh-mini .imh-g{color:' + GREEN + ';letter-spacing:.02em;margin-left:5px}';
+    '.imc{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imc-z,1500);' +
+    'box-sizing:border-box;width:min(290px,calc(100vw - 130px));max-height:calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow:auto;' +
+    'overscroll-behavior:contain;background:rgba(12,16,30,.6);border:.5px solid rgba(255,255,255,.28);border-radius:7px;color:rgba(255,255,255,.92);' +
+    'font:13px/1.3 ' + MONO + ';letter-spacing:normal;text-align:left;text-shadow:none;cursor:pointer;-webkit-tap-highlight-color:transparent;' +
+    'user-select:none;-webkit-user-select:none;pointer-events:auto;margin:0}' +
+    '.imc *{box-sizing:border-box}.imc [hidden]{display:none!important}' +
+    '.imc:focus-visible{outline:2px solid #7cc4ff;outline-offset:1px}' +
+    '.imc-wm{font-family:' + MARKF + ';font-size:26px;font-weight:900;letter-spacing:2px;line-height:1.1;color:transparent;' +
+    '-webkit-text-stroke:.5px rgba(255,255,255,.85);padding:8px 11px 3px;white-space:nowrap}' +
+    '@supports not (-webkit-text-stroke:.5px #fff){.imc-wm{color:rgba(255,255,255,.35)}}' +
+    '.imc-ico{width:100%;height:100%;display:block}' +
+    '.imc-ph{margin:3px 11px 0;border:.5px solid rgba(255,255,255,.3);aspect-ratio:3/2;background:rgba(255,255,255,.12);position:relative;overflow:hidden;' +
+    'display:flex;align-items:center;justify-content:center}' +
+    '.imc-ph .imc-ico{width:82%;height:82%}.imc-ph img{width:100%;height:100%;object-fit:cover;display:block}' +
+    '.imc-pn{position:absolute;right:4px;bottom:3px;font-size:9px;color:rgba(255,255,255,.55)}' +
+    '.imc-cap{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:5px 11px 0;font-size:11px;color:rgba(255,255,255,.55);line-height:1.35}' +
+    '.imc-fb{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:40px;max-width:46%;text-align:center}' +
+    '.imc-fl{width:24px;height:18px;opacity:.85;display:block;object-fit:cover;border:.5px solid rgba(255,255,255,.3)}' +
+    '.imc-rg{text-align:right;margin-left:auto}' +
+    '.imc-ln{border-top:.5px solid rgba(255,255,255,.2);margin-top:5px;padding:3px 0 4px}' +
+    '.imc-r{display:grid;grid-template-columns:38px 1fr;padding:1px 11px;align-items:baseline}' +
+    '.imc-l{font-size:11px;color:rgba(110,220,235,.7)}.imc-v{font-size:13px;overflow-wrap:anywhere}' +
+    '.imc-s .imc-l{color:rgba(110,220,235,.55)}.imc-s .imc-v{font-size:11px;color:rgba(255,255,255,.7)}' +
+    '.imc-g{color:' + GREEN + '}.imc-a{color:' + AMBER + '}' +
+    '.imc-cr{display:flex;justify-content:space-between;align-items:center;border-top:.5px solid rgba(255,255,255,.2);padding:4px 11px;font-size:11px;color:rgba(255,255,255,.55)}' +
+    '.imc-cr a{color:inherit;text-decoration:none}' +
+    '.imc-det{cursor:pointer;padding:6px 0 6px 10px;margin:-6px 0}.imc-det:focus-visible{outline:2px solid #7cc4ff}' +
+    '.imc-dp{border-top:.5px solid rgba(255,255,255,.2);padding:5px 11px 8px;font-size:11px;line-height:1.4;color:rgba(255,255,255,.75);cursor:auto;user-select:text;-webkit-user-select:text}' +
+    '.imc-dp .imc-r{padding:1px 0;grid-template-columns:52px 1fr}.imc-dp p{margin:4px 0 0}.imc-dp a{color:#a9d3ff}' +
+    '.imc-dh{color:rgba(110,220,235,.7);margin-top:6px}' +
+    '.imc-mini{display:none;align-items:center;gap:9px;padding:2px 9px 8px}' +
+    '.imc-t{width:66px;aspect-ratio:3/2;border:.5px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);overflow:hidden;flex:none;' +
+    'display:flex;align-items:center;justify-content:center}.imc-t img{width:100%;height:100%;object-fit:cover;display:block}' +
+    '.imc-t .imc-ico{width:86%;height:86%}' +
+    '.imc-ma{min-width:0}.imc-m1{font-size:13px;line-height:1.35;overflow-wrap:anywhere}.imc-m2{font-size:11px;line-height:1.35;color:rgba(255,255,255,.7);overflow-wrap:anywhere}' +
+    '.imc.min{width:min(230px,calc(100vw - 130px))}.imc.min .imc-wm{font-size:17px;padding:6px 9px 3px}' +
+    '.imc.min .imc-ph,.imc.min .imc-cap,.imc.min .imc-ln,.imc.min .imc-cr,.imc.min .imc-dp{display:none!important}.imc.min .imc-mini{display:flex}';
 
-  var S = { context: '', route: '', line1: '', line2: '', line2small: '', about: null, loc: '', signal: { text: 'Demo data' }, view: '3D render', stats: [], tag: null,
-    sceneNote: '', items: [], credits: [], live: false, below: [], z: 1500, mounted: false, dismissed: false, srcOpen: false };
-  var SCENE_NOTE_DEFAULT = 'Computer-rendered 3D scene: not AI-generated, and not actual imagery or video.';
-  var box, mini, miniLive, r2, id2, id3, rowsEl, more, src, lastSig = '', lastSrcSig = '', xr = null, collapseAt = 0, hovering = false;
+  var S = { thumb: null, photo: null, photoNote: '', flag: null, reg: '', type: '', loc: '', org: '', id: null, rte: '', pov: '', route: '',
+    sig: null, time: null, footer: null, details: null, live: false, expanded: false, det: false, z: 1500, mounted: false };
+  var card, els = {}, lastSig = '', lastDet = '', xr = null;
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-  function fmtAge(ms) {   // "3 s ago", "14 min ago", "3 hrs ago", "5 days ago", "7 yrs ago"
-    if (!(ms >= 0)) return ms < 0 ? 'just now' : '';
-    var s = Math.round(ms / 1000), n;
-    if (s < 2) return 'just now';
-    if (s < 90) return s + ' s ago';
-    if (s < 5400) return Math.round(s / 60) + ' min ago';
-    if (s < 172800) { n = Math.round(s / 3600); return n + (n === 1 ? ' hr' : ' hrs') + ' ago'; }
-    if (s < 63072000) { n = Math.round(s / 86400); return n.toLocaleString('en-US') + ' days ago'; }
-    return Math.round(s / 31557600) + ' yrs ago';
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function fmtDate(ms) { var d = new Date(ms); return pad(d.getDate()) + ' ' + MON[d.getMonth()] + ' ' + pad(d.getFullYear() % 100); }
+  function fmtTime(ms) { var d = new Date(ms), h = d.getHours(); return ((h % 12) || 12) + ':' + pad(d.getMinutes()) + (h < 12 ? ' AM' : ' PM'); }
+  function fmtAge(ms) {
+    if (!(ms >= 0)) return '';
+    var s = Math.round(ms / 1000);
+    if (s < 90) return s + ' s';
+    if (s < 5400) return Math.round(s / 60) + ' min';
+    if (s < 172800) return Math.round(s / 3600) + ' h';
+    return Math.round(s / 86400) + ' d';
   }
-  function fmtDate(ms) { var d = new Date(ms); return MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear(); }
-  function credText(c) { return typeof c === 'string' ? c : (c && c.text) || ''; }
-  function link(text, href) {
-    if (!href) return document.createTextNode(text);
-    var a = el('a', null, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
+  function shortReg(r) {   // "IMO 9811000" stays; a number longer than 10 characters -> "…" + its last 8
+    r = String(r || ''); var m = /^(.*?\s)?(\S+)$/.exec(r); if (!m) return r;
+    return m[2].length > 10 ? (m[1] || '') + '…' + m[2].slice(-8) : r;
   }
-  function line2() { return S.line1 || S.context || ''; }   // identity line 1 (historically "line 2" of the card, under the watermark)
-  function idLines() { return [line2(), S.line2 || '', S.line2 ? S.line2small || '' : '']; }
-  function fmtDay(ms) { var d = new Date(ms); return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
-  // SIGNAL value as [text, liveWordShown]: "source, live" only while setLive(true)
-  function signalParts() {
-    var g = S.signal || {};
-    if (typeof g === 'string') return [g, false];
-    if (g.source && S.live) return [g.source + ', ', true];
-    if (g.source && g.time) return [g.source + ', ' + fmtAge(Date.now() - g.time), false];
-    if (g.source && g.date) return [g.source + ', ' + fmtDay(g.date), false];
-    return [g.text || g.source || 'None', false];
+  // status word for SIG / the collapsed line: ['LIVE', green] | ['SIM', amber] | ['HIST 3 min', amber]
+  function status() {
+    var g = S.sig || {};
+    if (g.tag) return [g.tag, 'imc-a'];
+    if (S.live) return ['LIVE', 'imc-g'];
+    var age = S.time ? fmtAge(Date.now() - S.time) : '';
+    return ['HIST' + (age ? ' ' + age : ''), 'imc-a'];
   }
-  function rows() { var sp = signalParts(), R = [['LOC', S.loc || 'None']]; if (S.route) R.push(['ROUTE', S.route]);   // ROUTE: boats page extension
-    return R.concat([['SIGNAL', sp[0] + (sp[1] ? 'live' : ''), sp], ['VIEW', S.view || 'None']]); }
-  function statusText() { return S.tag && S.tag.text ? (S.live ? 'Live · ' : '') + S.tag.text : S.live ? 'Live' : ''; }
-  function label() {
-    var L = idLines(), id = L[0] + '. ' + (L[1] ? L[1] + (L[2] ? ' (' + L[2] + ')' : '') + '. ' : '');
-    return "I'M HERE. " + id + rows().map(function (r) { return r[0] + ': ' + r[1]; }).join('. '); }
+  function when() { return S.live ? Date.now() : S.time; }
+  function rows() {   // fixed order; empty rows hidden
+    var st = status(), g = S.sig || {}, t = when(), R = [];
+    if (S.loc) R.push(['LOC', S.loc]);
+    if (S.org) R.push(['ORG', S.org]);
+    if (S.id && S.id.value) R.push([S.id.label || 'ID', S.id.value]);
+    if (S.rte) R.push(['RTE', S.rte]);
+    if (S.pov) R.push(['POV', S.pov]);
+    if (g.source || st) R.push(['SIG', (g.source ? g.source + ' · ' : ''), st]);
+    if (t) { R.push(['DATE', fmtDate(t), null, true]); R.push(['TIME', fmtTime(t), null, true]); }
+    return R;
+  }
+  function miniLines() {
+    var st = status(), idv = S.id && S.id.value ? S.id.value : (S.sig && S.sig.source) || '';
+    return [S.loc || '', S.route || '', [idv, st]];
+  }
+  function text() {   // plain text (tests, aria-label)
+    var M = miniLines(), out = ["i'm here"];
+    if (!S.expanded) { out.push(M[0], M[1], (M[2][0] ? M[2][0] + ' · ' : '') + M[2][1][0]); return out.filter(Boolean).join('\n'); }
+    if (S.flag && S.flag.name) out.push(S.flag.name);
+    if (S.reg) out.push('REG ' + shortReg(S.reg));
+    if (S.type) out.push(S.type);
+    rows().forEach(function (r) { out.push(r[0] + ' ' + r[1] + (r[2] ? r[2][0] : '')); });
+    if (S.det) out.push(els.dp.innerText || els.dp.textContent);
+    return out.filter(Boolean).join('\n');
+  }
+
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function picture(p, small) {   // a line icon (SVG path) or an image
+    if (!p) return null;
+    if (p.icon && p.icon.d) {
+      var s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('viewBox', '0 0 ' + (p.icon.w || 120) + ' ' + (p.icon.h || 60));
+      s.setAttribute('class', 'imc-ico'); s.setAttribute('aria-hidden', 'true');
+      var path = document.createElementNS(SVGNS, 'path'); path.setAttribute('d', p.icon.d); path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', 'rgba(255,255,255,.82)'); path.setAttribute('stroke-width', small ? '2.2' : '1.4');
+      path.setAttribute('stroke-linejoin', 'round'); path.setAttribute('stroke-linecap', 'round'); path.setAttribute('vector-effect', 'non-scaling-stroke');
+      s.appendChild(path); return s;
+    }
+    if (p.src) { var im = new Image(); im.alt = p.alt || ''; im.src = p.src; im.decoding = 'async'; return im; }
+    return null;
+  }
+  function setPic(host, p, small, keep) {
+    var k = JSON.stringify(p || null);
+    if (host._k === k) return; host._k = k;
+    while (host.firstChild && host.firstChild !== keep) host.removeChild(host.firstChild);
+    var n = picture(p, small); if (n) host.insertBefore(n, keep || null);
+  }
 
   function render() {
     if (!S.mounted) return;
-    var R = rows();
-    var L = idLines();
-    var sig = JSON.stringify([L, R, S.dismissed, S.srcOpen, S.live]);
+    var R = rows(), M = miniLines();
+    var sig = JSON.stringify([R, M, S.flag, S.reg, S.type, S.footer, S.expanded, S.det, S.photoNote, S.thumb && JSON.stringify(S.thumb).length, S.photo && JSON.stringify(S.photo).length]);
     if (sig !== lastSig) {
       lastSig = sig;
-      box.hidden = S.dismissed; mini.hidden = !S.dismissed; miniLive.hidden = !S.live;
-      box.classList.toggle('imh-wide', S.srcOpen);
-      r2.textContent = L[0]; r2.hidden = !L[0]; r2.title = L[0];
-      id2.textContent = L[1]; id2.hidden = !L[1];
-      id3.textContent = L[2]; id3.hidden = !L[2];
-      rowsEl.textContent = '';
+      card.classList.toggle('min', !S.expanded);
+      card.setAttribute('aria-expanded', String(S.expanded));
+      setPic(els.t, S.thumb, true);
+      setPic(els.ph, S.photo || S.thumb, false, els.pn);
+      els.pn.textContent = S.photoNote || ''; els.pn.hidden = !S.photoNote;
+      els.m1.textContent = M[0]; els.m1.hidden = !M[0];
+      els.m2.textContent = M[1]; els.m2.hidden = !M[1];
+      els.m3.textContent = M[2][0] ? M[2][0] + ' · ' : ''; var sp = el('span', M[2][1][1], M[2][1][0]); els.m3.appendChild(sp);
+      // caption row
+      var f = S.flag || {};
+      els.fb.hidden = !(f.iso2 || f.name);
+      var want = f.iso2 ? FLAG_URL + String(f.iso2).toLowerCase() + '.svg' : '';
+      if (els.fl.getAttribute('data-src') !== want) { els.fl.setAttribute('data-src', want); if (want) els.fl.src = want; else els.fl.removeAttribute('src'); }
+      els.fl.hidden = !want; els.fl.alt = f.name ? f.name + ' flag' : '';
+      els.fn.textContent = f.name || '';
+      els.rg.textContent = '';
+      if (S.reg) els.rg.appendChild(document.createTextNode('REG ' + shortReg(S.reg)));
+      if (S.reg && S.type) els.rg.appendChild(el('br'));
+      if (S.type) els.rg.appendChild(document.createTextNode(S.type));
+      els.cap.hidden = els.fb.hidden && !S.reg && !S.type;
+      // rows
+      els.ln.textContent = '';
       R.forEach(function (r) {
-        rowsEl.appendChild(el('span', 'imh-l', r[0] + ':'));
-        var v = el('span', 'imh-v');
-        if (r[2]) { v.appendChild(document.createTextNode(r[2][0])); if (r[2][1]) v.appendChild(el('span', 'imh-g', 'live')); }
-        else v.textContent = r[1];
-        rowsEl.appendChild(v);
+        var d = el('div', 'imc-r' + (r[3] ? ' imc-s' : '')); d.appendChild(el('span', 'imc-l', r[0]));
+        var v = el('span', 'imc-v', r[1]); if (r[2]) v.appendChild(el('span', r[2][1], r[2][0])); d.appendChild(v); els.ln.appendChild(d);
       });
-      more.classList.toggle('imh-on', S.srcOpen);
-      more.setAttribute('aria-expanded', String(S.srcOpen));
-      box.setAttribute('aria-label', label());
-      src.hidden = !S.srcOpen;
+      // footer
+      els.fl2.textContent = '';
+      var ft = S.footer || {};
+      if (ft.text) { if (ft.href) { var a = el('a', null, ft.text); a.href = ft.href; a.target = '_blank'; a.rel = 'noopener'; a.addEventListener('click', function (e) { e.stopPropagation(); }); els.fl2.appendChild(a); } else els.fl2.textContent = ft.text; }
+      els.det.setAttribute('aria-expanded', String(S.det));
+      els.dp.hidden = !S.det;
+      card.setAttribute('aria-label', "I'M HERE card. " + text().replace(/\n/g, '. '));
       drawXR();
     }
-    renderSources(); place();
+    renderDetails(); measure();
   }
-  function renderSources() {
-    if (!S.mounted || !S.srcOpen) return;
-    var now = Date.now(), frag = document.createDocumentFragment();
-    if (S.about && (S.about.title || S.about.text)) {
-      var ab = el('div', 'imh-ab'); if (S.about.title) ab.appendChild(el('b', null, S.about.title));
-      if (S.about.text) ab.appendChild(document.createTextNode(S.about.text)); frag.appendChild(ab);
+  function renderDetails() {
+    if (!S.det) return;
+    var D = S.details || {}, k = JSON.stringify(D);
+    if (k === lastDet) return; lastDet = k;
+    var dp = els.dp; dp.textContent = '';
+    (D.rows || []).forEach(function (r) { if (!r || r[1] == null || r[1] === '') return; var d = el('div', 'imc-r'); d.appendChild(el('span', 'imc-l', r[0])); d.appendChild(el('span', null, String(r[1]))); dp.appendChild(d); });
+    (D.notes || []).forEach(function (n) { if (n) dp.appendChild(el('p', null, n)); });
+    if (D.credits && D.credits.length) {
+      dp.appendChild(el('div', 'imc-dh', 'Credits'));
+      D.credits.forEach(function (c) {
+        var p = el('p'); if (c.href) { var a = el('a', null, c.text); a.href = c.href; a.target = '_blank'; a.rel = 'noopener'; p.appendChild(a); } else p.textContent = c.text || c;
+        dp.appendChild(p);
+      });
     }
-    var st =(S.stats || []).filter(Boolean);
-    if (st.length) {
-      var r3 = el('div', 'imh-r3');
-      st.forEach(function (s) { var d = el('div', 'imh-st'); d.appendChild(el('i', null, s[0])); d.appendChild(el('b', null, s[1] == null || s[1] === '' ? '–' : String(s[1]))); r3.appendChild(d); });
-      frag.appendChild(r3);
-    }
-    frag.appendChild(el('div', 'imh-ph', 'Where this comes from'));
-    var sc = el('div', 'imh-d'); sc.appendChild(el('b', null, 'Scene: ')); sc.appendChild(document.createTextNode(S.sceneNote || SCENE_NOTE_DEFAULT)); frag.appendChild(sc);
-    if (statusText()) frag.appendChild(el('div', 'imh-d', 'Now: ' + statusText()));
-    S.items.forEach(function (it) {
-      if (!it) return;
-      var k = KINDS[it.kind] || [String(it.kind || 'INFO').toUpperCase(), '#6f7f8f'];
-      var d = el('div', 'imh-it'), h = el('div'), kb = el('span', 'imh-k', k[0]);
-      kb.style.background = k[1]; h.appendChild(kb); h.appendChild(el('span', 'imh-lb', it.label || '')); d.appendChild(h);
-      var lines = [];
-      if (it.source) lines.push('Source: ' + it.source);
-      var age = it.time ? fmtAge(now - it.time) : it.age;
-      if (age) lines.push((it.time ? (it.timeLabel || 'Updated') + ' ' : '') + age);
-      if (it.note) lines.push(it.note);
-      if (lines.length) d.appendChild(el('div', 'imh-d', lines.join('\n')));
-      if (it.href) { var lk = el('div', 'imh-d'); lk.appendChild(link('More about this source', it.href)); d.appendChild(lk); }
-      if (it.list && it.list.length) {
-        var ul = el('ul', 'imh-ls'), max = 30;
-        it.list.slice(0, max).forEach(function (r) {
-          var li = el('li'); li.appendChild(el('span', null, r.text || ''));
-          li.appendChild(el('span', null, r.time ? fmtAge(now - r.time) : (r.age || ''))); ul.appendChild(li);
-        });
-        if (it.list.length > max) { var m = el('li'); m.appendChild(el('span', null, '+ ' + (it.list.length - max) + ' more')); ul.appendChild(m); }
-        d.appendChild(ul);
-      }
-      frag.appendChild(d);
-    });
-    var cr = S.credits.filter(credText);
-    if (cr.length) {
-      var ft = el('div', 'imh-ft'); ft.appendChild(document.createTextNode('Credits: '));
-      cr.forEach(function (c, i) { if (i) ft.appendChild(document.createTextNode(' · ')); ft.appendChild(link(credText(c), c.href)); });
-      frag.appendChild(ft);
-    }
-    var tmp = el('div'); tmp.appendChild(frag.cloneNode(true));
-    if (tmp.innerHTML === lastSrcSig) return;
-    lastSrcSig = tmp.innerHTML; src.textContent = ''; src.appendChild(frag);
   }
-  function visible(e) {
-    if (!e || !e.getClientRects().length) return false;
-    var cs = getComputedStyle(e); return cs.visibility !== 'hidden' && cs.display !== 'none';
-  }
-  var lastTop = null, lastH = null;
-  function place() {
+  var lastM = '';
+  function measure() {
     if (!S.mounted) return;
-    var top = null;
-    S.below.forEach(function (sel) {
-      var list; try { list = document.querySelectorAll(sel); } catch (e) { return; }
-      for (var i = 0; i < list.length; i++) {
-        if (!visible(list[i])) continue;
-        var b = list[i].getBoundingClientRect();
-        if (b.bottom > 0 && b.bottom < innerHeight * 0.5) top = Math.max(top || 0, b.bottom + 6);
-      }
-    });
-    var t = top == null ? '' : Math.round(top) + 'px';
-    if (t !== lastTop) { lastTop = t; box.style.top = t; mini.style.top = t; }
-    // pages push their own top-left panels down by the compact card height (not the opened detail, which overlays)
-    var r = (S.dismissed ? mini : box).getBoundingClientRect(), h = S.srcOpen ? lastH : Math.round(r.height + 12) + 'px';   // +12: clear gap to any panel below
-    if (h && h !== lastH) { lastH = h; document.documentElement.style.setProperty('--imh-h', h); }
+    var r = card.getBoundingClientRect(), root = document.documentElement.style;
+    var h = Math.round(r.bottom) + 'px', w = Math.round(r.right) + 'px';
+    if (!S.expanded) { root.setProperty('--imc-hc', h); root.setProperty('--imc-wc', w); }
+    if (h + w !== lastM) { lastM = h + w; root.setProperty('--imc-h', h); root.setProperty('--imc-w', w); }
   }
-  function expand() { collapseAt = Date.now() + COLLAPSE_MS; if (S.dismissed) { S.dismissed = false; render(); } }
-  function setDismissed(d, focus) {
-    S.dismissed = !!d; if (d) S.srcOpen = false; else collapseAt = Date.now() + COLLAPSE_MS;
-    render();
-    if (focus) try { (d ? mini : box).focus({ preventScroll: true }); } catch (e) { /* ignore */ }
-  }
-  function tick() {   // auto-collapse ~6 s after showing, unless the detail is open or the pointer/focus is on the card
-    if (!S.mounted || S.dismissed || S.srcOpen || hovering || box.contains(document.activeElement)) { collapseAt = Math.max(collapseAt, Date.now() + 1500); return; }
-    if (Date.now() >= collapseAt) setDismissed(true, false);
-  }
-  function stop(e) { e.stopPropagation(); }
-  function button(e, fn) {
-    e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0');
-    e.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); });
-    e.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fn(); } });
-  }
+  function setExpanded(on) { on = !!on; if (on === S.expanded) return; S.expanded = on; if (!on) S.det = false; render(); }
+  function setDet(on) { on = !!on; if (on === S.det) return; S.det = on; lastDet = ''; if (on) S.expanded = true; render(); }
   function mount() {
     if (S.mounted) return;
     if (!document.body) { document.addEventListener('DOMContentLoaded', mount); return; }
-    if (!document.getElementById('imh-style')) { var st = el('style', null, CSS); st.id = 'imh-style'; document.head.appendChild(st); }
-    box = el('div', 'imh-box'); box.id = 'imh-card'; box.setAttribute('role', 'region'); box.setAttribute('tabindex', '-1');
-    var r1 = el('div', 'imh-r1');
-    r1.appendChild(el('span', 'imh-brand', "I'M HERE"));
-    more = el('span', 'imh-i', 'i'); more.setAttribute('aria-label', 'Details: live stats, sources, last update, live or recorded'); more.title = 'Details and sources';
-    button(more, function () { S.srcOpen = !S.srcOpen; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); });
-    r1.appendChild(more);
-    var x = el('span', 'imh-x', '×'); x.setAttribute('aria-label', 'Hide the I\'M HERE card'); x.title = 'Hide';
-    button(x, function () { setDismissed(true, true); });
-    r1.appendChild(x); box.appendChild(r1);
-    r2 = el('div', 'imh-r2'); box.appendChild(r2);
-    id2 = el('div', 'imh-id2'); id2.hidden = true; box.appendChild(id2);
-    id3 = el('div', 'imh-id3'); id3.hidden = true; box.appendChild(id3);
-    rowsEl = el('div', 'imh-rows'); box.appendChild(rowsEl);
-    var hoverOpen = false;   // desktop: hovering (i) previews the detail; a click pins it
-    more.addEventListener('mouseenter', function () {
-      if (!S.srcOpen && window.matchMedia && matchMedia('(hover: hover)').matches) { hoverOpen = true; S.srcOpen = true; lastSrcSig = ''; render(); }
+    if (!document.getElementById('imc-style')) { var st = el('style', null, CSS); st.id = 'imc-style'; document.head.appendChild(st); }
+    card = el('div', 'imc min'); card.id = 'imh-card'; card.setAttribute('role', 'button'); card.setAttribute('tabindex', '0');
+    card.title = 'Tap to expand or minimize';
+    card.appendChild(el('div', 'imc-wm', "i'm here"));
+    var mini = el('div', 'imc-mini'); els.t = el('div', 'imc-t'); mini.appendChild(els.t);
+    var ma = el('div', 'imc-ma'); els.m1 = el('div', 'imc-m1'); els.m2 = el('div', 'imc-m2'); els.m3 = el('div', 'imc-m2');
+    ma.appendChild(els.m1); ma.appendChild(els.m2); ma.appendChild(els.m3); mini.appendChild(ma); card.appendChild(mini);
+    els.ph = el('div', 'imc-ph'); els.pn = el('span', 'imc-pn'); els.ph.appendChild(els.pn); card.appendChild(els.ph);
+    els.cap = el('div', 'imc-cap'); els.fb = el('div', 'imc-fb'); els.fl = el('img', 'imc-fl'); els.fl.decoding = 'async';
+    els.fl.addEventListener('error', function () { els.fl.hidden = true; });
+    els.fn = el('span'); els.fb.appendChild(els.fl); els.fb.appendChild(els.fn); els.cap.appendChild(els.fb);
+    els.rg = el('div', 'imc-rg'); els.cap.appendChild(els.rg); card.appendChild(els.cap);
+    els.ln = el('div', 'imc-ln'); card.appendChild(els.ln);
+    var cr = el('div', 'imc-cr'); els.fl2 = el('span'); els.det = el('span', 'imc-det', 'ⓘ Details');
+    els.det.setAttribute('role', 'button'); els.det.setAttribute('tabindex', '0'); els.det.setAttribute('aria-label', 'Details: credits and identifiers');
+    cr.appendChild(els.fl2); cr.appendChild(els.det); card.appendChild(cr);
+    els.dp = el('div', 'imc-dp'); els.dp.hidden = true; card.appendChild(els.dp);
+    // Details toggles its panel and never collapses the card; taps inside the panel do nothing
+    function det(e) { e.stopPropagation(); setDet(!S.det); }
+    els.det.addEventListener('click', det);
+    els.det.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); det(e); } });
+    els.dp.addEventListener('click', function (e) { e.stopPropagation(); });
+    card.addEventListener('click', function () { setExpanded(!S.expanded); });
+    card.addEventListener('keydown', function (e) {
+      if (e.target !== card) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!S.expanded); }
+      else if (e.key === 'Escape') setExpanded(false);
     });
-    more.addEventListener('click', function (e) { if (hoverOpen) { hoverOpen = false; e.stopImmediatePropagation(); e.stopPropagation(); } }, true);   // pin, don't close
-    box.addEventListener('mouseenter', function () { hovering = true; });
-    box.addEventListener('mouseleave', function () { hovering = false; collapseAt = Math.max(collapseAt, Date.now() + 3000); if (hoverOpen) { hoverOpen = false; S.srcOpen = false; render(); } });
-    src = el('div', 'imh-src'); src.hidden = true; box.appendChild(src);
-    mini = el('div', 'imh-mini', "I'M HERE"); mini.id = 'imh-mark'; mini.hidden = true;
-    miniLive = el('span', 'imh-g', 'Live'); miniLive.hidden = true; mini.appendChild(miniLive);
-    mini.setAttribute('aria-label', "I'M HERE: show the info card"); mini.title = 'Show info';
-    button(mini, function () { setDismissed(false, true); });
-    ['pointerdown', 'pointermove', 'touchstart', 'touchmove', 'wheel', 'mousedown'].forEach(function (ev) {   // keep taps/scrolls off the 3D view underneath
-      box.addEventListener(ev, stop, { passive: true }); mini.addEventListener(ev, stop, { passive: true });
+    ['pointerdown', 'pointermove', 'touchstart', 'touchmove', 'wheel', 'mousedown'].forEach(function (ev) {   // keep taps off the 3D view underneath
+      card.addEventListener(ev, function (e) { e.stopPropagation(); }, { passive: true });
     });
-    box.addEventListener('keydown', function (e) { if (e.key === 'Escape' && S.srcOpen) { S.srcOpen = false; render(); } });
-    document.body.appendChild(box); document.body.appendChild(mini);
-    S.mounted = true; collapseAt = Date.now() + COLLAPSE_MS;
-    document.documentElement.style.setProperty('--imh-z', String(S.z));
+    document.body.appendChild(card);
+    S.mounted = true;
+    document.documentElement.style.setProperty('--imc-z', String(S.z));
     render();
-    addEventListener('resize', place);
-    setInterval(function () { render(); tick(); }, 1000);   // keeps "x ago" values current
+    addEventListener('resize', measure);
+    if (window.ResizeObserver) new ResizeObserver(measure).observe(card);
+    setInterval(render, 1000);   // ages, DATE / TIME while live
   }
   function apply(o) {
     if (!o) return;
-    if (o.about !== undefined) S.about = o.about && typeof o.about === 'object' ? { title: String(o.about.title || ''), text: String(o.about.text || '') } : null;
-    ['context', 'line1', 'line2', 'line2small', 'loc', 'route', 'view', 'sceneNote'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
-    if (o.signal !== undefined) S.signal = o.signal;
-    if (o.stats) S.stats = [].concat(o.stats);
-    if (o.tag !== undefined) S.tag = o.tag;
-    if (o.items) S.items = [].concat(o.items);
-    if (o.credits) S.credits = [].concat(o.credits);
-    if (o.below) S.below = [].concat(o.below);
+    ['thumb', 'photo', 'flag', 'id', 'sig', 'footer', 'details'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] || null; });
+    ['photoNote', 'reg', 'type', 'loc', 'org', 'rte', 'pov', 'route'].forEach(function (k) { if (o[k] !== undefined) S[k] = o[k] == null ? '' : String(o[k]); });
+    if (o.time !== undefined) S.time = o.time || null;
     if (o.zIndex != null) S.z = +o.zIndex || 1500;
   }
 
-  // ---- VR: a small HUD panel low in the corner of view, drawn the same way ----
+  // ---- VR: the collapsed card on a canvas (no images: the icon is drawn from its path, so the texture is never tainted)
   function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
-  function fit(g, t, w) { if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
-  var XR_EXIT_H = 58;
-  function xrHeight() { var L = idLines(); return 262 + (rows().length - 3) * 46 + (L[1] ? 42 : 0) + (L[2] ? 30 : 0) + (xr && xr.exitRow ? XR_EXIT_H : 0); }
-  function exitRect(m) {   // the Exit VR row's hot area in the mesh's plane (metres), from the canvas layout
-    var w = m.userData.imhW, H = xr.canvas.height, s = w / 512, top = H - 6 - XR_EXIT_H, bot = H - 6;
-    m.userData.exitRect = xr.exitRow ? { cx: 0, cy: (H / 2 - (top + bot) / 2) * s, w: (512 - 12) * s, h: XR_EXIT_H * s } : null;
+  function fit(g, t, w) { t = String(t || ''); if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
+  var XW = 512, XBODY = 236, XEXIT = 58;
+  function xrHeight() { return XBODY + (xr && xr.exitRow ? XEXIT : 0); }
+  function exitRect(m) {
+    var w = m.userData.imhW, H = xr.canvas.height, s = w / XW, top = H - 6 - XEXIT, bot = H - 6;
+    m.userData.exitRect = xr.exitRow ? { cx: 0, cy: (H / 2 - (top + bot) / 2) * s, w: (XW - 12) * s, h: XEXIT * s } : null;
   }
-  function xrResize(H) {   // two-line identity makes the panel taller: new canvas texture (GPU storage is fixed-size) + geometry
+  function xrResize(H) {
     var T = xr.THREE, c = xr.canvas; c.height = H;
     var tex = new T.CanvasTexture(c); if (T.SRGBColorSpace) tex.colorSpace = T.SRGBColorSpace;
-    xr.meshes.forEach(function (m) {
-      m.material.map = tex; m.material.needsUpdate = true;
-      var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / 512); exitRect(m);
-    });
+    xr.meshes.forEach(function (m) { m.material.map = tex; m.material.needsUpdate = true; var w = m.userData.imhW; m.geometry.dispose(); m.geometry = new T.PlaneGeometry(w, w * H / XW); exitRect(m); });
     xr.tex.dispose(); xr.tex = tex;
   }
   function drawXR() {
     if (!xr) return;
     if (xr.canvas.height !== xrHeight()) xrResize(xrHeight());
-    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height, L = idLines();
+    var c = xr.canvas, g = c.getContext('2d'), W = c.width, H = c.height, M = miniLines();
     g.clearRect(0, 0, W, H);
-    g.fillStyle = 'rgba(10,18,32,0.72)'; rr(g, 3, 3, W - 6, H - 6, 18); g.fill();   // a little denser in VR for legibility
-    g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.stroke();
-    g.textBaseline = 'alphabetic';
-    g.save(); g.fillStyle = 'rgba(255,255,255,0.3)'; g.font = '400 22px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '6px'; g.fillText("I'M HERE", 28, 46); g.restore();
-    g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = '400 26px ' + FONT; g.fillText(fit(g, L[0], W - 56), 28, 88);
-    var y = 140;
-    if (L[1]) { g.fillStyle = 'rgba(255,255,255,0.92)'; g.font = '500 30px ' + FONT; g.fillText(fit(g, L[1], W - 56), 28, 128); y += 42; }
-    if (L[2]) { g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + FONT; g.fillText(fit(g, L[2], W - 56), 28, 158); y += 30; }
-    // labels: translucent fill in VR (a 0.5px outline aliases/shimmers at headset panel scale); values solid white
-    var R = rows(), lx = 28, vx = 0;
-    g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px';
-    R.forEach(function (r) { vx = Math.max(vx, g.measureText(r[0] + ':').width); });
-    vx += lx + 22;
-    R.forEach(function (r) {
-      g.font = '700 24px ' + FONT; if ('letterSpacing' in g) g.letterSpacing = '3px'; g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillText(r[0] + ':', lx, y);
-      if ('letterSpacing' in g) g.letterSpacing = '0px';
-      g.font = '400 30px ' + FONT; g.fillStyle = VALUE;
-      if (r[2]) { var t = fit(g, r[2][0], W - 28 - vx - (r[2][1] ? 60 : 0)); g.fillText(t, vx, y);
-        if (r[2][1]) { var w = g.measureText(t).width; g.fillStyle = GREEN; g.font = '600 30px ' + FONT; g.fillText('live', vx + w, y); } }
-      else g.fillText(fit(g, r[1], W - 28 - vx), vx, y);
-      y += 46;
-    });
-    if (xr.exitRow) {   // last row: Exit VR (small, under the data rows; brighter while a ray points at it)
-      var ty = H - 6 - XR_EXIT_H;
-      g.save(); rr(g, 3, ty, W - 6, XR_EXIT_H + 3, 16); g.clip();
-      g.fillStyle = xr.exitHover ? 'rgba(200,32,42,0.75)' : 'rgba(200,32,42,0.22)'; g.fillRect(0, ty, W, XR_EXIT_H + 6); g.restore();
-      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(3, ty, W - 6, 2);
-      if ('letterSpacing' in g) g.letterSpacing = '0px';
-      g.fillStyle = xr.exitHover ? '#fff' : '#ffb3b6'; g.font = '600 28px ' + FONT; g.fillText('Exit VR', lx, ty + 39);
-      g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + FONT; g.textAlign = 'right'; g.fillText('or press B / Y', W - 28, ty + 38); g.textAlign = 'left';
+    g.fillStyle = 'rgba(12,16,30,0.78)'; rr(g, 3, 3, W - 6, H - 6, 16); g.fill();   // denser than on screens: legible over any scene
+    g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 2; g.stroke();
+    g.textBaseline = 'alphabetic'; if ('letterSpacing' in g) g.letterSpacing = '4px';
+    g.font = '900 46px ' + MARKF; g.lineWidth = 1.6; g.strokeStyle = 'rgba(255,255,255,0.85)'; g.strokeText("i'm here", 24, 56);
+    if ('letterSpacing' in g) g.letterSpacing = '0px';
+    var tx = 24, ty = 78, tw = 150, th = 100;   // thumbnail
+    g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(tx, ty, tw, th); g.strokeStyle = 'rgba(255,255,255,0.3)'; g.lineWidth = 1.5; g.strokeRect(tx, ty, tw, th);
+    var ic = S.thumb && S.thumb.icon;
+    if (ic && ic.d && typeof Path2D !== 'undefined') {
+      var iw = ic.w || 120, ih = ic.h || 60, k = Math.min((tw - 16) / iw, (th - 16) / ih);
+      g.save(); g.translate(tx + (tw - iw * k) / 2, ty + (th - ih * k) / 2); g.scale(k, k);
+      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 3 / k; g.lineJoin = 'round'; g.lineCap = 'round'; g.stroke(new Path2D(ic.d)); g.restore();
+    }
+    var lx = tx + tw + 18, lw = W - lx - 22;
+    g.fillStyle = 'rgba(255,255,255,0.92)'; g.font = '500 30px ' + MONO; g.fillText(fit(g, M[0], lw), lx, ty + 30);
+    g.fillStyle = 'rgba(255,255,255,0.7)'; g.font = '400 25px ' + MONO; g.fillText(fit(g, M[1], lw), lx, ty + 64);
+    g.font = '400 23px ' + MONO;
+    var st = M[2][1], sep = M[2][0] ? ' · ' : '', sw = g.measureText(sep + st[0]).width;
+    var it = M[2][0] ? fit(g, M[2][0], Math.max(40, lw - sw)) + sep : '';
+    g.fillText(it, lx, ty + 96); g.fillStyle = st[1] === 'imc-g' ? GREEN : AMBER; g.fillText(st[0], lx + g.measureText(it).width, ty + 96);
+    if (xr.exitRow) {
+      var ey = H - 6 - XEXIT;
+      g.save(); rr(g, 3, ey, W - 6, XEXIT + 3, 14); g.clip();
+      g.fillStyle = xr.exitHover ? 'rgba(200,32,42,0.75)' : 'rgba(200,32,42,0.22)'; g.fillRect(0, ey, W, XEXIT + 6); g.restore();
+      g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(3, ey, W - 6, 2);
+      g.fillStyle = xr.exitHover ? '#fff' : '#ffb3b6'; g.font = '600 28px ' + MONO; g.fillText('Exit VR', 24, ey + 39);
+      g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + MONO; g.textAlign = 'right'; g.fillText('or press B / Y', W - 24, ey + 38); g.textAlign = 'left';
     }
     xr.tex.needsUpdate = true;
   }
   function xrPanel(THREE, o) {
     o = o || {};
     if (!xr) {
-      var c = document.createElement('canvas'); c.width = 512; c.height = xrHeight();
+      var c = document.createElement('canvas'); c.width = XW; c.height = XBODY;
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
       xr = { canvas: c, tex: tex, THREE: THREE, meshes: [], exitRow: false, exitHover: false };
     }
     if (o.exitRow && !xr.exitRow) { xr.exitRow = true; xrResize(xrHeight()); }
-    var w = o.width || 0.24;   // ~0.24 m wide at 1 m: small but readable
-    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * xr.canvas.height / 512), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
+    var w = o.width || 0.24;
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * xr.canvas.height / XW), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
     m.userData.imhW = w; xr.meshes.push(m);
     m.renderOrder = 10000; m.frustumCulled = false; m.name = 'imhere-mark-xr';
     m.position.set(o.x != null ? o.x : -0.3, o.y != null ? o.y : -0.24, o.z != null ? o.z : -1);
-    m.rotation.x = 0.2;   // tilted slightly toward the eye, like a low dashboard tag
+    m.rotation.x = 0.2;
     exitRect(m); drawXR(); return m;
   }
 
-  window.ImHereMark = {
+  window.ImHereCard = {
     init: function (o) { apply(o); mount(); lastSig = ''; render(); return this; },
     update: function (o) { apply(o); render(); return this; },
     setLive: function (on) { on = !!on; if (on !== S.live) { S.live = on; render(); } return this; },
     isLive: function () { return S.live; },
-    open: function () { if (!S.mounted) return; S.dismissed = false; S.srcOpen = true; lastSrcSig = ''; collapseAt = Date.now() + COLLAPSE_MS; render(); },
-    close: function () { if (!S.mounted) return; S.srcOpen = false; render(); },
-    dismiss: function () { if (S.mounted) setDismissed(true, false); },
-    expand: function () { if (S.mounted) expand(); },
-    label: label, xrPanel: xrPanel,
-    xrExitHover: function (on) { on = !!on; if (xr && xr.exitRow && on !== xr.exitHover) { xr.exitHover = on; drawXR(); } },
-    items: function () { return S.items.slice(); }
+    expand: function () { setExpanded(true); return this; }, collapse: function () { setExpanded(false); return this; },
+    toggle: function () { setExpanded(!S.expanded); return this; }, isExpanded: function () { return S.expanded; },
+    openDetails: function () { setDet(true); return this; }, closeDetails: function () { setDet(false); return this; },
+    detailsOpen: function () { return S.det; }, text: text, xrPanel: xrPanel,
+    xrExitHover: function (on) { on = !!on; if (xr && xr.exitRow && on !== xr.exitHover) { xr.exitHover = on; drawXR(); } }
   };
 })();
 </script>
-<!-- IMHERE-MARK:END -->
 <script>
 /* AIS core: parsing, ship-type decoding, dead reckoning, demo data.
    Plain script (no imports) so it runs in the browser and in Node tests. */
@@ -1362,6 +1305,84 @@
     var line2 = (v && v.name ? v.name + ' · ' : '') + (v && v.imo ? 'IMO ' + v.imo : 'MMSI ' + (v ? v.mmsi : '?'));
     return { line1: line1, line2: line2, flag: flag, operator: op };
   }
+  // Flag state for the card: ISO 3166 alpha-2 (flag-icons file name) and a short country name (USA, UK, UAE)
+  var FLAG_ISO = { 'Albania': 'al', 'Belgium': 'be', 'Cyprus': 'cy', 'Germany': 'de', 'Malta': 'mt', 'Denmark': 'dk', 'Spain': 'es', 'France': 'fr',
+    'Finland': 'fi', 'Faroe Islands': 'fo', 'UK': 'gb', 'Gibraltar': 'gi', 'Greece': 'gr', 'Croatia': 'hr', 'Netherlands': 'nl', 'Italy': 'it',
+    'Ireland': 'ie', 'Portugal (Madeira)': 'pt', 'Norway': 'no', 'Poland': 'pl', 'Portugal': 'pt', 'Sweden': 'se', 'Turkey': 'tr', 'Ukraine': 'ua',
+    'Russia': 'ru', 'Latvia': 'lv', 'Estonia': 'ee', 'Lithuania': 'lt', 'Antigua and Barbuda': 'ag', 'Bahamas': 'bs', 'Bermuda': 'bm', 'Belize': 'bz',
+    'Canada': 'ca', 'Cayman Islands': 'ky', 'USA': 'us', 'Mexico': 'mx', 'Panama': 'pa', 'St Vincent and the Grenadines': 'vc', 'Saudi Arabia': 'sa',
+    'China': 'cn', 'Taiwan': 'tw', 'India': 'in', 'Iran': 'ir', 'Japan': 'jp', 'South Korea': 'kr', 'UAE': 'ae', 'Hong Kong': 'hk', 'Australia': 'au',
+    'New Zealand': 'nz', 'Indonesia': 'id', 'Malaysia': 'my', 'Marshall Islands': 'mh', 'Philippines': 'ph', 'Singapore': 'sg', 'Thailand': 'th',
+    'Vietnam': 'vn', 'Vanuatu': 'vu', 'Liberia': 'lr', 'Brazil': 'br', 'Chile': 'cl' };
+  var FLAG_SHORT = { 'Portugal (Madeira)': 'Portugal', 'Antigua and Barbuda': 'Antigua', 'St Vincent and the Grenadines': 'St Vincent',
+    'Marshall Islands': 'Marshall Is.', 'Cayman Islands': 'Cayman Is.', 'Faroe Islands': 'Faroe Is.', 'Saudi Arabia': 'Saudi Arabia', 'South Korea': 'S. Korea' };
+  function flagInfo(mmsi) { var n = flagOf(mmsi); return n ? { iso2: FLAG_ISO[n] || '', name: FLAG_SHORT[n] || n, full: n, mid: String(mmsi).slice(0, 3) } : null; }
+  // ORG row: the official name unless very recognizable (spec: MSC -> Mediterranean Shipping Co.)
+  var OPERATOR_FULL = { 'MSC': 'Mediterranean Shipping Co.', 'COSCO': 'COSCO Shipping', 'Evergreen': 'Evergreen Marine', 'ONE': 'Ocean Network Express',
+    'Yang Ming': 'Yang Ming Marine', 'Wan Hai': 'Wan Hai Lines', 'NYK': 'NYK Line', 'MOL': 'Mitsui O.S.K. Lines', 'Carnival': 'Carnival Cruise Line',
+    'HMM': 'HMM (Hyundai Merchant Marine)', 'ZIM': 'ZIM Integrated Shipping' };
+  function operatorFull(name) { var op = operatorOf(name); return op ? OPERATOR_FULL[op] || op : ''; }
+  // RTE phase word from the nav status (then speed): Underway / Anchored / Moored / Aground / Fishing / Stopped
+  function navPhase(v) {
+    var f = v && v.fix; if (!f) return '';
+    var ns = f.navStatus, sog = f.sog;
+    if (ns === 6) return 'Aground';
+    if (ns === 1) return 'Anchored';
+    if (ns === 5) return 'Moored';
+    if (ns === 7) return 'Fishing';
+    if (ns === 0 || ns === 8 || (sog != null && sog >= 0.5)) return 'Underway';
+    return sog == null ? '' : 'Stopped';
+  }
+  // destination as a short place name ("Long Beach"): the crew's text through the port table; never an origin
+  function destShort(v) {
+    var d = parseDestination(v && v.destination); if (!d) return '';
+    return d.destPort ? d.destPort.name.replace(/, [A-Z]{2}$/, '') : d.dest;
+  }
+  // LOC: nearest city with state / country code ("San Pedro, CA"), "Off ..." at sea, "Near ..." on rivers, else the ocean name
+  function locName(lat, lon) {
+    if (lat == null || lon == null) return '';
+    var town = null, td = Infinity, inPort = false;
+    for (var i = 0; i < PLACES.length; i++) {
+      var p = PLACES[i], d = distance(lat, lon, p[1], p[2]);
+      if (typeof p[3] === 'number' && p[3] > 0) { if (d <= p[3]) inPort = true; continue; }
+      if (d < td) { td = d; town = p; }
+    }
+    if (town && td <= 30000) return (inPort || td < 2500) ? town[0] : (town[3] === 'near' ? 'Near ' : 'Off ') + town[0];
+    return oceanName(lat, lon);
+  }
+  function oceanName(lat, lon) {   // coarse: good enough for "where on Earth" at sea
+    if (lat > 18 && lat < 31 && lon > -98 && lon < -81) return 'Gulf of Mexico';
+    if (lat > 9 && lat < 22 && lon > -88 && lon < -60) return 'Caribbean Sea';
+    if (lat > 30 && lat < 46 && lon > -6 && lon < 36) return 'Mediterranean Sea';
+    if (lat > 49.5 && lat < 51.2 && lon > -5.5 && lon < 1.8) return 'English Channel';
+    if (lat > 51 && lat < 61 && lon > -4 && lon < 9) return 'North Sea';
+    if (lat > 53 && lat < 66 && lon > 9 && lon < 30) return 'Baltic Sea';
+    if (lat > 0 && lat < 23 && lon > 99 && lon < 121) return 'South China Sea';
+    if (lat < -60) return 'Southern Ocean';
+    if (lat > 66) return 'Arctic Ocean';
+    if (lon >= 20 && lon < 100 && lat < 30) return 'Indian Ocean';
+    if (lon > -70 && lon < 20) return 'Atlantic Ocean';
+    if (lon >= 100 || lon <= -70) return lat < -30 && lon > 147 ? 'Tasman Sea' : 'Pacific Ocean';
+    return '';
+  }
+  // Side-view line icons for the card's photo slot (there is no free ship-photo API: an icon of the type, never a fake photo).
+  // viewBox 120 x 60, bow to the right, waterline at y 50.
+  var HULL = 'M6 38 L116 38 L108 50 L14 50 Z';
+  var SHIP_ICONS = {
+    container: HULL + ' M10 38 V16 H22 V38 M14 16 V11 H19 V16 M26 38 V27 H44 V38 M26 32 H44 M46 38 V25 H64 V38 M46 31 H64 M66 38 V25 H84 V38 M66 31 H84 M86 38 V28 H102 V38',
+    bulk: HULL + ' M10 38 V18 H22 V38 M14 18 V12 H19 V18 M28 38 V34 H40 V38 M46 38 V34 H58 V38 M64 38 V34 H76 V38 M82 38 V34 H94 V38 M43 34 L49 22 M61 34 L67 22 M79 34 L85 22',
+    tanker: 'M4 40 L116 40 L110 50 L12 50 Z M8 40 V22 H20 V40 M11 22 V16 H16 V22 M26 40 V36 H102 V40 M40 36 V33 M60 36 V33 M80 36 V33 M104 40 V30',
+    tug: 'M18 38 L104 38 L96 50 L26 50 Z M40 38 V24 H70 V38 M45 24 V18 H64 V24 M54 18 V8 M30 38 V33 H40',
+    tow: 'M4 38 H68 V50 H4 Z M10 38 V33 H62 V38 M74 40 H114 L108 50 H80 Z M84 40 V29 H102 V40 M93 29 V22',
+    ferry: 'M6 36 L114 36 L106 50 L14 50 Z M16 36 V27 H104 V36 M26 27 V20 H92 V27 M54 20 V13 H64 V20',
+    cruise: 'M4 36 L116 36 L108 50 L12 50 Z M10 36 V27 H108 V36 M16 27 V20 H102 V27 M24 20 V14 H92 V20 M52 14 V7 H62 V14 M16 31 H106',
+    fishing: 'M18 38 L104 38 L96 50 L26 50 Z M28 38 V25 H48 V38 M38 25 V8 M38 12 L92 34 M74 38 L82 24 L90 38',
+    sailboat: 'M28 42 L100 42 L92 50 L38 50 Z M62 40 V4 L92 40 Z M58 10 L34 40 H58',
+    yacht: 'M12 40 L112 40 L100 50 L22 50 Z M26 40 L36 30 H82 L94 40 M42 30 L50 23 H74 L80 30',
+    workboat: 'M18 40 L104 40 L96 50 L26 50 Z M64 40 V26 H88 V40 M28 40 V30 L52 22 M52 22 V40',
+    generic: 'M8 38 L112 38 L104 50 L16 50 Z M14 38 V24 H34 V38 M19 24 V17 H28 V24'
+  };
+  function shipIcon(kind) { var d = SHIP_ICONS[kind] || SHIP_ICONS.generic; return { d: d + ' M0 55 H18 M26 55 H50 M58 55 H86 M94 55 H120', w: 120, h: 60 }; }
   // Plain-words status from the last report (AIS navigational status + speed)
   function shipStatus(v) {
     var f = v && v.fix;
@@ -1566,7 +1587,8 @@
     DemoFeed: DemoFeed, DEMO_FLEET: DEMO_FLEET, DEMO_TRACK: DEMO_TRACK, fmtTimeUtc: fmtTimeUtc,
     decodeRot: decodeRot, rotText: rotText, navStatusText: navStatusText, etaTime: etaTime, etaText: etaText, lookupPort: lookupPort,
     parseDestination: parseDestination, routeText: routeText, operatorOf: operatorOf, displayType: displayType, placeName: placeName,
-    fmtLatLon: fmtLatLon, helmData: helmData, PORTS: PORTS
+    fmtLatLon: fmtLatLon, helmData: helmData, PORTS: PORTS,
+    flagInfo: flagInfo, operatorFull: operatorFull, navPhase: navPhase, destShort: destShort, locName: locName, oceanName: oceanName, shipIcon: shipIcon
   };
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -1581,7 +1603,7 @@ const C = window.AISCore;
 const $ = (id) => document.getElementById(id);
 
 const RELAY = 'https://imhere-flights.bt4w8jn5ty.workers.dev';
-const BUILD = 'fccf2745';   // content hash, filled in by tools/build.js: script URLs carry ?v=BUILD so phones never run a stale copy
+const BUILD = 'b449fec0';   // content hash, filled in by tools/build.js: script URLs carry ?v=BUILD so phones never run a stale copy
 const OLD_KEY_STORE = 'imhere.aisstream.key';   // older versions kept a pasted key here; no longer used
 const LIVE_MAX_AGE_MS = 20 * 60 * 1000;   // drop vessels silent for 20 min
 const LIVE_FRESH_MS = 30000;              // "live" only while connected and reports arrived in the last 30 s
@@ -2908,7 +2930,7 @@ function createScene(THREE, OrbitControls, hooks) {
   }
 
   /* ----- VR: the I'M HERE label (one card, Exit VR as its last row), seat / ship / label controls ----- */
-  const MARKX = window.ImHereMark;
+  const MARKX = window.ImHereCard;
   const markXR = MARKX && MARKX.xrPanel ? MARKX.xrPanel(THREE, { exitRow: true }) : null;
   const LABEL_MODES = ['dash', 'high', 'wrist'];
   const LABEL_NAMES = { dash: 'Label A: Dashboard', high: 'Label B: High corner', wrist: 'Label C: Wrist (raise left hand)' };
@@ -3308,63 +3330,59 @@ function setupVR() {
 }
 function onXR(on) { $('vrBtn').textContent = on ? 'Exit VR' : 'Enter VR'; if (!on && scene3d) scene3d.resize(); renderAboard(); }
 
-/* ---------------- I'M HERE label (shared/imhere-mark.js, inlined in the page) ---------------- */
-const MARK = window.ImHereMark;
-const SHORT_AREA = { losangeles: 'Los Angeles / Long Beach, CA', rotterdam: 'Rotterdam, NL', singapore: 'Singapore Strait', channel: 'Dover Strait, English Channel', cumberland: 'Old Hickory Lake, TN', neworleans: 'New Orleans, LA', houston: 'Houston Ship Channel, TX', newyork: 'New York Harbor', gibraltar: 'Strait of Gibraltar' };
+/* ---------------- I'M HERE card (shared/imhere-card.js, inlined in the page) ---------------- */
+const MARK = window.ImHereCard;
+const SHORT_AREA = { losangeles: 'Los Angeles, CA', rotterdam: 'Rotterdam, NL', singapore: 'Singapore Strait', channel: 'Dover Strait', cumberland: 'Old Hickory Lake, TN', neworleans: 'New Orleans, LA', houston: 'Houston, TX', newyork: 'New York Harbor', gibraltar: 'Strait of Gibraltar' };
+const POV_NAMES = { captain: 'Helm', deck: 'Bow', chase: 'Chase' };
+const CARD_CREDITS = [
+  { text: 'Imagery © Esri, Maxar, Earthstar Geographics', href: 'https://www.esri.com' },
+  { text: 'AIS: aisstream.io, relayed by the I\'M HERE server', href: 'https://aisstream.io' },
+  { text: 'Flags: flag-icons (MIT)', href: 'https://github.com/lipis/flag-icons' },
+  { text: 'Map view: Leaflet, CARTO / OpenStreetMap contributors', href: 'https://www.openstreetmap.org/copyright' },
+  { text: '3D: three.js (MIT). Built with Claude AI' }];
 function refreshMark() {
   if (!MARK) return;
   const now = Date.now(), area = C.AREAS[state.areaId], f = state.feedState;
   const live = liveNow(now);
   const demo = state.mode === 'demo' && !!state.feed;
   const v = state.rideMmsi != null ? state.store.vessels.get(state.rideMmsi) : null;
-  const list = [];
-  state.store.vessels.forEach((x) => { if (x.fix) list.push(x); });
-  list.sort((p, q) => (q.updatedAt || 0) - (p.updatedAt || 0));
-  const age = (ms) => C.formatAge(ms).replace(/ \d+ s ago$/, ' ago');
-  let tag;
-  if (live) tag = { text: v ? 'report ' + age(now - v.updatedAt) : 'last report ' + age(now - state.lastMsgAt) };
-  else if (demo) tag = { text: 'SIMULATED SAMPLE: made-up vessels, not real ships or positions', kind: 'simulated' };
-  else if (f.kind === 'error') tag = { text: "Can't reach ship feed: " + f.text, kind: 'estimated' };
-  else if (f.kind === 'open') tag = { text: 'Connected, waiting for reports', kind: 'estimated' };
-  else tag = { text: 'Connecting…', kind: 'estimated' };
-  let stats;
-  if (v) {
-    const fx = v.fix || {}, hd = C.displayHeading(fx);
-    stats = [['Speed', fx.sog == null ? 'n/a' : fx.sog.toFixed(1) + ' kn'], ['Heading', hd == null ? 'n/a' : Math.round(hd) + '°'], ['Type', C.decodeShipType(v.shipType).label]];
-  } else {
-    stats = [['Vessels', String(list.length)], ['Moving', String(list.filter((x) => x.fix && x.fix.sog != null && x.fix.sog >= 0.5).length)]];
-  }
-  const vesselsItem = state.mode === 'live'
-    ? { kind: live ? 'live' : 'recorded', label: 'Vessel positions, speed, course, type, size', source: 'AIS radio reports via aisstream.io, relayed by the I\'M HERE server' + (live ? ', arriving live' : ' (not arriving right now: last known values)'),
-        time: state.lastMsgAt || null, timeLabel: 'Last report', note: 'Age of each vessel\'s last report:', list: list.map((x) => ({ text: C.vesselTitle(x), time: x.updatedAt })) }
-    : { kind: 'simulated', label: 'Vessels', source: 'Simulated sample: three made-up tows/tugs on an approximate Cumberland River path near Old Hickory Dam. Not real vessels or positions.',
-        list: list.map((x) => ({ text: C.vesselTitle(x), time: x.updatedAt })) };
+  let n = 0; state.store.vessels.forEach((x) => { if (x.fix) n++; });
+  let status;
+  if (live) status = 'Live AIS reports arriving';
+  else if (demo) status = 'SIMULATED SAMPLE: made-up vessels, not real ships or positions';
+  else if (f.kind === 'error') status = "Can't reach ship feed: " + f.text;
+  else if (f.kind === 'open') status = 'Connected, waiting for reports';
+  else status = 'Connecting…';
   const cam = scene3d ? scene3d.camMode : 'captain';
-  const SEAT = { deck: 'On deck', captain: 'Captain, at the helm', chase: 'Chase cam' };
-  const id = v ? C.shipIdentity(v, demo) : null;
-  const dr = v && v.fix ? C.deadReckon(v.fix, now) : null;
-  const loc = (dr && C.placeName(dr.lat, dr.lon)) || SHORT_AREA[state.areaId] || area.name;
-  if (v) stats.push(['Seat', SEAT[cam] || cam]);
-  MARK.update({
-    context: '', line1: v ? id.line1 : (demo ? 'Simulated sample' : 'AIS') + ' · Ship tracking',
-    line2: v ? id.line2 : list.length + (list.length === 1 ? ' ship' : ' ships') + ' nearby', line2small: v ? C.shipStatus(v) : '',
-    loc, route: v && state.view === '3d' ? C.routeText(v, now) || 'Destination not sent yet' : '',
-    signal: demo ? { text: 'Demo data' } : state.mode === 'live' && (v ? v.updatedAt : state.lastMsgAt) ? { source: 'aisstream', time: v ? v.updatedAt : state.lastMsgAt }
-      : { text: f.kind === 'error' ? 'No signal' : 'Connecting…' },
-    view: state.view === 'map' ? 'Map' : v ? '3D render · ship typical of type' : '3D render', tag, stats,
-    about: v ? { title: SEAT[cam] || '', text: cam === 'captain' ? 'Bridge windows ahead; the chart and instrument screens are on the console in front of you.' : '' } : null,
-    sceneNote: 'The map is real satellite imagery (Esri), captured earlier, not live; ships are drawn from live AIS reports. The sea, waves and wakes are computer-drawn, not live. No AI-generated scenes and no video.',
-    items: [vesselsItem,
-      { kind: 'data', label: 'Route and ETA', source: 'Destination and ETA as typed in by the ship\'s crew (AIS static data). AIS has no "from" port: an origin is shown only if the crew wrote one (e.g. "CNYTN>USLAX"). Common port codes are turned into names (USLAX -> Los Angeles, US); anything else is shown as sent' },
-      { kind: 'data', label: 'Bridge screens and helm strip', source: 'Heading, course and speed over ground, rate of turn, nav status, draft, destination, ETA and position, all from AIS. The chart is the same satellite imagery with AIS targets; not for navigation' },
-      { kind: 'assumed', label: 'Depth, wind and tide', source: 'Not in AIS, so not shown (no made-up numbers). Charted depth and wind / tide will come from NOAA in a later version' },
-      { kind: 'assumed', label: 'Operator / flag', source: 'AIS has no operator field: a well-known name prefix gives it (MSC, Maersk, EVER = Evergreen…); otherwise the flag comes from the MMSI\'s country digits (MID)' },
-      { kind: 'estimated', label: 'Movement between reports', source: 'Estimated from the last speed and course (at most 10 minutes), then glides to each new report' },
-      { kind: 'illustrative', label: '3D boats', source: 'Typical ships of the reported AIS type (container ship, tanker, tug, ferry, sailboat…), scaled to the reported length and width (typical size if not sent yet) and turned to the reported heading. Not the real ship\'s look: AIS does not say e.g. container vs bulk, so that is guessed from name and size; container colours and stacks are made up. The bridge interior and console are drawn, not the real ship\'s' },
-      { kind: 'illustrative', label: 'Sea and land', source: 'Waves, wakes (stronger with reported speed) and the gentle rocking aboard are simulated, not measured sea state; land is the flat satellite map, no buildings, bridges or terrain' },
-      { kind: 'data', label: 'Map', source: 'Esri World Imagery (OpenStreetMap tiles as fallback)' },
-      { kind: 'assumed', label: 'Coverage', source: 'Depends on volunteer AIS receivers near the area; most small pleasure boats carry no AIS and never appear' },
-      { kind: 'data', label: 'Page version', source: 'Build ' + BUILD } ] });
+  const notes = ['Now: ' + status,
+    'Picture: an icon of the ship type. There is no free ship-photo source we can use, so no photo is shown rather than a fake one.',
+    'Scene: real satellite imagery (Esri, not live); ships from AIS reports; sea, waves and the ship models are computer-drawn (typical of the reported type, not the real ship). Movement between reports is estimated.',
+    'Not in AIS: depth, wind, tide, origin port.'];
+  const base = { footer: { text: 'Esri', href: 'https://www.esri.com' }, sig: demo ? { source: 'Demo', tag: 'SIM' } : { source: 'AIS' } };
+  if (!v) {
+    MARK.update(Object.assign(base, {
+      thumb: { icon: C.shipIcon('container'), label: 'Ships' }, photo: null, photoNote: 'icon · no photo', flag: null, reg: '', type: n + (n === 1 ? ' ship nearby' : ' ships nearby'),
+      loc: SHORT_AREA[state.areaId] || area.name, org: '', id: null, rte: '', pov: state.view === 'map' ? 'Map' : "God's eye",
+      route: demo ? 'Simulated sample' : n + (n === 1 ? ' ship nearby' : ' ships nearby'), time: demo ? null : state.lastMsgAt || null,
+      details: { rows: [['Area', area.name], ['Build', BUILD]], notes, credits: CARD_CREDITS } }));
+    MARK.setLive(live);
+    return;
+  }
+  const fl = demo ? null : C.flagInfo(v.mmsi), kind = C.modelKind(v);
+  const dr = v.fix ? C.deadReckon(v.fix, now) : null;
+  const loc = (dr && C.locName(dr.lat, dr.lon)) || SHORT_AREA[state.areaId] || area.name;
+  const dest = C.destShort(v), phase = C.navPhase(v);
+  const name = C.vesselTitle(v);
+  MARK.update(Object.assign(base, {
+    thumb: { icon: C.shipIcon(kind), label: C.displayType(v) }, photo: null, photoNote: 'type icon · no photo',
+    flag: fl ? { iso2: fl.iso2, name: fl.name } : null,
+    reg: v.imo ? 'IMO ' + v.imo : 'MMSI ' + v.mmsi, type: C.displayType(v),
+    loc, org: demo ? '' : C.operatorFull(v.name), id: { label: 'NAME', value: name },
+    rte: [dest ? '→ ' + dest : '', phase].filter(Boolean).join(' · '),
+    pov: state.view === 'map' ? 'Map' : POV_NAMES[cam] || cam, route: dest ? '→ ' + dest : phase,
+    time: v.updatedAt || null,
+    details: { rows: [['IMO', v.imo || 'not sent'], ['MMSI', v.mmsi], ['Call', v.callSign || ''], ['Flag', fl ? fl.full + ' (MID ' + fl.mid + ')' : demo ? 'none (simulated)' : 'unknown'],
+      ['Dest', v.destination ? C.cleanText(v.destination) : 'not sent'], ['ETA', C.etaText(v.eta, now) || ''], ['Build', BUILD]], notes, credits: CARD_CREDITS } }));
   MARK.setLive(live);
 }
 
@@ -3436,8 +3454,7 @@ function init() {
     $(id).addEventListener('click', () => { if (scene3d) scene3d.setCamMode(m); renderAboard(); refreshMark(); }));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('info').hidden = true; closeMenu(); } });
 
-  if (MARK) MARK.init({ line1: 'AIS · Ship tracking', line2: 'Boats', loc: 'Los Angeles / Long Beach, CA', signal: { text: 'Connecting…' }, view: '3D render', zIndex: 1500,
-    credits: [{ text: 'Imagery © Esri, Maxar, Earthstar Geographics', href: 'https://www.esri.com' }, { text: 'AIS: aisstream.io', href: 'https://aisstream.io' }] });
+  if (MARK) MARK.init({ zIndex: 1500, loc: 'Los Angeles, CA', sig: { source: 'AIS' }, thumb: { icon: C.shipIcon('container') } });
   // Open straight into a busy port (Los Angeles / Long Beach) unless the link names an area (#area=newyork).
   const fromHash = /area=([a-z]+)/.exec(location.hash || '');
   const initialArea = (fromHash && C.AREAS[fromHash[1]]) ? fromHash[1] : 'losangeles';
