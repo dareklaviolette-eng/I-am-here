@@ -22,12 +22,15 @@
        sections: [{ id, title, el, open }] the sidebar (the elements are moved inside it).
      ImHereTopbar.update()  ImHereTopbar.act(id)  state() / setState(s)  sideOpen() / setSide(b)  cardOpen() / setCard(b)
        menu() ('pov' | 'layers' | null)  setMenu(m)  setXR(bool) (hides the screen controls while presenting)
+       useExternalLayers(mount) shared/imhere-layers-ui.js takes the Layers chip: mount(hostEl) builds it in the right
+         corner (screens; the host gets the .imh-chips class); in VR X.layersAnchor is where its chip goes (the very corner).
      ImHereTopbar.xr(THREE, { cardWidth }) -> X (VR, world-mounted: the page owns the mount; nothing here follows the head)
        X.attach(group)  adds the controls to a group whose origin is the eye at mount time, forward -z (call once)
        X.step(nowMs)    redraws what changed (signatures; at most 10 Hz)
        X.ray(o, d) -> { key, id } | null    (world-space ray, THREE.Vector3s; no allocations)
        X.select(o, d) -> true when a control took it      X.hover(o, d) / X.hoverEnd()  (call for each ray, then end)
        X.card  the I'M HERE card mesh (register it as a VR safety exit target: its Exit VR row)
+       X.layersAnchor  an Object3D in the top-right corner (+z toward you) for createLayersXR({ anchor }) when external
      CSS variables on <html>: --ihb-top (px under the controls: where a card / list can start), --ihb-z */
 (function () {
   'use strict';
@@ -54,7 +57,10 @@
     '.ihb-cells{display:flex;flex-wrap:wrap;gap:2px 14px;margin:0}.ihb-cells dt{font-size:9.5px;letter-spacing:.08em;color:rgba(110,220,235,.7)}.ihb-cells dd{margin:0;font-weight:600;white-space:nowrap}' +
     '.ihb-right{position:fixed;top:calc(10px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));display:flex;gap:6px;z-index:var(--ihb-z,1600)}' +
     '.ihb-right .ihb-b{white-space:nowrap}' +
-    '@media (max-width:430px){.ihb-lay-t{display:none}}' +
+    // narrow phones: both groups share one row, so everything tightens (left group <= ~200 px, the corner <= ~150 px)
+    '@media (max-width:430px){.ihb-lay-t{display:none}.ihb-left{gap:4px}.ihb-left .ihb-b{padding:0 7px}.ihb-side-b{min-width:40px}' +
+    '.ihb-mark{font-size:13px;letter-spacing:.5px}.ihb-split .ihb-arr{min-width:30px;padding:0 4px}.ihb-right{gap:4px}.ihb-right .ihb-b{padding:0 8px}' +
+    '.ihb-right.imh-chips button.imh-chip{padding:8px 9px;letter-spacing:0}}' +
     '.ihb-dd{position:fixed;top:calc(62px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));z-index:calc(var(--ihb-z,1600) + 10);min-width:230px;max-width:calc(100vw - 20px);' +
     'max-height:calc(100dvh - 80px);overflow:auto;display:flex;flex-direction:column;gap:2px;padding:5px;background:rgba(12,16,30,.88);border:.5px solid rgba(255,255,255,.28);border-radius:9px;' +
     '-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-sizing:border-box}' +
@@ -77,7 +83,7 @@
     'letter-spacing:.02em;color:rgba(255,255,255,.62);text-decoration:none;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.12);' +
     'text-shadow:0 0 2px rgba(0,0,0,.75),0 0 6px rgba(0,0,0,.45);mix-blend-mode:normal;pointer-events:auto}';
 
-  var O = null, S = { state: 'compact', side: false, card: true, menu: null, menuAt: 0, xr: false, hintShown: false }, E = {}, mounted = false, layT = 0, leaveT = 0;
+  var O = null, S = { state: 'compact', side: false, card: true, menu: null, menuAt: 0, xr: false, hintShown: false, extLayers: false }, E = {}, mounted = false, layT = 0, leaveT = 0;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function flags(f) { return ' ' + (f || '') + ' '; }
   function has(f, k) { return flags(f).indexOf(' ' + k + ' ') >= 0; }
@@ -204,7 +210,7 @@
       var sig = JSON.stringify(m.data || []); if (E.cells._s !== sig) { E.cells._s = sig; E.cells.textContent = ''; (m.data || []).forEach(function (kv) { var d = el('div'); d.appendChild(el('dt', null, kv[0])); d.appendChild(el('dd', null, kv[1])); E.cells.appendChild(d); }); }
     }
     E.pov.setAttribute('aria-expanded', String(S.menu === 'pov')); E.lay.setAttribute('aria-expanded', String(S.menu === 'layers'));
-    E.lay.setAttribute('aria-label', m.layersLabel || 'Layers');
+    E.lay.setAttribute('aria-label', m.layersLabel || 'Layers'); E.lay.hidden = S.extLayers;
     fill(E.ddPov, !hidden && S.menu === 'pov' ? (m.pov || []) : null, 'pov');
     fill(E.ddLay, !hidden && S.menu === 'layers' ? (m.layers || []) : null, 'lay');
     E.sidebar.hidden = hidden || !S.side;
@@ -262,7 +268,8 @@
     if (card) { leftG.add(card); card.position.set(CW / 2, 0, 0); }
     function face(o, x, y, z) { o.position.set(x, y, z); o.rotation.set(-Math.atan2(y, Math.hypot(x, z)), Math.atan2(-x, -z), 0, 'YXZ'); }
     // one band high along the top of the windshield (+16 deg): left group from 30 deg left, the corner to 26 deg right
-    face(leftG, -0.6, 0.36, -1.0); face(rightG, 0.52, 0.36, -1.05); face(lowG, 0.62, -0.42, -1.0);
+    face(leftG, -0.6, 0.36, -1.0); face(rightG, 0.68, 0.36, -1.0); face(lowG, 0.62, -0.42, -1.0);
+    var DATA_MAX = 1190;   // px of the left panel the slid-out data may use: it ends before the right corner
     function drawLeft(m) {
       var p = P.left, g = p.g, H = p.ch, h = p.hover, st = S.state, tag = !!m.tag || !!m.xrTag;
       var sig = JSON.stringify([st, tag, S.side, S.card, !!m.live, h, st === 'full' ? m.data : 0]); if (sig === p.sig) return; p.sig = sig;
@@ -282,10 +289,10 @@
       g.textAlign = 'left'; g.textBaseline = 'alphabetic';
       if (st === 'full' && m.data && m.data.length) {
         var x = 436, x0 = 414;
-        g.fillStyle = 'rgba(6,16,26,0.82)'; rrect(g, x0, 4, p.cw - x0 - 4, H - 8, 14); g.fill(); g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 2; g.stroke();
+        g.fillStyle = 'rgba(6,16,26,0.82)'; rrect(g, x0, 4, DATA_MAX - x0, H - 8, 14); g.fill(); g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 2; g.stroke();
         for (var k = 0; k < m.data.length; k++) {
           var kv = m.data[k]; g.font = '400 19px ' + MONO; var kw = g.measureText(kv[0]).width; g.font = '600 27px ' + MONO; var vw = g.measureText(kv[1]).width, w = Math.max(kw, vw);
-          if (x + w > p.cw - 20) break;
+          if (x + w > DATA_MAX - 16) break;
           g.font = '400 19px ' + MONO; g.fillStyle = CYAN; g.fillText(kv[0], x, 38); g.font = '600 27px ' + MONO; g.fillStyle = 'rgba(255,255,255,0.92)'; g.fillText(kv[1], x, 74); x += w + 28;
         }
       }
@@ -293,13 +300,21 @@
     }
     function drawRight(m) {
       var p = P.right, g = p.g, H = p.ch, h = p.hover;
-      var sig = JSON.stringify([S.state, S.menu, h]); if (sig === p.sig) return; p.sig = sig;
+      var sig = JSON.stringify([S.state, S.menu, h, S.extLayers]); if (sig === p.sig) return; p.sig = sig;
       g.clearRect(0, 0, p.cw, H); p.hits = [];
       if (S.state === 'hidden') { p.tex.needsUpdate = true; return; }
       g.textBaseline = 'middle'; g.textAlign = 'center'; g.font = '500 28px ' + MONO;
-      bg(g, 4, 4, 236, H - 8, h === 'pov' || S.menu === 'pov'); g.fillStyle = '#fff'; g.fillText('POV ▾', 122, H / 2 + 2); p.hits.push(['pov', 0, 0, 244, H]);
-      bg(g, 250, 4, 286, H - 8, h === 'layers' || S.menu === 'layers'); g.fillStyle = '#fff'; g.fillText('◫ Layers ▾', 393, H / 2 + 2); p.hits.push(['layers', 246, 0, 294, H]);
+      var px = S.extLayers ? 296 : 4;   // with the shared Layers chip in the very corner, POV sits at this panel's right end
+      bg(g, px, 4, 236, H - 8, h === 'pov' || S.menu === 'pov'); g.fillStyle = '#fff'; g.fillText('POV ▾', px + 118, H / 2 + 2); p.hits.push(['pov', px - 4, 0, 244, H]);
+      if (!S.extLayers) { bg(g, 250, 4, 286, H - 8, h === 'layers' || S.menu === 'layers'); g.fillStyle = '#fff'; g.fillText('◫ Layers ▾', 393, H / 2 + 2); p.hits.push(['layers', 246, 0, 294, H]); }
       g.textAlign = 'left'; g.textBaseline = 'alphabetic'; p.tex.needsUpdate = true;
+    }
+    var LXW = 0.19, layersAnchor = new THREE.Group(); layersAnchor.name = 'imhere-layers-anchor'; rightG.add(layersAnchor);
+    function placeRight() {   // the corner: [ POV ][ shared Layers chip ] or [ POV · Layers ] (one panel)
+      var shift = S.extLayers ? LXW + 0.01 : 0;
+      P.right.mesh.position.set(-P.right.wm / 2 - shift, -P.right.hm / 2, 0);
+      P.menu.mesh.position.set(-P.menu.wm / 2 - shift, -P.right.hm - 0.012 - P.menu.hm / 2, 0.003);
+      layersAnchor.position.set(-LXW / 2, -P.right.hm / 2, 0.002); layersAnchor.visible = S.state !== 'hidden';
     }
     function drawList(p, items, title) {
       var g = p.g, W = p.cw, h = p.hover;
@@ -330,13 +345,13 @@
     }
     var at = 0;
     X = {
-      left: leftG, right: rightG, low: lowG, card: card, panels: P, dirty: true,
+      left: leftG, right: rightG, low: lowG, card: card, panels: P, dirty: true, layersAnchor: layersAnchor,
       attach: function (group) { group.add(leftG, rightG, lowG); },
       step: function (now) {
         if (!X.dirty && now - at < 250) return; if (now - at < 100) return;   // at most 10 Hz, at least 4 Hz
         at = now; X.dirty = false;
         var m = M(), hidden = S.state === 'hidden';
-        drawLeft(m); drawRight(m); drawCredit(m);
+        drawLeft(m); drawRight(m); drawCredit(m); placeRight();
         var items = !hidden && S.menu ? (S.menu === 'pov' ? m.pov : m.layers) : null;
         P.menu.mesh.visible = !!items; if (items) drawList(P.menu, items, S.menu === 'pov' ? 'POV' : 'Layers');
         P.side.mesh.visible = !hidden && S.side; if (P.side.mesh.visible) drawList(P.side, m.sideItems || [], m.sideTitle || '');
@@ -387,6 +402,11 @@
     sideOpen: function () { return S.side; }, setSide: function (b) { S.side = !!b; if (S.side) S.card = false; render(); return this; },
     cardOpen: function () { return S.card; }, setCard: function (b) { S.card = !!b; if (S.card) S.side = false; render(); return this; },
     menu: function () { return S.menu; }, setMenu: function (m) { setMenu(m); return this; },
+    useExternalLayers: function (mountFn) {
+      S.extLayers = true; if (S.menu === 'layers') S.menu = null;
+      if (mounted && mountFn) { E.right.classList.add('imh-chips'); try { mountFn(E.right); } catch (e) { console.error('[topbar] layers', e); } }
+      render(); return this;
+    },
     setXR: function (on) { on = !!on; if (on !== S.xr) { S.xr = on; S.menu = null; render(); } return this; },
     section: function (id, open) { E.secs && E.secs.forEach(function (r) { if (r.id === id) r.open = !!open; }); render(); return this; },
     xr: xr

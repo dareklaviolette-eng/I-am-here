@@ -9,7 +9,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="imhere-build" content="24204f13">
+<meta name="imhere-build" content="e27869f9">
 <style>
   :root { --bg:#0e1a24; --panel:rgba(12,22,34,.86); --line:rgba(255,255,255,.16); --text:#e8f1f7; --muted:#9db3c4; --live:#5DCAA5; --err:#ff9d92; }
   * { box-sizing: border-box; }
@@ -154,7 +154,7 @@
 </style>
 <script type="importmap">
 { "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js?v=24204f13",
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js?v=e27869f9",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
 } }
 </script>
@@ -981,12 +981,15 @@
        sections: [{ id, title, el, open }] the sidebar (the elements are moved inside it).
      ImHereTopbar.update()  ImHereTopbar.act(id)  state() / setState(s)  sideOpen() / setSide(b)  cardOpen() / setCard(b)
        menu() ('pov' | 'layers' | null)  setMenu(m)  setXR(bool) (hides the screen controls while presenting)
+       useExternalLayers(mount) shared/imhere-layers-ui.js takes the Layers chip: mount(hostEl) builds it in the right
+         corner (screens; the host gets the .imh-chips class); in VR X.layersAnchor is where its chip goes (the very corner).
      ImHereTopbar.xr(THREE, { cardWidth }) -> X (VR, world-mounted: the page owns the mount; nothing here follows the head)
        X.attach(group)  adds the controls to a group whose origin is the eye at mount time, forward -z (call once)
        X.step(nowMs)    redraws what changed (signatures; at most 10 Hz)
        X.ray(o, d) -> { key, id } | null    (world-space ray, THREE.Vector3s; no allocations)
        X.select(o, d) -> true when a control took it      X.hover(o, d) / X.hoverEnd()  (call for each ray, then end)
        X.card  the I'M HERE card mesh (register it as a VR safety exit target: its Exit VR row)
+       X.layersAnchor  an Object3D in the top-right corner (+z toward you) for createLayersXR({ anchor }) when external
      CSS variables on <html>: --ihb-top (px under the controls: where a card / list can start), --ihb-z */
 (function () {
   'use strict';
@@ -1013,7 +1016,10 @@
     '.ihb-cells{display:flex;flex-wrap:wrap;gap:2px 14px;margin:0}.ihb-cells dt{font-size:9.5px;letter-spacing:.08em;color:rgba(110,220,235,.7)}.ihb-cells dd{margin:0;font-weight:600;white-space:nowrap}' +
     '.ihb-right{position:fixed;top:calc(10px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));display:flex;gap:6px;z-index:var(--ihb-z,1600)}' +
     '.ihb-right .ihb-b{white-space:nowrap}' +
-    '@media (max-width:430px){.ihb-lay-t{display:none}}' +
+    // narrow phones: both groups share one row, so everything tightens (left group <= ~200 px, the corner <= ~150 px)
+    '@media (max-width:430px){.ihb-lay-t{display:none}.ihb-left{gap:4px}.ihb-left .ihb-b{padding:0 7px}.ihb-side-b{min-width:40px}' +
+    '.ihb-mark{font-size:13px;letter-spacing:.5px}.ihb-split .ihb-arr{min-width:30px;padding:0 4px}.ihb-right{gap:4px}.ihb-right .ihb-b{padding:0 8px}' +
+    '.ihb-right.imh-chips button.imh-chip{padding:8px 9px;letter-spacing:0}}' +
     '.ihb-dd{position:fixed;top:calc(62px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));z-index:calc(var(--ihb-z,1600) + 10);min-width:230px;max-width:calc(100vw - 20px);' +
     'max-height:calc(100dvh - 80px);overflow:auto;display:flex;flex-direction:column;gap:2px;padding:5px;background:rgba(12,16,30,.88);border:.5px solid rgba(255,255,255,.28);border-radius:9px;' +
     '-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-sizing:border-box}' +
@@ -1036,7 +1042,7 @@
     'letter-spacing:.02em;color:rgba(255,255,255,.62);text-decoration:none;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.12);' +
     'text-shadow:0 0 2px rgba(0,0,0,.75),0 0 6px rgba(0,0,0,.45);mix-blend-mode:normal;pointer-events:auto}';
 
-  var O = null, S = { state: 'compact', side: false, card: true, menu: null, menuAt: 0, xr: false, hintShown: false }, E = {}, mounted = false, layT = 0, leaveT = 0;
+  var O = null, S = { state: 'compact', side: false, card: true, menu: null, menuAt: 0, xr: false, hintShown: false, extLayers: false }, E = {}, mounted = false, layT = 0, leaveT = 0;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function flags(f) { return ' ' + (f || '') + ' '; }
   function has(f, k) { return flags(f).indexOf(' ' + k + ' ') >= 0; }
@@ -1163,7 +1169,7 @@
       var sig = JSON.stringify(m.data || []); if (E.cells._s !== sig) { E.cells._s = sig; E.cells.textContent = ''; (m.data || []).forEach(function (kv) { var d = el('div'); d.appendChild(el('dt', null, kv[0])); d.appendChild(el('dd', null, kv[1])); E.cells.appendChild(d); }); }
     }
     E.pov.setAttribute('aria-expanded', String(S.menu === 'pov')); E.lay.setAttribute('aria-expanded', String(S.menu === 'layers'));
-    E.lay.setAttribute('aria-label', m.layersLabel || 'Layers');
+    E.lay.setAttribute('aria-label', m.layersLabel || 'Layers'); E.lay.hidden = S.extLayers;
     fill(E.ddPov, !hidden && S.menu === 'pov' ? (m.pov || []) : null, 'pov');
     fill(E.ddLay, !hidden && S.menu === 'layers' ? (m.layers || []) : null, 'lay');
     E.sidebar.hidden = hidden || !S.side;
@@ -1221,7 +1227,8 @@
     if (card) { leftG.add(card); card.position.set(CW / 2, 0, 0); }
     function face(o, x, y, z) { o.position.set(x, y, z); o.rotation.set(-Math.atan2(y, Math.hypot(x, z)), Math.atan2(-x, -z), 0, 'YXZ'); }
     // one band high along the top of the windshield (+16 deg): left group from 30 deg left, the corner to 26 deg right
-    face(leftG, -0.6, 0.36, -1.0); face(rightG, 0.52, 0.36, -1.05); face(lowG, 0.62, -0.42, -1.0);
+    face(leftG, -0.6, 0.36, -1.0); face(rightG, 0.68, 0.36, -1.0); face(lowG, 0.62, -0.42, -1.0);
+    var DATA_MAX = 1190;   // px of the left panel the slid-out data may use: it ends before the right corner
     function drawLeft(m) {
       var p = P.left, g = p.g, H = p.ch, h = p.hover, st = S.state, tag = !!m.tag || !!m.xrTag;
       var sig = JSON.stringify([st, tag, S.side, S.card, !!m.live, h, st === 'full' ? m.data : 0]); if (sig === p.sig) return; p.sig = sig;
@@ -1241,10 +1248,10 @@
       g.textAlign = 'left'; g.textBaseline = 'alphabetic';
       if (st === 'full' && m.data && m.data.length) {
         var x = 436, x0 = 414;
-        g.fillStyle = 'rgba(6,16,26,0.82)'; rrect(g, x0, 4, p.cw - x0 - 4, H - 8, 14); g.fill(); g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 2; g.stroke();
+        g.fillStyle = 'rgba(6,16,26,0.82)'; rrect(g, x0, 4, DATA_MAX - x0, H - 8, 14); g.fill(); g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 2; g.stroke();
         for (var k = 0; k < m.data.length; k++) {
           var kv = m.data[k]; g.font = '400 19px ' + MONO; var kw = g.measureText(kv[0]).width; g.font = '600 27px ' + MONO; var vw = g.measureText(kv[1]).width, w = Math.max(kw, vw);
-          if (x + w > p.cw - 20) break;
+          if (x + w > DATA_MAX - 16) break;
           g.font = '400 19px ' + MONO; g.fillStyle = CYAN; g.fillText(kv[0], x, 38); g.font = '600 27px ' + MONO; g.fillStyle = 'rgba(255,255,255,0.92)'; g.fillText(kv[1], x, 74); x += w + 28;
         }
       }
@@ -1252,13 +1259,21 @@
     }
     function drawRight(m) {
       var p = P.right, g = p.g, H = p.ch, h = p.hover;
-      var sig = JSON.stringify([S.state, S.menu, h]); if (sig === p.sig) return; p.sig = sig;
+      var sig = JSON.stringify([S.state, S.menu, h, S.extLayers]); if (sig === p.sig) return; p.sig = sig;
       g.clearRect(0, 0, p.cw, H); p.hits = [];
       if (S.state === 'hidden') { p.tex.needsUpdate = true; return; }
       g.textBaseline = 'middle'; g.textAlign = 'center'; g.font = '500 28px ' + MONO;
-      bg(g, 4, 4, 236, H - 8, h === 'pov' || S.menu === 'pov'); g.fillStyle = '#fff'; g.fillText('POV ▾', 122, H / 2 + 2); p.hits.push(['pov', 0, 0, 244, H]);
-      bg(g, 250, 4, 286, H - 8, h === 'layers' || S.menu === 'layers'); g.fillStyle = '#fff'; g.fillText('◫ Layers ▾', 393, H / 2 + 2); p.hits.push(['layers', 246, 0, 294, H]);
+      var px = S.extLayers ? 296 : 4;   // with the shared Layers chip in the very corner, POV sits at this panel's right end
+      bg(g, px, 4, 236, H - 8, h === 'pov' || S.menu === 'pov'); g.fillStyle = '#fff'; g.fillText('POV ▾', px + 118, H / 2 + 2); p.hits.push(['pov', px - 4, 0, 244, H]);
+      if (!S.extLayers) { bg(g, 250, 4, 286, H - 8, h === 'layers' || S.menu === 'layers'); g.fillStyle = '#fff'; g.fillText('◫ Layers ▾', 393, H / 2 + 2); p.hits.push(['layers', 246, 0, 294, H]); }
       g.textAlign = 'left'; g.textBaseline = 'alphabetic'; p.tex.needsUpdate = true;
+    }
+    var LXW = 0.19, layersAnchor = new THREE.Group(); layersAnchor.name = 'imhere-layers-anchor'; rightG.add(layersAnchor);
+    function placeRight() {   // the corner: [ POV ][ shared Layers chip ] or [ POV · Layers ] (one panel)
+      var shift = S.extLayers ? LXW + 0.01 : 0;
+      P.right.mesh.position.set(-P.right.wm / 2 - shift, -P.right.hm / 2, 0);
+      P.menu.mesh.position.set(-P.menu.wm / 2 - shift, -P.right.hm - 0.012 - P.menu.hm / 2, 0.003);
+      layersAnchor.position.set(-LXW / 2, -P.right.hm / 2, 0.002); layersAnchor.visible = S.state !== 'hidden';
     }
     function drawList(p, items, title) {
       var g = p.g, W = p.cw, h = p.hover;
@@ -1289,13 +1304,13 @@
     }
     var at = 0;
     X = {
-      left: leftG, right: rightG, low: lowG, card: card, panels: P, dirty: true,
+      left: leftG, right: rightG, low: lowG, card: card, panels: P, dirty: true, layersAnchor: layersAnchor,
       attach: function (group) { group.add(leftG, rightG, lowG); },
       step: function (now) {
         if (!X.dirty && now - at < 250) return; if (now - at < 100) return;   // at most 10 Hz, at least 4 Hz
         at = now; X.dirty = false;
         var m = M(), hidden = S.state === 'hidden';
-        drawLeft(m); drawRight(m); drawCredit(m);
+        drawLeft(m); drawRight(m); drawCredit(m); placeRight();
         var items = !hidden && S.menu ? (S.menu === 'pov' ? m.pov : m.layers) : null;
         P.menu.mesh.visible = !!items; if (items) drawList(P.menu, items, S.menu === 'pov' ? 'POV' : 'Layers');
         P.side.mesh.visible = !hidden && S.side; if (P.side.mesh.visible) drawList(P.side, m.sideItems || [], m.sideTitle || '');
@@ -1346,6 +1361,11 @@
     sideOpen: function () { return S.side; }, setSide: function (b) { S.side = !!b; if (S.side) S.card = false; render(); return this; },
     cardOpen: function () { return S.card; }, setCard: function (b) { S.card = !!b; if (S.card) S.side = false; render(); return this; },
     menu: function () { return S.menu; }, setMenu: function (m) { setMenu(m); return this; },
+    useExternalLayers: function (mountFn) {
+      S.extLayers = true; if (S.menu === 'layers') S.menu = null;
+      if (mounted && mountFn) { E.right.classList.add('imh-chips'); try { mountFn(E.right); } catch (e) { console.error('[topbar] layers', e); } }
+      render(); return this;
+    },
     setXR: function (on) { on = !!on; if (on !== S.xr) { S.xr = on; S.menu = null; render(); } return this; },
     section: function (id, open) { E.secs && E.secs.forEach(function (r) { if (r.id === id) r.open = !!open; }); render(); return this; },
     xr: xr
@@ -2181,7 +2201,7 @@ const C = window.AISCore;
 const $ = (id) => document.getElementById(id);
 
 const RELAY = 'https://imhere-flights.bt4w8jn5ty.workers.dev';
-const BUILD = '24204f13';   // content hash, filled in by tools/build.js: script URLs carry ?v=BUILD so phones never run a stale copy
+const BUILD = 'e27869f9';   // content hash, filled in by tools/build.js: script URLs carry ?v=BUILD so phones never run a stale copy
 const OLD_KEY_STORE = 'imhere.aisstream.key';   // older versions kept a pasted key here; no longer used
 const LIVE_MAX_AGE_MS = 20 * 60 * 1000;   // drop vessels silent for 20 min
 const LIVE_FRESH_MS = 30000;              // "live" only while connected and reports arrived in the last 30 s
@@ -2504,6 +2524,7 @@ function load3D() {
   scene3dLoading = Promise.all([import('three'), import('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/controls/OrbitControls.js?v=' + BUILD)])
     .then(([THREE, ctrl]) => {
       scene3d = createScene(THREE, ctrl.OrbitControls, { cycleSeat: vrCycleSeat, nextShip: vrNextShip, onXR, act, hoverShip, miniInfo });
+      if (sharedLayers) { scene3d.useLayersXR(sharedLayers.LU, sharedLayers.reg); scene3d.setShipsLayer(ui.ships); }
       window.__boats3d = scene3d;   // for the headless tests
       $('loading3d').hidden = true;
       return scene3d;
@@ -3693,7 +3714,7 @@ function createScene(THREE, OrbitControls, hooks) {
     camera.getWorldPosition(_O); _D.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1, 0.5).unproject(camera).sub(_O).normalize();
     return true;
   }
-  let hoverAt = 0, hoverShip = null;
+  let hoverAt = 0, hoverShip = null, layersXR = null;
   function xrHoverStep(t) {   // 10 Hz: what the rays point at (hover highlight, mini card, pointing away closes menus)
     if (t - hoverAt < 100) return; hoverAt = t;
     const frame = renderer.xr.getFrame && renderer.xr.getFrame(), ses = renderer.xr.getSession && renderer.xr.getSession(); if (!frame || !ses) return;
@@ -3701,6 +3722,7 @@ function createScene(THREE, OrbitControls, hooks) {
     for (const src of ses.inputSources) {
       if (!rayFromSource(frame, src)) continue;
       if (TBX && uiMount.visible && TBX.hover(_O, _D)) { onUI = true; continue; }
+      if (layersXR && layersXR._regionAtRay(_O, _D)) { onUI = true; continue; }
       const h = probe(true);
       if (h.kind === 'ui') { onUI = true; if (miniId == null) miniId = h.id; }
       else if (h.kind === 'ship' && ship == null) ship = h.mmsi;
@@ -3714,6 +3736,7 @@ function createScene(THREE, OrbitControls, hooks) {
     try {
       if (!rayFromSource(ev.frame, ev.inputSource)) return;
       if (TBX && uiMount.visible && TBX.select(_O, _D)) return;   // the top controls (and the card; its Exit row is the safety layer's)
+      if (layersXR && layersXR._regionAtRay(_O, _D)) return;      // the shared Layers chip handles its own select
       const h = probe(true);
       if (h.kind === 'ui') { if (h.id && hooks.act) hooks.act(h.id); return; }
       if (hooks.act) hooks.act(h.kind === 'ship' ? 'ship:' + h.mmsi : 'world');
@@ -3912,6 +3935,9 @@ function createScene(THREE, OrbitControls, hooks) {
       padStep();
       if (mountPending && headOk) mountUI();
       if (TBX) TBX.step(t);
+      // the shared Layers chip compares controller rays (matrixWorld) with its own fresh matrix: bring the rig's children
+      // (controllers, the mount) up to date first, or on a moving ship the ray lags the chip by a frame of motion
+      if (layersXR) { rig.updateMatrixWorld(true); layersXR.update(); }
       xrHoverStep(t);
     }
     miniStep(); blinkStep(t);
@@ -3935,6 +3961,13 @@ function createScene(THREE, OrbitControls, hooks) {
       else if (!isEye(m) && state.rideMmsi != null) startRide(state.rideMmsi);
     },
     setShipsLayer(on) { shipsOn = !!on; },
+    useLayersXR(LU, reg) {   // the shared VR Layers chip, world-mounted in the very corner of the top controls
+      if (layersXR || !TBX) return;
+      rig.add(renderer.xr.getController(0), renderer.xr.getController(1));   // its rays come from these (matrices kept current)
+      layersXR = LU.createLayersXR({ THREE, renderer, camera, layers: reg, anchor: TBX.layersAnchor });
+    },
+    get layersXR() { return layersXR; },
+    get shipsOn() { return shipsOn; },
     get rideMmsi() { return state.rideMmsi; }, blinking() { return blinkS.on; },
     xrProbe(src, fr) { const f = fr || (renderer.xr.getFrame && renderer.xr.getFrame()); if (!rayFromSource(f, src)) return 'no ray'; const t = P.mini.mesh.visible ? rayPlane(P.mini.mesh, P.mini.wm, P.mini.hm) : 'hidden';
       const h = probe(true); return { t, hp: Object.assign({}, hp), kind: h.kind, id: h.id, O: _O.toArray().map(Math.round), D: _D.toArray().map((x) => +x.toFixed(3)), mesh: P.mini.mesh.getWorldPosition(new THREE.Vector3()).toArray().map(Math.round) }; },
@@ -3983,8 +4016,9 @@ function povItems() {   // only the views that exist for what you are looking at
   const hs = (h > 0 ? '+' : '') + Math.round(h * 100) + ' cm';
   return views.concat([['recenter', 'Recenter', '', ''], ['h+', 'Height ▲', hs, 'keep'], ['h-', 'Height ▼', '5 cm steps', 'keep']]);
 }
-// Layers: TO BE REPLACED by shared/imhere-layers-ui.js (the shared Layers control being built for every department).
-// Boats-only placeholder with the same look: Ships (on), the other layers listed but disabled ("soon").
+// Layers: the shared control (shared/imhere-layers-ui.js + shared/world-layers.js, department 'maritime': Ships on) is
+// loaded at start (loadSharedLayers). FALLBACK ONLY (TO BE REPLACED / removed once the shared modules always load): this
+// boats-only list with the same items, used if those modules cannot be fetched.
 function layerItems() {
   return [['layer:ships', 'Ships', '', (ui.ships ? 'on' : 'off') + ' keep'], ['layer:planes', 'Planes', 'soon', 'dis'], ['layer:wildlife', 'Wildlife', 'soon', 'dis'], ['layer:iss', 'ISS', 'soon', 'dis']];
 }
@@ -4003,6 +4037,21 @@ function miniInfo(mmsi) {
 function dataCells(v) {   // the data the › arrow slides out: HDG, SOG, DEST first, more where there is room
   const d = C.helmData(v, Date.now());
   return [['HDG', d.hdg], ['SOG', d.sog], ['DEST', d.dest], ['COG', d.cog], ['ROT', d.rot], ['ETA', d.eta], ['STATUS', d.status], ['DRAFT', d.draft]];
+}
+// the shared world-layers registry with a Ships layer: the AIS feed is the page's own, so the layer only shows / hides the ships
+let sharedLayers = null;
+async function loadSharedLayers() {
+  try {
+    const [WL, LU] = await Promise.all([import('../shared/world-layers.js?v=' + BUILD), import('../shared/imhere-layers-ui.js?v=' + BUILD)]);
+    const reg = new WL.WorldLayers({ department: 'maritime' });
+    reg.register({ id: 'ships', label: 'Ships', refreshMs: 3600000, fetchNear: () => Promise.resolve(null), setData() {}, update() {}, pickables: () => [],
+      setVisible(on) { ui.ships = !!on; if (scene3d) scene3d.setShipsLayer(ui.ships); },
+      status() { let n = 0; state.store.vessels.forEach((v) => { if (v.fix) n++; }); return n + (n === 1 ? ' ship' : ' ships') + (state.mode === 'demo' ? ' (sample)' : ' (AIS)'); } });
+    sharedLayers = { reg, LU };
+    if (TB) TB.useExternalLayers((host) => LU.createLayersChip({ layers: reg, host }));
+    if (scene3d) scene3d.useLayersXR(LU, reg);
+    return true;
+  } catch (e) { console.warn('[boats] shared Layers control not loaded, using the fallback list:', e && e.message); return false; }
 }
 function tbModel() {
   const v = state.rideMmsi != null ? state.store.vessels.get(state.rideMmsi) : null, now = Date.now();
@@ -4345,6 +4394,7 @@ function init() {
   if (TB) TB.init({ zIndex: 1600, model: tbModel, onAction: act, dataEl: $('helm'), storageKey: 'imhere.boats.topbar',
     sections: [{ id: 'ships', title: 'Ships nearby', el: $('ships'), open: true }, { id: 'search', title: 'Search', el: $('searchSec') },
       { id: 'departments', title: 'Departments', el: $('deptSec') }, { id: 'settings', title: 'Settings', el: $('settingsSec') }] });
+  loadSharedLayers();
   // Open straight into a busy port (Los Angeles / Long Beach) unless the link names an area (#area=newyork).
   const fromHash = /area=([a-z]+)/.exec(location.hash || '');
   const initialArea = (fromHash && C.AREAS[fromHash[1]]) ? fromHash[1] : 'losangeles';
