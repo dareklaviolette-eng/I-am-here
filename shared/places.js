@@ -68,6 +68,24 @@ export function pickPlace(fromFile, fromAirport, preferNm = 8) {
   return fromFile ? { ...fromFile, via: fromFile.via || 'places' } : null;
 }
 
+// At sea (approved rule; for hosts that know they are on water, e.g. a ship): the town within 12 nm, else the body of water
+// (12-200 nm from land), else "<Ocean> · International waters" beyond 200 nm. Without a land mask a flying page cannot tell
+// sea from empty land, so the aviation page keeps the nearest town.
+export const SEA = { townNm: 12, watersNm: 200 };
+// Coarse named-water boxes (approximate basin outlines, checked in order). Good enough to name open water; not a map.
+const WATERS = [
+  ['Arctic Ocean', (la) => la > 66], ['Southern Ocean', (la) => la < -60],
+  ['Mediterranean Sea', (la, lo) => la > 30 && la < 46 && lo > -6 && lo < 36], ['Gulf of Mexico', (la, lo) => la > 18 && la < 31 && lo > -98 && lo < -81],
+  ['Caribbean Sea', (la, lo) => la > 9 && la < 22 && lo > -88 && lo < -60], ['Indian Ocean', (la, lo) => la < 25 && ((lo > 20 && lo < 105) || (lo >= 105 && lo < 147 && la < -10))],
+  ['Atlantic Ocean', (la, lo) => (lo > -70 && lo < 20) || (la > 0 && lo > -100 && lo <= -70)],
+];
+export function oceanName(lat, lon) { for (const [n, f] of WATERS) if (f(lat, lon)) return n; return 'Pacific Ocean'; }
+export function seaLoc(lat, lon, nearest) {
+  if (nearest && nearest.distNm <= SEA.townNm) return formatPlace(nearest);
+  const o = oceanName(lat, lon);
+  return nearest && nearest.distNm <= SEA.watersNm ? o : o + ' \u00b7 International waters';
+}
+
 export function createPlaces({ base = '../shared/places/', fetchFn = (u) => fetch(u) } = {}) {
   let index = null, indexP = null; const tilesOn = new Set(), loading = new Map(), grid = new PlaceGrid();
   async function getIndex() {
