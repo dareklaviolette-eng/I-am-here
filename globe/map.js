@@ -112,40 +112,45 @@ export class TinyMap {
   // --- input: drag to pan, wheel / pinch / double-tap to zoom, tap to pick
   _bind() {
     const c = this.canvas; c.style.touchAction = 'none';
-    let down = null, lastTap = 0, pinch = null;
+    let down = null, lastTap = null, pinch = null;
+    // canvas-relative CSS px from clientX/Y (offsetX/Y is unreliable for touch pointers on iOS Safari and with page zoom)
+    const pos = (e) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    // a tap may drift a little: a finger rolls, a Quest controller ray shakes. Measured as distance from where it went down
+    // (not summed over every move event), with more room for touch / pen than for a mouse.
+    const slop = (e) => (e.pointerType === 'mouse' ? 10 : 14);
     c.addEventListener('pointerdown', (e) => {
-      c.setPointerCapture(e.pointerId); this.pointers.set(e.pointerId, [e.offsetX, e.offsetY]); this.anim = null;
-      if (this.pointers.size === 1) down = { x: e.offsetX, y: e.offsetY, t: performance.now(), moved: 0 };
+      try { c.setPointerCapture(e.pointerId); } catch (err) { /* not capturable: events still reach the canvas */ }
+      const [x, y] = pos(e); this.pointers.set(e.pointerId, [x, y]); this.anim = null;
+      if (this.pointers.size === 1) down = { x, y, t: performance.now(), far: false };
       if (this.pointers.size === 2) { const [a, b] = [...this.pointers.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z: this.zoom }; down = null; }
     });
     c.addEventListener('pointermove', (e) => {
-      const prev = this.pointers.get(e.pointerId);
+      const prev = this.pointers.get(e.pointerId), [x, y] = pos(e);
       // hover (mouse, pen, or the Quest browser's controller ray): nothing pressed; touch has no hover (tap instead)
-      if (!prev) { if (e.pointerType !== 'touch' && this.onHover) this.onHover(e.offsetX, e.offsetY, e); return; }
-      this.pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
+      if (!prev) { if (e.pointerType !== 'touch' && this.onHover) this.onHover(x, y, e); return; }
+      this.pointers.set(e.pointerId, [x, y]);
       if (this.pointers.size === 2 && pinch) {
         const [a, b] = [...this.pointers.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
         this.zoomAround((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, pinch.z + Math.log2(d / pinch.d) - this.zoom);
       } else if (this.pointers.size === 1) {
-        const dx = e.offsetX - prev[0], dy = e.offsetY - prev[1];
-        if (down) down.moved += Math.abs(dx) + Math.abs(dy);
-        if (!down || down.moved > 6) this.panBy(dx, dy);
+        if (down && !down.far && Math.hypot(x - down.x, y - down.y) > slop(e)) { down.far = true; this.panBy(x - down.x, y - down.y); return; }
+        if (!down || down.far) this.panBy(x - prev[0], y - prev[1]);
       }
     });
     const up = (e) => {
       if (!this.pointers.has(e.pointerId)) return;
       this.pointers.delete(e.pointerId); if (this.pointers.size < 2) pinch = null;
-      if (down && e.type === 'pointerup' && down.moved <= 6 && performance.now() - down.t < 600) {
-        const now = performance.now();
-        if (now - lastTap < 300 && e.pointerType !== 'mouse') { this.zoomAround(e.offsetX, e.offsetY, 1); lastTap = 0; }
-        else { lastTap = now; if (this.onTap) this.onTap(e.offsetX, e.offsetY, e); }
+      if (down && !down.far && e.type === 'pointerup' && performance.now() - down.t < 700) {
+        const now = performance.now(), { x, y } = down;   // the point it went down on, not where it drifted to
+        if (lastTap && now - lastTap.t < 300 && e.pointerType !== 'mouse' && Math.hypot(x - lastTap.x, y - lastTap.y) < 40) { this.zoomAround(x, y, 1); lastTap = null; }
+        else { lastTap = { t: now, x, y }; if (this.onTap) this.onTap(x, y, e); }
       }
       down = null;
     };
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
     c.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch' && !this.pointers.size && this.onHover) this.onHover(null, null, e); });
-    c.addEventListener('wheel', (e) => { e.preventDefault(); this.anim = null; this.zoomAround(e.offsetX, e.offsetY, Math.max(-1, Math.min(1, -e.deltaY / (e.deltaMode ? 3 : 240)))); }, { passive: false });
-    c.addEventListener('dblclick', (e) => { e.preventDefault(); this.zoomAround(e.offsetX, e.offsetY, 1); });
+    c.addEventListener('wheel', (e) => { e.preventDefault(); this.anim = null; const [x, y] = pos(e); this.zoomAround(x, y, Math.max(-1, Math.min(1, -e.deltaY / (e.deltaMode ? 3 : 240)))); }, { passive: false });
+    c.addEventListener('dblclick', (e) => { e.preventDefault(); const [x, y] = pos(e); this.zoomAround(x, y, 1); });
     addEventListener('resize', () => this.resize());
   }
 }
