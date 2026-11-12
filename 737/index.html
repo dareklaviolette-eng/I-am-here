@@ -771,6 +771,9 @@ import { buildAirport } from './airport-kit.js';
 import { loadOurAirport, defaultEnd, nearestAirport, nearestAirports } from './ourairports.js';
 import { isGA } from '../shared/aircraft-class.js';
 import { createPlaces, formatPlace, pickPlace } from '../shared/places.js';
+import { WorldLayers } from '../shared/world-layers.js';
+import { createPlanesLayer, drawTCAS, ndRangeNm } from '../shared/layer-planes.js';
+import { createLayersUI } from '../shared/imhere-layers-ui.js';
 import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit, COCKPIT_737, Backoff, SourcePool, FRESH_S as LIVE_FRESH_S, EXTRAP_MAX,
   fetchFR24, FR24Follow, FR24_NAME, FR24_FRESH_S, FR24_EXTRAP_MAX } from './live-flights.js';
 import { toLocal } from './airport-kit.js';
@@ -1566,7 +1569,8 @@ function refreshMark() {
   items.push(tiles
     ? { kind: 'recorded', label: 'Ground scenery', source: 'Google Photorealistic 3D Tiles: aerial imagery captured on past dates, not live',
         note: 'Image credits are shown at the bottom right, as Google requires.' + (scenery.credits() ? ' Now: ' + scenery.credits() : '') }
-    : { kind: 'illustrative', label: 'Ground, sky and weather', source: 'Generic ground and sky drawn by I\'M HERE; not the real view, weather or traffic' });
+    : { kind: 'illustrative', label: 'Ground, sky and weather', source: 'Generic ground and sky drawn by I\'M HERE; not the real view or weather' + (LAYERS.isOn('planes') ? '' : ' or traffic') });
+  const tfc = LAYERS.isOn('planes') ? PLANES.markItem(Date.now(), !JOIN.hex) : null; if (tfc) items.push(tfc);
   if (WX.mode === 'clear') items.push({ kind: 'illustrative', label: 'Weather: Clear', source: 'Weather switched off for a perfect view (not the real conditions)' });
   else if (WX.data) items.push({ kind: wxIsLive(WX.data) ? 'live' : 'recorded', label: `Weather: METAR ${WX.data.icao}`, source: WX.data.via, time: WX.data.obsTime, timeLabel: 'Observed',
     note: WX.data.raw + (wxIsLive(WX.data) ? '' : '\nOlder than 90 minutes: not live.') + '\nClouds, visibility, rain/snow and wind are drawn from this report.' });
@@ -1703,7 +1707,9 @@ function drawND(x) {
   for (let h = 0; h < 360; h += 5) { x.save(); x.rotate((h - F.track) * D2R); L(x, 0, -R, 0, h % 10 ? -R + 9 : -R + 16);
     if (h % 30 === 0) T(x, h / 10, 0, -R + 32, 18); x.restore(); }
   x.setLineDash([6, 8]); x.beginPath(); x.arc(0, 0, R / 2, Math.PI, Math.PI * 2); x.stroke(); x.setLineDash([]);
-  T(x, '20', -R / 2 - 18, -12, 15);
+  const ndR = ndRangeNm(F.phase, F.altitude);   // the ND's range: 10 / 20 / 40 nm by phase (the half ring shows half of it)
+  T(x, String(ndR / 2), -R / 2 - 18, -12, 15);
+  if (LAYERS.isOn('planes')) drawTCAS(x, PLANES.slots, { R, rangeNm: ndR, trackDeg: F.track, maxBelow: 72 });   // TCAS traffic (live)
   // route (magenta) relative to track
   x.rotate((268 - F.track) * D2R); x.strokeStyle = C.m; x.lineWidth = 3;
   const pts = [[0, 0], [-40, -170], [60, -300], [30, -420]];
@@ -1712,6 +1718,7 @@ function drawND(x) {
   x.restore();
   x.strokeStyle = C.w; x.lineWidth = 3; x.beginPath(); x.moveTo(cx, cy - 22); x.lineTo(cx - 12, cy + 10); x.lineTo(cx + 12, cy + 10); x.closePath(); x.stroke();
   T(x, F.phase, 494, 22, 15, C.g, 'right');
+  if (LAYERS.isOn('planes')) { const okT = PLANES.healthy(); T(x, okT ? 'TFC' : 'TFC NO DATA', 18, 494, 16, okT ? C.c : C.a, 'left'); }
 }
 function arcGauge(x, X, Y, v, max, label, val) {
   const R = 58, a0 = 160 * D2R, sweep = 210 * D2R, f = Math.min(Math.max(v / max, 0), 1.05), a = a0 + f * sweep;
@@ -1775,9 +1782,9 @@ function setTOD(k) {
 // Seats / camera
 // ---------------------------------------------------------------------------
 const toWorld = (a) => v3(a).multiplyScalar(S);
-let seat = 'captain';
+let seat = 'captain', onSeatHook = null;
 function setSeat(k) {
-  seat = k; const s = SEATS[k]; const eye = toWorld(s.eye), at = toWorld(s.at);
+  seat = k; if (onSeatHook) onSeatHook(); const s = SEATS[k]; const eye = toWorld(s.eye), at = toWorld(s.at);
   document.querySelectorAll('[data-seat]').forEach((b) => b.classList.toggle('on', b.dataset.seat === k));
   dome.position.copy(toWorld(COCKPIT ? COCKPIT.domeAt() : [0, 2.6, 0.9])); if (COCKPIT) COCKPIT.onSeat(k);
   if (renderer.xr.isPresenting) { placeRig(); return; }
@@ -1940,9 +1947,39 @@ for (let i = 0; i < 2; i++) {
   const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -0.8)]),
     new THREE.LineBasicMaterial({ color: 0x0a84ff, transparent: true, opacity: 0.6 })); ctrl.add(line);
   ctrl.addEventListener('selectstart', () => {   // pointing at an EFB: use it; anywhere else: next seat
+    if (LAYERS_UI.xr.pointing(ctrl)) return;      // the Layers chip handles its own selects
     const p = ctrlRay(ctrl); if (p) efb.click(p); else setSeat(seatCycle[(seatCycle.indexOf(seat) + 1) % seatCycle.length]);
   });
 }
+// ---------------------------------------------------------------------------
+// World layers (shared/world-layers.js): the real things around you. Aviation: Planes on by default. Layers chip at the
+// bottom right (screens) / lower right in VR; markers on gaze or point; TCAS symbols on the NDs (737 and Airbus).
+// ---------------------------------------------------------------------------
+const LAYERS = new WorldLayers({ department: 'aviation' });
+const PLANES = LAYERS.register(createPlanesLayer({ THREE }));
+// markers only through the windows: from a seat, a look more than ~10° below the nose is at the instrument panel
+// VR: the Layers chip is world-mounted top right of the windshield for the current seat (re-mounted on a seat change)
+const layersAnchor = new THREE.Group(); layersAnchor.name = 'layers-anchor'; aircraft.add(layersAnchor);
+function mountLayersXR() {
+  const e = (SEATS[seat].orbit ? SEATS.captain : SEATS[seat]).eye;   // metres -> aircraft units (/S); the pilot's right is -x
+  layersAnchor.position.set(e[0] - 0.30 / S, e[1] + 0.13 / S, e[2] + 0.60 / S); layersAnchor.rotation.set(0, Math.PI, 0); layersAnchor.scale.setScalar(1 / S);
+}
+mountLayersXR(); onSeatHook = mountLayersXR;
+const LAYERS_UI = createLayersUI({ THREE, renderer, scene, camera, layers: LAYERS, anchor: layersAnchor, rayOk: (o, d) => SEATS[seat].orbit || d.y > -0.17 });
+LAYERS.onChange(() => { efbDirty = true; });
+const OWN = { lat: 0, lon: 0, altFt: 0, fieldFt: 0, gy: 0, hex: '', callsign: '', onGround: false, nearAptNm: null, night: false };
+function layersStep(dt, gy, fieldFt) {
+  if (!airport) return;   // no position yet (the scene origin is set when the airport loads)
+  const ll = ownLatLon();
+  OWN.lat = ll.lat; OWN.lon = ll.lon; OWN.altFt = F.altitude; OWN.fieldFt = fieldFt; OWN.gy = gy;
+  OWN.hex = JOIN.hex || ''; OWN.callsign = JOIN.hex ? F.flight : ''; OWN.night = todName !== 'day';
+  OWN.onGround = F.phase === 'TAXI' || F.phase === 'ROLLOUT' || F.radioAlt < 10;
+  OWN.nearAptNm = airport ? Math.hypot(orgOff[0] - pos.x, orgOff[1] - pos.z) / 1852 : null;
+  PLANES.setMax(renderer.xr.isPresenting && xrLevel >= 2 ? 20 : 40);   // the VR watchdog asks for a lighter scene
+  LAYERS.tick(world, OWN, dt);
+  LAYERS_UI.update();
+}
+window.__737layers = { LAYERS, PLANES, UI: LAYERS_UI, OWN, displays, camera, world };   // for tests
 setInterval(() => { if (!renderer.xr.isPresenting) return; let b = null; for (const ct of vrCtrls) { const p = ctrlRay(ct); if (p) b = efb.btnAt(p) || b; } efb.hover = b; }, 100);
 
 // ---------------------------------------------------------------------------
@@ -2048,6 +2085,7 @@ function frameStep(dt, now) {
   realismStep(dt); setNear(real ? 0.1 : 0.02); weatherStep(dt, gy);
   if ((efbClock += dt) > 0.5 && efbDirty !== null) { efbClock = 0; efb.draw(efbDirty); }   // repaints only when its content changed
   if (airport) { airport.group.position.set(orgOff[0] - pos.x, gy, orgOff[1] - pos.z); airport.group.visible = Math.hypot(orgOff[0] - pos.x, orgOff[1] - pos.z) < 60000; airport.update(now / 1000, camera, renderer, todLights); }
+  guard('layers', () => layersStep(dt, gy, fieldFt));
   landing.intensity = mode === 'approach' ? 900 : 0;
   const vr = renderer.xr.isPresenting;
   if ((dispClock += dt) > (vr ? 1 / [12, 6, 3][xrLevel] : 1 / 24)) { dispClock = 0; redrawDisplays(); }   // ~24 Hz live displays (12 Hz in VR)

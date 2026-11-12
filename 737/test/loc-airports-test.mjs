@@ -41,6 +41,11 @@ const far = { name: 'Denver', admin1: 'CO', cc: 'US', distNm: 14 }, apt = { name
 ok(P.pickPlace(far, apt).name === 'Broomfield' && P.pickPlace(far, apt).via === 'airport', 'sparse file (nearest 14 nm) -> nearer airfield town');
 ok(P.pickPlace({ ...far, distNm: 3 }, apt).name === 'Denver', 'file place within 8 nm wins');
 
+// at sea (for ship pages): town within 12 nm, water body 12-200 nm, "· International waters" beyond
+ok(P.seaLoc(36.9, -75.9, { name: 'Virginia Beach', admin1: 'VA', cc: 'US', distNm: 8 }) === 'Virginia Beach, VA', 'at sea within 12 nm: the town');
+ok(P.seaLoc(36, -74, { name: 'X', cc: 'US', distNm: 60 }) === 'Atlantic Ocean' && P.seaLoc(33.5, -121, { distNm: 50 }) === 'Pacific Ocean', 'at sea 12-200 nm: the ocean');
+ok(P.seaLoc(30, -40, { distNm: 900 }) === 'Atlantic Ocean \u00b7 International waters', 'beyond 200 nm: "Atlantic Ocean · International waters"');
+ok(P.oceanName(25, -90) === 'Gulf of Mexico' && P.oceanName(-10, 80) === 'Indian Ocean' && P.oceanName(35, 18) === 'Mediterranean Sea', 'named waters');
 // ---- EFB nearest airports
 const ROWS = [
   ['KBJC', 'medium_airport', 'Rocky Mountain Metropolitan Airport', 39.9088, -105.1172, 'Denver', 'US-CO'],

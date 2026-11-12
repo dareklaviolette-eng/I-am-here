@@ -21,3 +21,5 @@ Third-party assets used in I'M HERE.
     `node shared/places/build-places.mjs geonames cities1000.txt`.
   - Until then, when the seed has no town nearby, LOC uses the nearest airfield's town from OurAirports (public domain).
 - **Airports** (EFB nearest airports, LOC fallback): OurAirports (https://ourairports.com/data/), public domain.
+- **Plane traffic layer** (737 page, `shared/layer-planes.js`): live ADS-B from airplanes.live, adsb.lol, adsb.fi, OpenSky
+  (free, non-commercial terms; check before commercial use); Flightradar24 via the I'M HERE relay as the last fallback.
