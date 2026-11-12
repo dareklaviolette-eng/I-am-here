@@ -768,7 +768,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { buildAirport } from './airport-kit.js';
-import { loadOurAirport, defaultEnd, nearestAirport } from './ourairports.js';
+import { loadOurAirport, defaultEnd, nearestAirport, nearestAirports } from './ourairports.js';
+import { isGA } from '../shared/aircraft-class.js';
 import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit, COCKPIT_737, Backoff, SourcePool, FRESH_S as LIVE_FRESH_S, EXTRAP_MAX,
   fetchFR24, FR24Follow, FR24_NAME, FR24_FRESH_S, FR24_EXTRAP_MAX } from './live-flights.js';
 import { toLocal } from './airport-kit.js';
@@ -1286,6 +1287,26 @@ const _eye = new THREE.Vector3();
 // ---------------------------------------------------------------------------
 const ORG = { lat: 0, lon: 0 };   // scene origin (airport reference point, or a re-origin point en route)
 let orgOff = [0, 0];               // airport position in the scene-origin frame
+// The ridden aircraft's latitude/longitude: the inverse of toLocal() around the scene origin (no allocations).
+const OWN_LL = { lat: 0, lon: 0 };
+function ownLatLon() {
+  const p = ORG.lat * D2R, mLat = 111132.92 - 559.82 * Math.cos(2 * p) + 1.175 * Math.cos(4 * p), mLon = 111412.84 * Math.cos(p) - 93.5 * Math.cos(3 * p);
+  OWN_LL.lat = ORG.lat + pos.z / mLat; OWN_LL.lon = ORG.lon - pos.x / mLon; return OWN_LL;
+}
+// EFB "Nearest airports": the ~10 nearest to the current position (OurAirports), sorted by distance, with true bearing.
+// Refreshed every 30 s or every 2 nm flown. Riding a GA aircraft (light / helicopter) also lists small airfields.
+const NEAR = { list: [], at: 0, lat: null, lon: null, ga: null, busy: false, err: '' };
+function nearStep() {
+  if (!airport || NEAR.busy) return;
+  const ll = ownLatLon(), ga = !!(JOIN.hex && JOIN.info && isGA(JOIN.info.type, JOIN.info.category)), now = Date.now();
+  const moved = NEAR.lat === null ? Infinity : Math.hypot(ll.lat - NEAR.lat, (ll.lon - NEAR.lon) * Math.cos(ll.lat * D2R)) * 60;
+  if (now - NEAR.at < 30000 && moved < 2 && ga === NEAR.ga) return;
+  if (NEAR.err && now - NEAR.at < 30000 && ga === NEAR.ga) return;   // the list was not reachable: try again in 30 s
+  NEAR.busy = true; NEAR.at = now; NEAR.lat = ll.lat; NEAR.lon = ll.lon; NEAR.ga = ga;
+  nearestAirports(ll.lat, ll.lon, { n: 10, types: ga ? ['large_airport', 'medium_airport', 'small_airport'] : ['large_airport', 'medium_airport'] })
+    .then((l) => { NEAR.list = l; NEAR.err = ''; }, (e) => { NEAR.err = String((e && e.message) || e); })
+    .finally(() => { NEAR.busy = false; efbDirty = true; });
+}
 const JOIN = { hex: null, info: null, src: null, tracker: null, list: [], busy: false, prevTrack: null, groundT: 0, landed: false, last: null,
   back: new Backoff({ base: 2000, max: 30000, normal: 5000 }), backAt: 0, pool: new SourcePool(),   // the ridden aircraft: one request every 5 s
   // Flightradar24 first (through the relay: GitHub site only, CORS is locked to it; ?fr24=0 turns it off, ?fr24=1 on), every 20 s
@@ -1818,8 +1839,10 @@ const efb = (() => {
     }
     if (tab === 'Airport' && airport) {
       const ids = Object.keys(airport.ends).sort((a, b) => rwyKey(a) - rwyKey(b)).slice(0, 8);
-      ids.forEach((id, i) => B(X + (i % 4) * 140, Y + 40 + Math.floor(i / 4) * 80, 128, 68, id, () => { AP.rwy = id; $('rwy').value = id; setMode('approach'); }, AP.rwy === id && mode === 'approach'));
-      ['KBNA', 'KJFK', 'KLAX', 'KATL', 'KSEA', 'KDEN', 'EGLL', 'EHAM'].forEach((k, i) => B(X + (i % 4) * 140, Y + 250 + Math.floor(i / 4) * 80, 128, 68, k, () => loadAirport(k), airport.data.icao === k));
+      ids.forEach((id, i) => B(X + (i % 4) * 140, Y + 40 + Math.floor(i / 4) * 64, 128, 56, id, () => { AP.rwy = id; $('rwy').value = id; setMode('approach'); }, AP.rwy === id && mode === 'approach'));
+      // nearest airports to where you are now, nearest first: "KBJC 6 nm 120°" (distance and true bearing)
+      NEAR.list.slice(0, 10).forEach((a, i) => B(X + (i % 2) * 290, 288 + Math.floor(i / 2) * 60, 280, 54, `${a.ident} ${a.distNm < 9.5 ? a.distNm.toFixed(0) : Math.round(a.distNm)} nm ${pad3(a.brg)}°`,
+        () => loadAirport(a.ident, null, { keepLive: !!JOIN.hex }), airport.data.icao === a.ident));
     }
     if (tab === 'Flight') {
       B(X, Y, 180, chh, 'Approach', () => setMode('approach'), !JOIN.hex && mode === 'approach'); B(X + 194, Y, 180, chh, 'Cruise', () => setMode('cruise'), !JOIN.hex && mode === 'cruise');
@@ -1835,7 +1858,7 @@ const efb = (() => {
     const d = new Date(), st = scenery && tab === 'Realism' ? scenery.stats() : null;
     return [tab, hover ? hover.label : '', btns.map((b) => b.label + (b.on ? 1 : 0) + (b.dis ? 1 : 0)).join('|'), airport ? airport.data.icao : '',
       d.getUTCHours(), d.getUTCMinutes(), JOIN.hex || '', F.flight || '', JOIN.list.length,
-      tab === 'Weather' ? [WX.mode, WX.data ? WX.data.raw : '', WX.err || ''].join('/') : '',
+      tab === 'Weather' ? [WX.mode, WX.data ? WX.data.raw : '', WX.err || ''].join('/') : '', tab === 'Airport' ? (NEAR.err ? 'x' : '') : '',
       tab === 'Realism' ? (st && st.visible ? Math.round(realTarget() * 100) : '-') + $('realNote').textContent : ''].join('~');
   }
   function draw(force) {
@@ -1864,7 +1887,8 @@ const efb = (() => {
     if (tab === 'Realism') { g.fillStyle = '#e8eef4'; g.font = '700 44px system-ui, sans-serif'; g.textAlign = 'center';
       g.fillText(scenery && scenery.stats().visible ? Math.round(realTarget() * 100) + '%' : '—', X + 205, 84 + 78 + 14 + 39); g.textAlign = 'left';
       g.fillStyle = '#aab6c2'; g.font = '400 22px system-ui, sans-serif'; wrapText('Realism (test): how strongly Google 3D tiles show over our render. ' + $('realNote').textContent, X, 380, 560, 30, 5); }
-    if (tab === 'Airport' && airport) { g.fillStyle = '#e8eef4'; g.font = '600 24px system-ui, sans-serif'; g.fillText(`${airport.data.icao} · runways`, X, 104); g.fillText('Go to airport', X, 314); }
+    if (tab === 'Airport' && airport) { g.fillStyle = '#e8eef4'; g.font = '600 24px system-ui, sans-serif'; g.fillText(`${airport.data.icao} · runways`, X, 104); g.fillText('Nearest airports', X, 270);
+      if (!NEAR.list.length) { g.fillStyle = '#7f8c99'; g.font = '400 22px system-ui, sans-serif'; g.fillText(NEAR.err ? 'Airport list not reachable right now' : 'Finding the nearest airports…', X, 310); } }
     if (tab === 'Flight') { g.fillStyle = '#aab6c2'; g.font = '400 20px system-ui, sans-serif'; if (!JOIN.hex) g.fillText(JOIN.list.length ? '737s & A320s within 150 nm (tap to ride):' : 'Live ADS-B: 737s first.', X, 278); }
     if (tab === 'Charts') { g.fillStyle = '#e8eef4'; g.font = '600 34px system-ui, sans-serif'; g.fillText('Charts', X, 120); g.fillStyle = '#7f8c99'; g.font = '400 26px system-ui, sans-serif'; g.fillText('Coming soon', X, 170); }
     tex.needsUpdate = true;
@@ -1876,6 +1900,7 @@ const efb = (() => {
   function click(p) { const b = btnAt(p); if (b && !b.dis) { b.fn(); efbDirty = true; draw(true); return true; } return !!p; }
   return { draw, hitUV, btnAt, click, mounts, set hover(b) { if (b !== hover) { hover = b; draw(); } }, get hover() { return hover; } };
 })();
+window.__737efb = { efb, zoom: (m) => efbZoom(m), near: () => NEAR };   // for tests
 // desktop / phone: click the tablet to zoom in; click its buttons; click elsewhere or Esc to zoom out
 let efbZoomed = null;
 function efbZoom(m) {
@@ -2015,7 +2040,7 @@ function frameStep(dt, now) {
   const vr = renderer.xr.isPresenting;
   if ((dispClock += dt) > (vr ? 1 / [12, 6, 3][xrLevel] : 1 / 24)) { dispClock = 0; redrawDisplays(); }   // ~24 Hz live displays (12 Hz in VR)
   if (scenery && scenery.tiles) scenery.tiles.errorTarget = vr ? [16, 32, 64][xrLevel] : 12;   // coarser tiles in a headset
-  if ((uiClock += dt) > 0.25) { uiClock = 0; sigNote();
+  if ((uiClock += dt) > 0.25) { uiClock = 0; sigNote(); guard('nearest airports', nearStep);
     $('readout').innerHTML = `<b>${r0(F.altitude).toLocaleString()}</b> ft · <b>${r0(F.airspeed)}</b> kt<br>HDG ${pad3(F.heading)}° · ${F.verticalSpeed >= 0 ? '+' : ''}${r0(F.verticalSpeed)} fpm<br>${F.phase}`; }
   if (live && (markClock += dt) > 1) { markClock = 0; refreshMark(); }   // SIGNAL drops "live" as soon as the feed goes quiet
 }

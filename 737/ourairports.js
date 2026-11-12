@@ -294,6 +294,31 @@ export async function nearestAirport(lat, lon, opts = {}) {
   }
   return best ? { ident: (best.ident || '').toUpperCase(), name: best.name, municipality: best.municipality || '', region: best.iso_region || '', distNm: bd * 0.3048 / 1852 } : null;
 }
+// The nearest airports to a position, sorted by distance, for the EFB list ("KBJC 6 nm 120°") and the LOC fallback.
+// types: which OurAirports types count (default large + medium; add 'small_airport' when riding a GA aircraft).
+// -> [{ ident, name, type, municipality, region, country, lat, lon, distNm, brg }]  (brg: true bearing from the position)
+export function nearestFromRows(rows, lat, lon, { n = 10, types = ['large_airport', 'medium_airport'], maxNm = 200 } = {}) {
+  const want = new Set(types), dLat = maxNm / 60, out = [];
+  for (const r of rows) {
+    if (!want.has(r.type)) continue;
+    const la = +r.latitude_deg; if (!Number.isFinite(la) || Math.abs(la - lat) > dLat) continue;
+    const lo = +r.longitude_deg; if (!Number.isFinite(lo)) continue;
+    const d = distanceFt(lat, lon, la, lo) * FT / 1852; if (d > maxNm) continue;
+    if (out.length === n && d >= out[n - 1].distNm) continue;
+    const e = { ident: String(r.ident || '').toUpperCase(), name: r.name || '', type: r.type, municipality: r.municipality || '', region: r.iso_region || '',
+      country: r.iso_country || '', lat: la, lon: lo, distNm: d, brg: bearingDeg(lat, lon, la, lo) };
+    let k = out.length; out.push(e); while (k > 0 && out[k - 1].distNm > d) { out[k] = out[k - 1]; k--; } out[k] = e;
+    if (out.length > n) out.length = n;
+  }
+  return out;
+}
+export async function nearestAirports(lat, lon, opts = {}) {
+  const base = opts.base || OA_BASE;
+  const o = { fetchFn: opts.fetchFn || ((u) => fetch(u)), onStatus: opts.onStatus, refresh: opts.refresh };
+  const aText = await getText(base + 'airports.csv', o);
+  if (!airportIndex || airportIndex.base !== base) airportIndex = { base, rows: parseCSV(aText).rows };
+  return nearestFromRows(airportIndex.rows, lat, lon, opts);
+}
 export async function loadOurAirport(query, opts = {}) {
   const base = opts.base || OA_BASE;
   const o = { fetchFn: opts.fetchFn || ((u) => fetch(u)), onStatus: opts.onStatus, refresh: opts.refresh };
