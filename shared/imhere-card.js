@@ -20,8 +20,14 @@
              footer   { text, href }      details { rows: [[k, v]], notes: [text], credits: [{ text, href }] }
      ImHereCard.setLive(bool) / isLive() / expand() / collapse() / toggle() / isExpanded()
      ImHereCard.openDetails() / closeDetails() / detailsOpen() / text()   (text(): the card as plain text)
-     ImHereCard.xrPanel(THREE, { width, exitRow }) -> THREE.Mesh of the COLLAPSED card for VR (canvas, kept up to date);
+     ImHereCard.xrPanel(THREE, { width, exitRow, expandable }) -> THREE.Mesh of the card for VR (canvas, kept up to date);
        mesh.userData.exitRect = { cx, cy, w, h } for the VR safety layer's exitTargets; ImHereCard.xrExitHover(bool).
+       expandable: true draws the EXPANDED card in VR too while isExpanded() (rows LOC .. TIME); default: always collapsed.
+       mesh.userData.top = the panel's top edge in its local plane (pages keep the top edge fixed when the height changes).
+     ImHereCard.xrShowBody(bool): false shrinks the VR panel to its Exit VR row alone (the card is "closed" but VR can
+       always be left with a point + select). ImHereCard.xrHitTest(mesh, x, y) -> 'exit' | 'card' | null (mesh-local metres).
+     ImHereCard.setShown(bool) / isShown(): hide or show the screen card (default shown).
+   CSS variable --imc-top (set by the page, default 10px): the card's top edge, e.g. under a page's own control row.
    CSS variables on <html> (pages keep their own panels clear of the card):
      --imc-hc / --imc-wc  bottom edge / right edge of the COLLAPSED card (px from the top / left of the viewport)
      --imc-h  / --imc-w   the same for the card as it is now (expanded or not) */
@@ -34,8 +40,8 @@
   var MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   var FLAG_URL = 'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/';
   var CSS =
-    '.imc{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));z-index:var(--imc-z,1500);' +
-    'box-sizing:border-box;width:min(290px,calc(100vw - 130px));max-height:calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow:auto;' +
+    '.imc{position:fixed;left:calc(10px + env(safe-area-inset-left));top:calc(var(--imc-top,10px) + env(safe-area-inset-top));z-index:var(--imc-z,1500);' +
+    'box-sizing:border-box;width:min(290px,calc(100vw - 130px));max-height:var(--imc-maxh,calc(100dvh - var(--imc-top,10px) - 10px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));overflow:auto;' +
     'overscroll-behavior:contain;background:rgba(12,16,30,.6);border:.5px solid rgba(255,255,255,.28);border-radius:7px;color:rgba(255,255,255,.92);' +
     'font:13px/1.3 ' + MONO + ';letter-spacing:normal;text-align:left;text-shadow:none;cursor:pointer;-webkit-tap-highlight-color:transparent;' +
     'user-select:none;-webkit-user-select:none;pointer-events:auto;margin:0}' +
@@ -73,7 +79,7 @@
     '.imc.min .imc-ph,.imc.min .imc-cap,.imc.min .imc-ln,.imc.min .imc-cr,.imc.min .imc-dp{display:none!important}.imc.min .imc-mini{display:flex}';
 
   var S = { thumb: null, photo: null, photoNote: '', flag: null, reg: '', type: '', loc: '', org: '', id: null, rte: '', pov: '', route: '',
-    sig: null, time: null, footer: null, details: null, live: false, expanded: false, det: false, z: 1500, mounted: false };
+    sig: null, time: null, footer: null, details: null, live: false, expanded: false, det: false, z: 1500, mounted: false, shown: true };
   var card, els = {}, lastSig = '', lastDet = '', xr = null;
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -210,6 +216,7 @@
   function measure() {
     if (!S.mounted) return;
     var r = card.getBoundingClientRect(), root = document.documentElement.style;
+    if (!S.shown) r = { bottom: 0, right: 0 };
     var h = Math.round(r.bottom) + 'px', w = Math.round(r.right) + 'px';
     if (!S.expanded) { root.setProperty('--imc-hc', h); root.setProperty('--imc-wc', w); }
     if (h + w !== lastM) { lastM = h + w; root.setProperty('--imc-h', h); root.setProperty('--imc-w', w); }
@@ -251,6 +258,7 @@
       card.addEventListener(ev, function (e) { e.stopPropagation(); }, { passive: true });
     });
     document.body.appendChild(card);
+    card.hidden = !S.shown;
     S.mounted = true;
     document.documentElement.style.setProperty('--imc-z', String(S.z));
     render();
@@ -269,11 +277,17 @@
   // ---- VR: the collapsed card on a canvas (no images: the icon is drawn from its path, so the texture is never tainted)
   function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
   function fit(g, t, w) { t = String(t || ''); if (g.measureText(t).width <= w) return t; while (t.length > 1 && g.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
-  var XW = 512, XBODY = 236, XEXIT = 58;
-  function xrHeight() { return XBODY + (xr && xr.exitRow ? XEXIT : 0); }
+  var XW = 512, XBODY = 236, XEXIT = 58, XROW = 36, XCAP = 70;
+  function xrExpanded() { return !!(xr && xr.expandable && S.expanded && xr.body); }
+  function xrBodyH() {
+    if (xr && !xr.body) return 0;
+    return xrExpanded() ? XBODY + XCAP + rows().length * XROW + 8 : XBODY;
+  }
+  function xrHeight() { return Math.max(XEXIT + 12, xrBodyH() + (xr && xr.exitRow ? XEXIT + (xr.body ? 0 : 12) : 0)); }
   function exitRect(m) {
     var w = m.userData.imhW, H = xr.canvas.height, s = w / XW, top = H - 6 - XEXIT, bot = H - 6;
     m.userData.exitRect = xr.exitRow ? { cx: 0, cy: (H / 2 - (top + bot) / 2) * s, w: (XW - 12) * s, h: XEXIT * s } : null;
+    m.userData.top = H / 2 * s; m.userData.height = H * s;
   }
   function xrResize(H) {
     var T = xr.THREE, c = xr.canvas; c.height = H;
@@ -288,6 +302,18 @@
     g.clearRect(0, 0, W, H);
     g.fillStyle = 'rgba(12,16,30,0.78)'; rr(g, 3, 3, W - 6, H - 6, 16); g.fill();   // denser than on screens: legible over any scene
     g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 2; g.stroke();
+    if (xr.body) drawXRBody(g, W, M);
+    if (xr.exitRow) {
+      var ey = H - 6 - XEXIT;
+      g.save(); rr(g, 3, ey, W - 6, XEXIT + 3, 14); g.clip();
+      g.fillStyle = xr.exitHover ? 'rgba(200,32,42,0.75)' : 'rgba(200,32,42,0.22)'; g.fillRect(0, ey, W, XEXIT + 6); g.restore();
+      if (xr.body) { g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(3, ey, W - 6, 2); }
+      g.fillStyle = xr.exitHover ? '#fff' : '#ffb3b6'; g.font = '600 28px ' + MONO; g.fillText('Exit VR', 24, ey + 39);
+      g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + MONO; g.textAlign = 'right'; g.fillText('or press B / Y', W - 24, ey + 38); g.textAlign = 'left';
+    }
+    xr.tex.needsUpdate = true;
+  }
+  function drawXRBody(g, W, M) {
     g.textBaseline = 'alphabetic'; if ('letterSpacing' in g) g.letterSpacing = '4px';
     g.font = '900 46px ' + MARKF; g.lineWidth = 1.6; g.strokeStyle = 'rgba(255,255,255,0.85)'; g.strokeText("i'm here", 24, 56);
     if ('letterSpacing' in g) g.letterSpacing = '0px';
@@ -306,23 +332,33 @@
     var st = M[2][1], sep = M[2][0] ? ' · ' : '', sw = g.measureText(sep + st[0]).width;
     var it = M[2][0] ? fit(g, M[2][0], Math.max(40, lw - sw)) + sep : '';
     g.fillText(it, lx, ty + 96); g.fillStyle = st[1] === 'imc-g' ? GREEN : AMBER; g.fillText(st[0], lx + g.measureText(it).width, ty + 96);
-    if (xr.exitRow) {
-      var ey = H - 6 - XEXIT;
-      g.save(); rr(g, 3, ey, W - 6, XEXIT + 3, 14); g.clip();
-      g.fillStyle = xr.exitHover ? 'rgba(200,32,42,0.75)' : 'rgba(200,32,42,0.22)'; g.fillRect(0, ey, W, XEXIT + 6); g.restore();
-      g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(3, ey, W - 6, 2);
-      g.fillStyle = xr.exitHover ? '#fff' : '#ffb3b6'; g.font = '600 28px ' + MONO; g.fillText('Exit VR', 24, ey + 39);
-      g.fillStyle = 'rgba(255,255,255,0.45)'; g.font = '400 22px ' + MONO; g.textAlign = 'right'; g.fillText('or press B / Y', W - 24, ey + 38); g.textAlign = 'left';
-    }
-    xr.tex.needsUpdate = true;
+    if (!xrExpanded()) return;
+    // expanded (VR): caption (country | REG + type), the line, then the rows in the fixed order
+    var y = XBODY + 4, f = S.flag || {};
+    g.fillStyle = 'rgba(255,255,255,0.55)'; g.font = '400 22px ' + MONO;
+    if (f.name) g.fillText(fit(g, f.name, 200), 24, y + 26);
+    g.textAlign = 'right';
+    if (S.reg) g.fillText(fit(g, 'REG ' + shortReg(S.reg), 260), W - 24, y + 26);
+    if (S.type) g.fillText(fit(g, S.type, 260), W - 24, y + 54);
+    g.textAlign = 'left';
+    y += XCAP; g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(14, y - 8, W - 28, 2);
+    rows().forEach(function (r) {
+      var small = !!r[3];
+      g.fillStyle = small ? 'rgba(110,220,235,0.55)' : 'rgba(110,220,235,0.7)'; g.font = '400 ' + (small ? 19 : 21) + 'px ' + MONO; g.fillText(r[0], 24, y + 24);
+      g.fillStyle = small ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.92)'; g.font = '400 ' + (small ? 21 : 25) + 'px ' + MONO;
+      var vx = 104, vt = fit(g, r[1], W - vx - 24 - (r[2] ? g.measureText(r[2][0]).width : 0)); g.fillText(vt, vx, y + 25);
+      if (r[2]) { g.fillStyle = r[2][1] === 'imc-g' ? GREEN : AMBER; g.fillText(r[2][0], vx + g.measureText(vt).width, y + 25); }
+      y += XROW;
+    });
   }
   function xrPanel(THREE, o) {
     o = o || {};
     if (!xr) {
       var c = document.createElement('canvas'); c.width = XW; c.height = XBODY;
       var tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [], exitRow: false, exitHover: false };
+      xr = { canvas: c, tex: tex, THREE: THREE, meshes: [], exitRow: false, exitHover: false, expandable: false, body: true };
     }
+    if (o.expandable) xr.expandable = true;
     if (o.exitRow && !xr.exitRow) { xr.exitRow = true; xrResize(xrHeight()); }
     var w = o.width || 0.24;
     var m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * xr.canvas.height / XW), new THREE.MeshBasicMaterial({ map: xr.tex, transparent: true, depthTest: false, depthWrite: false, fog: false }));
@@ -342,6 +378,20 @@
     toggle: function () { setExpanded(!S.expanded); return this; }, isExpanded: function () { return S.expanded; },
     openDetails: function () { setDet(true); return this; }, closeDetails: function () { setDet(false); return this; },
     detailsOpen: function () { return S.det; }, text: text, xrPanel: xrPanel,
-    xrExitHover: function (on) { on = !!on; if (xr && xr.exitRow && on !== xr.exitHover) { xr.exitHover = on; drawXR(); } }
+    xrExitHover: function (on) { on = !!on; if (xr && xr.exitRow && on !== xr.exitHover) { xr.exitHover = on; drawXR(); } },
+    xrShowBody: function (on) { on = !!on; if (xr && on !== xr.body) { xr.body = on; drawXR(); } return this; },
+    xrHitTest: function (m, x, y) {
+      if (!xr || !m || !m.userData.imhW) return null;
+      var w = m.userData.imhW, h = w * xr.canvas.height / XW, R = m.userData.exitRect;
+      if (Math.abs(x) > w / 2 || Math.abs(y) > h / 2) return null;
+      if (R && Math.abs(x - R.cx) <= R.w / 2 && Math.abs(y - R.cy) <= R.h / 2) return 'exit';
+      return xr.body ? 'card' : null;
+    },
+    setShown: function (on) {
+      on = !!on; if (on === S.shown) return this; S.shown = on;
+      if (card) { card.hidden = !on; if (!on) { lastM = ''; } measure(); }
+      return this;
+    },
+    isShown: function () { return S.shown; }
   };
 })();
