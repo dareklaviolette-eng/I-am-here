@@ -9,7 +9,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="imhere-build" content="e27869f9">
+<meta name="imhere-build" content="7732ba2e">
 <style>
   :root { --bg:#0e1a24; --panel:rgba(12,22,34,.86); --line:rgba(255,255,255,.16); --text:#e8f1f7; --muted:#9db3c4; --live:#5DCAA5; --err:#ff9d92; }
   * { box-sizing: border-box; }
@@ -154,7 +154,7 @@
 </style>
 <script type="importmap">
 { "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js?v=e27869f9",
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js?v=7732ba2e",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
 } }
 </script>
@@ -224,7 +224,7 @@
 <div id="info" class="overlay" hidden>
   <div class="card" role="dialog" aria-labelledby="infoTitle">
     <h2 id="infoTitle">About this prototype</h2>
-    <p>Real ships report their position by radio (AIS). This page shows those reports live from <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>, relayed by the I'M HERE server. Pick a ship from the list to go aboard. You start at the helm: the bridge windows ahead, and two screens on the console in front of you, a chart and the instruments (heading, course, speed, rate of turn, status, draft, destination and ETA, position). You can also stand at the bow or follow the ship with the chase cam. Everything works by pointing and selecting (a tap or click, a controller trigger, or a pinch): the row at the top left opens the ship list and menu (&#9776;), the I'M HERE card (the tag) and the top bar; the top bar's POV menu switches between Helm, Bow, Aft, Port, Starboard, Chase and God's eye and has Recenter and eye height; tap or point at any other ship for its mini card and "Be there" to hop aboard. In VR these controls are mounted high on the ship, along the top of the bridge windows. Quest extras: A = next view, right thumbstick click = next ship; B or Y (or the card's Exit VR row) leaves VR.</p>
+    <p>Real ships report their position by radio (AIS). This page shows those reports live from <a href="https://aisstream.io" target="_blank" rel="noopener">aisstream.io</a>, relayed by the I'M HERE server. Pick a ship from the list to go aboard. You start at the helm: the bridge windows ahead, and two screens on the console in front of you, a chart and the instruments (heading, course, speed, rate of turn, status, draft, destination and ETA, position). You can also stand at the bow or follow the ship with the chase cam. Everything works by pointing and selecting (a tap or click, a controller trigger, or a pinch). Top left: &#9776; opens the sidebar (Ships nearby, Search, Departments, Settings); the "i'm here" tag opens the I'M HERE card under it; &rsaquo; slides the helm data out, &lsaquo; folds it back and then hides everything but one faint dot (tap the dot to bring it back). Top right: POV (Helm, Bow, Aft, Port, Starboard, Chase, God's eye, Recenter, eye height) and Layers. Tap or point at any other ship for its mini card, then "Be there" to hop aboard. In VR these controls are mounted high on the ship, along the top of the bridge windows, and do not follow your head. Quest extras: A = next view, right thumbstick click = next ship; B or Y (or the card's Exit VR row) leaves VR.</p>
     <h3>Depth, wind and tide</h3>
     <p>AIS does not report water depth, so the screens say "charted depth coming soon" instead of a number. Charted depth and wind / tide will come from NOAA in a later version. The bridge screens are not for navigation.</p>
     <h3>Old Hickory Lake &amp; small boats</h3>
@@ -2201,7 +2201,7 @@ const C = window.AISCore;
 const $ = (id) => document.getElementById(id);
 
 const RELAY = 'https://imhere-flights.bt4w8jn5ty.workers.dev';
-const BUILD = 'e27869f9';   // content hash, filled in by tools/build.js: script URLs carry ?v=BUILD so phones never run a stale copy
+const BUILD = '7732ba2e';   // content hash, filled in by tools/build.js: script URLs carry ?v=BUILD so phones never run a stale copy
 const OLD_KEY_STORE = 'imhere.aisstream.key';   // older versions kept a pasted key here; no longer used
 const LIVE_MAX_AGE_MS = 20 * 60 * 1000;   // drop vessels silent for 20 min
 const LIVE_FRESH_MS = 30000;              // "live" only while connected and reports arrived in the last 30 s
