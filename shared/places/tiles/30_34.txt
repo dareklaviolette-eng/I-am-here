@@ -1,0 +1,4 @@
+Jerusalem		IL	31.7806	35.2239
+Amman		JO	31.9500	35.9333
+Gaza		PS	31.5000	34.4667
+Hebron		PS	31.5333	35.0950

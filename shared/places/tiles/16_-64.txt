@@ -1,0 +1,3 @@
+St Barthelemy		BL	17.8833	-62.8500
+St Kitts		KN	17.3000	-62.7167
+Montserrat		MS	16.7167	-62.2167

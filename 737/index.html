@@ -770,6 +770,7 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { buildAirport } from './airport-kit.js';
 import { loadOurAirport, defaultEnd, nearestAirport, nearestAirports } from './ourairports.js';
 import { isGA } from '../shared/aircraft-class.js';
+import { createPlaces, formatPlace, pickPlace } from '../shared/places.js';
 import { fetchNearby, fetchHex, sortFlights, searchFlights, Tracker, deriveCockpit, COCKPIT_737, Backoff, SourcePool, FRESH_S as LIVE_FRESH_S, EXTRAP_MAX,
   fetchFR24, FR24Follow, FR24_NAME, FR24_FRESH_S, FR24_EXTRAP_MAX } from './live-flights.js';
 import { toLocal } from './airport-kit.js';
@@ -1295,6 +1296,21 @@ function ownLatLon() {
 }
 // EFB "Nearest airports": the ~10 nearest to the current position (OurAirports), sorted by distance, with true bearing.
 // Refreshed every 30 s or every 2 nm flown. Riding a GA aircraft (light / helicopter) also lists small airfields.
+// Card LOC: just the place ("Westminster, CO"; no "over" / "near"): the nearest town from the offline place file
+// (shared/places.js), or the nearest airfield's town (OurAirports) when the place file has nothing closer. At most every 10 s.
+const PLACES = createPlaces({ base: '../shared/places/' });
+const LOC = { text: '', via: '', at: 0, busy: false };
+function locStep() {
+  if (LOC.busy || Date.now() - LOC.at < 10000 || !airport) return;
+  LOC.busy = true; LOC.at = Date.now();
+  const { lat, lon } = ownLatLon(), la = lat, lo = lon;
+  const town = (a) => (a && a.municipality ? { name: a.municipality, admin1: a.country === 'US' ? a.region.replace(/^US-/, '') : '', cc: a.country, distNm: a.distNm } : null);
+  Promise.all([PLACES.nearest(la, lo).catch(() => null),
+    nearestAirports(la, lo, { n: 1, types: ['large_airport', 'medium_airport', 'small_airport'], maxNm: 40 }).then((l) => town(l[0])).catch(() => null)])
+    .then(([p, a]) => { const pick = pickPlace(p, a); LOC.text = formatPlace(pick); LOC.via = pick ? pick.via : ''; })
+    .finally(() => { LOC.busy = false; refreshMark(); });
+}
+window.__737loc = LOC;   // for tests
 const NEAR = { list: [], at: 0, lat: null, lon: null, ga: null, busy: false, err: '' };
 function nearStep() {
   if (!airport || NEAR.busy) return;
@@ -1555,24 +1571,20 @@ function refreshMark() {
   else if (WX.data) items.push({ kind: wxIsLive(WX.data) ? 'live' : 'recorded', label: `Weather: METAR ${WX.data.icao}`, source: WX.data.via, time: WX.data.obsTime, timeLabel: 'Observed',
     note: WX.data.raw + (wxIsLive(WX.data) ? '' : '\nOlder than 90 minutes: not live.') + '\nClouds, visibility, rain/snow and wind are drawn from this report.' });
   else items.push({ kind: 'estimated', label: 'Weather', source: WX.err ? 'METAR not reachable: ' + WX.err : 'Loading the METAR…' });
+  if (LOC.text) { const pi = PLACES.info();
+    items.push({ kind: 'data', label: 'LOC: ' + LOC.text, source: LOC.via === 'airport' ? "Nearest airfield's town (OurAirports, public domain)" : (pi && pi.credit) || 'Offline place list',
+      note: LOC.via === 'airport' ? 'The offline place list has no town closer than this airfield yet.' : pi && !pi.complete ? pi.note : 'Nearest town to the aircraft; updated every 10 s.' }); }
   items.push({ kind: 'illustrative', label: `Time of day: ${todName}`, source: 'Chosen with the Day/Dusk/Night buttons, not the real time at the airport' });
   const AB = COCKPIT && COCKPIT.isAirbus();
   items.push(AB ? { kind: 'illustrative', label: 'Airbus A320 flight deck', source: '3D model ' + AIRBUS_CREDIT + ', optimized for VR', href: AIRBUS_URL,
       note: (JOIN.hex && typeNoteText(JOIN.info) ? typeNoteText(JOIN.info) + '\n' : '') + 'Cockpit displays are drawn from the flight data above (simplified, 737NG-style symbology on the Airbus screens).' }
     : { kind: 'illustrative', label: '737-800 flight deck', source: '3D model "Boeing 737-800 Cockpit" by hakai315 (Sketchfab, CC BY 4.0), optimized', href: COCKPIT_URL,
     note: (JOIN.hex && typeNoteText(JOIN.info) ? typeNoteText(JOIN.info) + '\n' : '') + 'Cockpit displays are drawn from the flight data above (737NG-style, simplified).' });
-  const jst = JOIN.hex && JOIN.tracker ? JOIN.tracker.state(Date.now()) : null;
-  const awayNm = jst && d ? Math.hypot(...toLocal(d.arp, jst.lat, jst.lon)) / 1852 : 0;
-  const apt = d ? shortName(d) : '', near = awayNm < 30;
+  const apt = d ? shortName(d) : '';
   // two-line identity: line1 = airline · type, line2 = flight number · tail; LOC = a plain place phrase
   const typ = JOIN.hex && JOIN.info && JOIN.info.type ? ({ B738: '737-800', B737: '737-700', B739: '737-900', B38M: '737 MAX 8', B39M: '737 MAX 9', B736: '737-600' }[JOIN.info.type] || airbusName(JOIN.info.type) || JOIN.info.type) : JOIN.hex ? 'type not reported' : AB ? 'Airbus A320' : '737-800';
   const town = (x) => x ? [x.municipality || placeName(x), (x.region || '').replace(/^[A-Z]{2}-/, '')].filter(Boolean).join(', ') : '';
-  const city = (x) => x ? x.municipality || placeName(x) : '', at = d ? city(d) + ' (' + apt + ')' : '';
-  const over = (x) => x ? US_STATE[(x.region || '').replace(/^US-/, '')] || city(x) : 'open country';
-  const loc = jst ? (jst.onGround ? (near ? 'On the ground at ' + at : JOIN.place ? 'On the ground near ' + town(JOIN.place) : 'On the ground')
-      : (jst.vr || 0) > 300 && near ? 'Climbing out of ' + at : (jst.vr || 0) < -300 && near ? 'On approach to ' + at
-      : 'Cruising over ' + over(JOIN.place))
-    : live ? (d ? 'Near ' + at : 'None') : mode === 'cruise' ? (d ? 'Cruising near ' + at : 'Cruising') : d ? 'On approach to ' + at : 'Parked';
+  const loc = LOC.text || town(JOIN.place) || town(d) || 'None';   // just the place, no preposition (card spec)
   const cs = live && F.flight && F.flight !== 'DEMO' ? F.flight.trim().toUpperCase() : '', m = /^([A-Z]{3})(\d+[A-Z]?)$/.exec(cs);
   const airline = !live ? 'Demo flight' : m && AIRLINE[m[1]] ? AIRLINE[m[1]] : m ? m[1] : 'Live flight';
   const reg = JOIN.hex && JOIN.info && JOIN.info.reg ? JOIN.info.reg : '';
@@ -2040,7 +2052,7 @@ function frameStep(dt, now) {
   const vr = renderer.xr.isPresenting;
   if ((dispClock += dt) > (vr ? 1 / [12, 6, 3][xrLevel] : 1 / 24)) { dispClock = 0; redrawDisplays(); }   // ~24 Hz live displays (12 Hz in VR)
   if (scenery && scenery.tiles) scenery.tiles.errorTarget = vr ? [16, 32, 64][xrLevel] : 12;   // coarser tiles in a headset
-  if ((uiClock += dt) > 0.25) { uiClock = 0; sigNote(); guard('nearest airports', nearStep);
+  if ((uiClock += dt) > 0.25) { uiClock = 0; sigNote(); guard('nearest airports', nearStep); guard('loc', locStep);
     $('readout').innerHTML = `<b>${r0(F.altitude).toLocaleString()}</b> ft · <b>${r0(F.airspeed)}</b> kt<br>HDG ${pad3(F.heading)}° · ${F.verticalSpeed >= 0 ? '+' : ''}${r0(F.verticalSpeed)} fpm<br>${F.phase}`; }
   if (live && (markClock += dt) > 1) { markClock = 0; refreshMark(); }   // SIGNAL drops "live" as soon as the feed goes quiet
 }

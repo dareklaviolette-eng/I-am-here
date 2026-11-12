@@ -11,3 +11,13 @@ Third-party assets used in I'M HERE.
   Changes: textures resized and converted to WebP, normal/roughness maps and window glass removed, meshes re-based to metres.
 - **Boeing 737-800 flight deck** (`737/shell.gltf`): "Boeing 737-800 Cockpit" by hakai315
   (https://sketchfab.com/3d-models/boeing-737-800-cockpit-d463256f98654b36af019d2d88bd5bbe), CC BY 4.0, optimized.
+
+## Data
+
+- **Place names for the card's LOC row** (`shared/places/`, built by `shared/places/build-places.mjs`):
+  - Shipped now: a small seed of the tz database's zone cities (`zone.tab`, public domain).
+  - To be installed: GeoNames `cities1000.txt` or `cities500.txt` (https://download.geonames.org/export/dump/),
+    CC BY 4.0, credit "GeoNames" (https://www.geonames.org/). Rebuild with
+    `node shared/places/build-places.mjs geonames cities1000.txt`.
+  - Until then, when the seed has no town nearby, LOC uses the nearest airfield's town from OurAirports (public domain).
+- **Airports** (EFB nearest airports, LOC fallback): OurAirports (https://ourairports.com/data/), public domain.

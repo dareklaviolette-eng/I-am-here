@@ -1,0 +1,3 @@
+Aruba		AW	12.5000	-69.9667
+Kralendijk		BQ	12.1508	-68.2767
+Curacao		CW	12.1833	-69.0000

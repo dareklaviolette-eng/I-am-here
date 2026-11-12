@@ -1,0 +1,2 @@
+Vienna		AT	48.2167	16.3333
+Bratislava		SK	48.1500	17.1167

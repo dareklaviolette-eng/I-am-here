@@ -1,0 +1,4 @@
+Indianapolis	IN	US	39.7683	-86.1581
+Vincennes	IN	US	38.6772	-87.5286
+Marengo	IN	US	38.3756	-86.3447
+Petersburg	IN	US	38.4919	-87.2786
