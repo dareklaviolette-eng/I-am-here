@@ -43,7 +43,7 @@ export const POVS = [['deck', 'Observation deck'], ['helm', 'Helm'], ['command',
 // rig pose per POV in the craft frame: floor point p, facing yaw (0 = toward the bow), seated / standing eye height (screens),
 // default pitch (screens); look: a point the camera aims at (outside POVs)
 const POV = {
-  deck: { p: [-1.15, 0, -0.75], lookIn: [-1.5, 0.95, -14], eye: 1.36, inside: true },
+  deck: { p: [-0.55, 0, -0.85], lookIn: [-2.6, 0.95, -14], eye: 1.36, inside: true },
   helm: { p: [L.pilot.x, L.platY, L.pilot.z + 0.05], yaw: 0, eye: 1.22, pitch: -0.07, inside: true },
   command: { p: [0.9, 0, -9.6], lookIn: [0, 1.05, -1.5], eye: 1.68, inside: true },
   bethere: { p: [0, 0, -8.5], yaw: 0, eye: 1.2, pitch: -0.02, inside: false },

@@ -76,7 +76,7 @@ export function makeMaterials(envMap) {
     panel: std({ color: 0x40464f, metalness: 0.55, roughness: 0.42, side: THREE.DoubleSide }),
     floor: std({ color: 0x161a20, metalness: 0.45, roughness: 0.2, envMapIntensity: 1.1 }),
     wood: std({ color: 0x4a3326, metalness: 0.05, roughness: 0.32, envMapIntensity: 0.8 }),
-    fabric: std({ color: 0xcdbfa9, metalness: 0, roughness: 0.92, envMapIntensity: 0.5 }),
+    fabric: std({ color: 0xcdbfa9, metalness: 0, roughness: 0.92, envMapIntensity: 0.5, side: THREE.DoubleSide }),
     cushion: std({ color: 0x4c5563, metalness: 0, roughness: 0.85, envMapIntensity: 0.4 }),
     leather: std({ color: 0x33363d, metalness: 0.1, roughness: 0.42 }),
     rug: std({ color: 0x5d5148, metalness: 0, roughness: 1, envMapIntensity: 0.3 }),
@@ -201,7 +201,8 @@ export function buildInterior(M, tex) {
   for (const [a, b] of [[0.62, 2.52], [-2.52, -0.62]]) {
     B.add('fabric', lathe(sofaProfile, 40, a, b - a), T);
     B.add('fabric', caps(a), T); B.add('fabric', caps(b), T);
-    for (const ph of [a, b]) B.add('fabric', rbox(0.2, 0.62, 0.92, 0.08), [T.x + Math.sin(ph) * 3.43, 0.31, T.z + Math.cos(ph) * 3.43], [0, ph, 0]);
+    for (const ph of [a, b]) { B.add('fabric', new THREE.CapsuleGeometry(0.15, 0.62, 4, 12).rotateX(Math.PI / 2), [T.x + Math.sin(ph) * 3.45, 0.58, T.z + Math.cos(ph) * 3.45], [0, ph, 0]);
+      B.add('fabric', rbox(0.28, 0.5, 0.9, 0.1), [T.x + Math.sin(ph) * 3.43, 0.34, T.z + Math.cos(ph) * 3.43], [0, ph, 0]); }
     B.add('metal', lathe([[2.98, 0.0], [2.98, 0.14], [3.88, 0.14], [3.88, 0.0]], 40, a, b - a), T);
     B.add('warm', lathe([[2.97, 0.03], [2.97, 0.05]], 40, a, b - a), T);
     // seat cushion seams and back pillows
@@ -216,7 +217,8 @@ export function buildInterior(M, tex) {
     B.add('fabric', cap(a), T); B.add('fabric', cap(b), T);
     B.add('metal', lathe([[4.26, 0.0], [4.26, 0.14], [5.1, 0.14], [5.1, 0.0]], 28, a, b - a), T);
     B.add('warm', lathe([[5.11, 0.03], [5.11, 0.05]], 28, a, b - a), T);
-    for (const ph of [a, b]) B.add('fabric', rbox(0.2, 0.62, 0.86, 0.08), [T.x + Math.sin(ph) * 4.69, 0.31, T.z + Math.cos(ph) * 4.69], [0, ph, 0]);
+    for (const ph of [a, b]) { B.add('fabric', new THREE.CapsuleGeometry(0.15, 0.56, 4, 12).rotateX(Math.PI / 2), [T.x + Math.sin(ph) * 4.69, 0.58, T.z + Math.cos(ph) * 4.69], [0, ph, 0]);
+      B.add('fabric', rbox(0.28, 0.5, 0.84, 0.1), [T.x + Math.sin(ph) * 4.69, 0.34, T.z + Math.cos(ph) * 4.69], [0, ph, 0]); }
     for (let k = 0; k < 3; k++) { const ph = a + (b - a) * (k + 0.5) / 3; B.add(k === 1 ? 'cushion' : 'fabric', rbox(0.5, 0.4, 0.15, 0.07), [T.x + Math.sin(ph) * 4.66, 0.7, T.z + Math.cos(ph) * 4.66], [-0.25, ph, 0, 'YXZ']); } }
   // side tables with warm lamps at the sofa ends near the bow
   for (const ph of [2.75, -2.75]) {

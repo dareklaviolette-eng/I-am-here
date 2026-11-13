@@ -20,7 +20,7 @@
   #toast.on { opacity: 1; }
   #dock { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 1450; display: flex; gap: 8px; }
   #dock button { font: 600 13px ui-monospace, Menlo, monospace; color: rgba(255, 255, 255, .92); background: rgba(12, 16, 30, .6); border: .5px solid rgba(255, 255, 255, .28);
-    border-radius: 22px; min-height: 44px; padding: 0 16px; cursor: pointer; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+    border-radius: 22px; min-height: 44px; padding: 0 16px; cursor: pointer; white-space: nowrap; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
   #dock button:hover { border-color: rgba(160, 220, 255, .7); }
   #dock button[hidden] { display: none; }
   #note { position: fixed; left: 10px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 1300; font: 11px system-ui, sans-serif; color: rgba(255, 255, 255, .55);
@@ -31,7 +31,7 @@
   .side-list button:hover { background: rgba(60, 110, 150, .6); }
   .side-list button[aria-current="true"] { background: rgba(40, 80, 110, .65); }
   .side-about { padding: 6px 14px 12px; font: 12px/1.45 system-ui, sans-serif; color: rgba(255, 255, 255, .78); }
-  @media (max-width: 600px) { #note { display: none; } }
+  @media (max-width: 600px) { #note { display: none; } #dock button { padding: 0 12px; } }
 </style>
 <script type="importmap">
 { "imports": {
@@ -375,6 +375,7 @@ import { createGoogleScenery } from '../737/google-scenery.js';
 import { Aurora, POVS } from '../shared/aurora/aurora.js';
 import { createBackdrop } from '../shared/aurora/backdrop.js';
 import { createYosemiteWorld, AXIS, DOMES, toLocal as yToLocal } from './yosemite-world.js';
+import { worldFromTour } from './tour-world.js';
 
 const GOOGLE_KEY = 'AIzaSyD5_qsBFe74zBURZ8UTYFzz_7es3dPSM9A';   // domain-restricted to the GitHub Pages site
 const $ = (id) => document.getElementById(id);
@@ -397,8 +398,8 @@ addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; cam
 async function loadWorld() {
   try {
     const m = await import('../travel/yosemite/tour.js');
-    const w = m.world || m.default || (m.createWorld && m.createWorld());
-    if (w && Array.isArray(w.stops) && typeof w.update === 'function' && w.origin) return { w, from: 'travel/yosemite/tour.js' };
+    const w = m.world || m.default || (m.createWorld && m.createWorld()) || worldFromTour(m, { name: 'Yosemite' });
+    if (w && Array.isArray(w.stops) && w.stops.length && typeof w.update === 'function' && w.origin) return { w, from: 'travel/yosemite/tour.js' };
   } catch (e) { /* not on the site (yet): use the demo world */ }
   return { w: createYosemiteWorld(), from: 'aurora/yosemite-world.js' };
 }
@@ -454,7 +455,7 @@ const TBX = ImHereTopbar.xr(THREE, { cardWidth: 0.3 });
 // ---------------------------------------------------------------- toast + welcome
 let toastT = 0;
 function toast(text) { const t = $('toast'); t.textContent = text; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 3000); }
-setTimeout(() => { $('welcome').style.opacity = '0'; }, 5200);
+let welcomeArmed = false;   // the welcome fades 5 s after the first frame (building the craft can take a moment)
 
 // ---------------------------------------------------------------- the craft
 Aurora.mount({ scene, camera, renderer, topbarXR: TBX, onToast: toast,
@@ -544,6 +545,7 @@ renderer.setAnimationLoop(() => {
   backdrop.update(camera);
   if ((cardClock += dt) > 1) { cardClock = 0; ImHereCard.update({ time: Date.now() }); }
   renderer.render(scene, camera);
+  if (!welcomeArmed) { welcomeArmed = true; setTimeout(() => { $('welcome').style.opacity = '0'; }, 5000); }
 });
 
 window.__aurora = { Aurora, renderer, scene, camera, world, TBX, backdrop, XRS, scenery: () => scenery, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles }) };
