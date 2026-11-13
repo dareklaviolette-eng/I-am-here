@@ -1,4 +1,4 @@
-// I'M HERE · XR Aurora (Omni-class flagship, REG IH-0000), v1: the shared craft every tour and department loads into.
+// I'M HERE · XR Aurora (Aurora-class lead ship, REG IH-0000), v1: the shared craft every tour and department loads into.
 // Procedural three.js r165 (no downloads). One room, two levels: the Observation Lounge (globe table + ring menu, curved
 // sofas, glass dome) and, up three glowing steps, the Helm (pilot seat + two, curved console with five live screens),
 // with the Temporal Drive behind it. Exterior hull + energy field for Chase and God's eye.

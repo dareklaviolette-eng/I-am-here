@@ -1,4 +1,4 @@
-// PLACEHOLDER for the I'M HERE craft XR Aurora (Omni-class flagship, REG IH-0000). To be swapped for shared/aurora/ when it
+// PLACEHOLDER for the I'M HERE craft XR Aurora (Aurora-class lead ship, REG IH-0000). To be swapped for shared/aurora/ when it
 // lands: the tour only uses this small interface.
 //   createAuroraFrame(THREE) -> { group, setShown(bool), place(x, y, z, heading, vr), welcome(host?, today?), NAME, REG }
 //     group     add once to the scene (screens) or the rig (VR); place() moves it with the viewpoint every frame
