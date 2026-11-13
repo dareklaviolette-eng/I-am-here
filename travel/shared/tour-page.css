@@ -36,6 +36,7 @@
   #efbHead .x { margin-left: auto; }
   #efbTabs { display: flex; gap: 6px; padding: 8px 10px; }
   #efbTabs .cb { min-height: 34px; font-size: 12px; }
+  #tabHere { max-width: calc(100% - 118px); overflow: hidden; text-overflow: ellipsis; } #tabAll { flex: none; }   /* long stop names stay on their side */
   #efbList { overflow: auto; padding: 0 10px 12px; overscroll-behavior: contain; }
   .sp-card { border: .5px solid rgba(255,255,255,.18); border-radius: 10px; padding: 10px 12px; margin-top: 8px; background: rgba(255,255,255,.03); }
   .sp-card h3 { margin: 0; font-size: 15.5px; } .sp-card .sci { font-style: italic; color: rgba(255,255,255,.6); font-size: 13px; }

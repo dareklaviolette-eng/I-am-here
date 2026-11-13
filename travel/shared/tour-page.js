@@ -92,6 +92,7 @@ const SKY = { day: { zen: 0x3f6fa8, hor: 0xc9dbea, low: 0x9fb1c0, sun: 0xfff3dc,
   night: { zen: 0x02040b, hor: 0x0b1326, low: 0x04070e, sun: 0x000000, fog: 0x0a1121, tint: 0x3a4766 } };
 const tmpA = new THREE.Color(), tmpB = new THREE.Color();
 const sunDir = new THREE.Vector3().fromArray(P.sun || [0.5, 0.55, -0.66]);   // x = west (Yosemite: afternoon sun from the south-west)
+const sunNow = sunDir.clone(), sunTo = new THREE.Vector3();
 // night stops: stars and (where the park asks for it) the aurora, a rendered sky around the eye
 const nightSky = createNightSky(THREE, P.nightSky || {}); scene.add(nightSky.group);
 
@@ -222,7 +223,7 @@ const wxWind = (w) => (METRIC ? (w.windDir + ' ' + w.windKmh + ' km/h') : (w.win
 
 // ------------------------------------------------------------------------------------------------ caption, field guide
 // elevations: Yosemite in feet; metric parks in metres, with feet alongside in the card's Details
-const elevShort = (s) => (METRIC ? T.fmtM(s.elevM) : T.fmtFt(s.elevFt));
+const elevShort = (s) => s.elevShort || (METRIC ? T.fmtM(s.elevM) : T.fmtFt(s.elevFt));
 const altWords = (m) => (METRIC ? T.fmtM(m) + ' (' + T.fmtFt(m / T.FT) + ')' : T.fmtFt(m / T.FT));
 function stopElev(s) { return s.elevNote || (METRIC ? altWords(s.elevM) : T.fmtFt(s.elevFt)); }
 function renderCaption() {
@@ -534,7 +535,8 @@ function atmosphereStep(dt) {
   const u = sky.material.uniforms, g = S.gold, nt = S.night;   // nt = 0 everywhere but night stops: the day / golden grade as before
   for (const key of ['zen', 'hor', 'low']) u[key].value.copy(tmpA.set(SKY.day[key])).lerp(tmpB.set(SKY.gold[key]), g).lerp(tmpB.set(SKY.night[key]), nt);
   u.sunCol.value.copy(tmpA.set(SKY.day.sun)).lerp(tmpB.set(SKY.gold.sun), g).lerp(tmpB.set(SKY.night.sun), nt);
-  u.sun.value.copy(sunDir); u.sun.value.y = 0.55 - 0.42 * g; u.sun.value.normalize();
+  sunNow.lerp(s.sun ? sunTo.fromArray(s.sun).normalize() : sunDir, k);   // a stop may set its own sun (Zermatt: sunrise in the east)
+  u.sun.value.copy(sunNow); u.sun.value.y = 0.55 - 0.42 * g; u.sun.value.normalize();
   scene.fog.color.copy(tmpA.set(SKY.day.fog)).lerp(tmpB.set(SKY.gold.fog), g).lerp(tmpB.set(SKY.night.fog), nt);
   const alt = Math.max(0, (CURVED ? T.fromLocal(...cur.pos).altMsl : cur.pos[1]) - (P.hazeTopM || 2500));   // high above the park the air thins: less haze
   scene.fog.density = (1e-5 + S.haze * S.haze * 6e-4) / (1 + alt / 4000);
@@ -605,6 +607,6 @@ loadLayers();
 window.__tour = window.__yos = {
   S, cur, STOPS, goTo, setPov, setAuto, blinking: () => BL.on, tiles: () => tiles, tilesShown: () => tilesShown, frames: () => frames,
   renderer, camera, rig, aurora, mounted: () => uiMount.visible, tb: () => TBX, cap: CAPX, uiMount,
-  inRig: (o) => rig.matrixWorld.clone().invert().multiply(o.matrixWorld), card: () => TBX && TBX.card, nightSky, park: P,
+  inRig: (o) => rig.matrixWorld.clone().invert().multiply(o.matrixWorld), card: () => TBX && TBX.card, nightSky, park: P, CURVED, basisAt: T.basisAt,
 };
 }

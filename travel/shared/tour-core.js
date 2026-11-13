@@ -126,14 +126,20 @@ export function createTour({ ORIGIN, GEOID_M = 0, STOPS, curved = false, holdS =
 
   // From one pose to the next: a cubic Bezier that rises over long legs (so the ground never streams past fast and nothing
   // high is in the way), with an eased clock (smootherstep). Duration 10 s up to DUR_MAX from distance and turn.
-  function legLift(dist) { return dist > 6000 ? Math.min(dist * 0.35, LIFT_MAX) : dist * 0.2 + 100; }
+  // (curved tours lift more on hops under 20 km: their low viewpoints sit at sea level or deep in valleys)
+  function legLift(dist) {
+    if (curved) return dist < 20000 ? dist * 0.45 + 200 : Math.min(dist * 0.35, LIFT_MAX);
+    return dist > 6000 ? Math.min(dist * 0.35, LIFT_MAX) : dist * 0.2 + 100;
+  }
   function legDuration(a, b) {
     const dist = len(sub(b.pos, a.pos)), turn = Math.abs(angleBetween(a.heading, b.heading)) / D2R + Math.abs(b.pitch - a.pitch) / D2R;
     return clamp(10 + dist / 4000 + turn / 20, 10, DUR_MAX);
   }
   function makeLeg(a, b) {
-    const dist = len(sub(b.pos, a.pos)), lift = legLift(dist), k = 0.22;
-    const d = sub(b.pos, a.pos);
+    const dist = len(sub(b.pos, a.pos)), lift = legLift(dist), d = sub(b.pos, a.pos);
+    // on long legs of a curved tour the craft climbs almost straight up first and comes almost straight down at the end,
+    // so the ground never streams past while it is low (k: how far along the control points sit)
+    const k = curved && dist > 40000 ? 0.03 : 0.22;
     let p1, p2;
     if (!curved) { p1 = [a.pos[0] + d[0] * k, a.pos[1] + lift, a.pos[2] + d[2] * k]; p2 = [b.pos[0] - d[0] * k, b.pos[1] + lift, b.pos[2] - d[2] * k]; }
     else {   // rise along the local vertical at the middle of the leg; the chord's own climb is left out, as on flat legs
@@ -163,13 +169,14 @@ export function createTour({ ORIGIN, GEOID_M = 0, STOPS, curved = false, holdS =
     }
     return best;
   }
-  // Fastest "ground flow" on a leg (deg/s): speed over height above the ground (sea level here; a comfort proxy).
-  function legPeakFlow(L, n = 400, groundM = 0) {
+  // Fastest "ground flow" on a leg (deg/s): horizontal speed over height (above sea level, at least 200 m): how fast the land
+  // below appears to stream past. A comfort proxy; Yosemite's legs peak at about 22.
+  function legPeakFlow(L, n = 400) {
     const o = { pos: [0, 0, 0] }, p = { pos: [0, 0, 0] }; let best = 0;
     for (let i = 1; i <= n; i++) {
       legPose(L, (i - 1) / n, p); legPose(L, i / n, o);
-      const v = len(sub(o.pos, p.pos)) / (L.dur / n), h = Math.max(200, fromLocal(...o.pos).altMsl - groundM);
-      best = Math.max(best, v / h / D2R);
+      const dv = sub(o.pos, p.pos), up = basisAt(o.pos).u, vu = dot(dv, up), vh = Math.sqrt(Math.max(0, dot(dv, dv) - vu * vu)) / (L.dur / n);
+      best = Math.max(best, vh / Math.max(200, fromLocal(...o.pos).altMsl) / D2R);
     }
     return best;
   }

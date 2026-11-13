@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Swiss Alps · I'M HERE Travel Desk</title>
+<meta name="theme-color" content="#0b1424">
+<link rel="stylesheet" href="../shared/tour-page.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
+  "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/" } }
+</script>
+<script src="../../shared/xr-safety.js"></script>
+<script src="../../shared/imhere-card.js"></script>
+<script src="../../shared/imhere-topbar.js"></script>
+</head>
+<body>
+<script type="module">
+// The page shell is shared by every Travel Desk park (travel/shared/tour-page.js); this park brings its stops, field guide
+// and fallback terrain.
+import * as T from './tour.js';
+import * as guide from './guide.js';
+import { buildTerrain } from './terrain.js';
+import { startTourPage } from '../shared/tour-page.js';
+startTourPage({ T, guide, buildTerrain });
+</script>
+</body>
+</html>
