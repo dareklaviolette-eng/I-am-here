@@ -1,0 +1,9 @@
+{
+  "name": "xr-australis-hull",
+  "date": "2026-11-13",
+  "task_id": "01a1d6f4-ab32-747d-906d-47e2bb473953",
+  "status": "SUCCEEDED",
+  "notes": "XR Australis IH-0001 (founder's ship), sister of XR Aurora. First order-desk test.",
+  "error": null,
+  "model": "meshy/models/xr-australis-hull.glb"
+}
