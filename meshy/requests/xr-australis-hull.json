@@ -1,0 +1,8 @@
+{
+  "image": "meshy/inputs/xr-australis-port.png",
+  "texture_prompt": "Polished silver and dark chrome hull, long glass lounge window band with warm lit interior, raised glass helm canopy, three rear engine rings glowing blue, blue light accents along the hull",
+  "target_polycount": 30000,
+  "enable_pbr": true,
+  "symmetry_mode": "on",
+  "notes": "XR Australis IH-0001 (founder's ship), sister of XR Aurora. First order-desk test."
+}
