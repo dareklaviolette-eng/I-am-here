@@ -1,8 +1,7 @@
 // I'M HERE Travel Desk · Google Photorealistic 3D Tiles for a whole region (adapted from 737/google-scenery.js, which stays
 // the aviation copy: same pinned library, same auth / Draco plugins, same single 'load-model' listener).
-// The tiles sit in the tour's world frame (tour.js FRAME: x = west, y = up, z = north, metres). No ground matching, no
-// stencil: the tour never lands. Any failure throws, and the page keeps its fallback terrain.
-import { FRAME } from './tour.js';
+// The tiles sit in the tour's world frame (the park's tour.js FRAME: x = west, y = up, z = north, metres), passed in as frame.
+// No ground matching, no stencil: the tour never lands. Any failure throws, and the page keeps its fallback terrain.
 
 export const TILES_LIB = 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.3.46/src/index.js';   // last 0.3: accepts three r165
 export const TILES_PLUGINS = TILES_LIB.replace(/index\.js$/, 'plugins/index.js');
@@ -11,10 +10,11 @@ export const GOOGLE_ROOT = 'https://tile.googleapis.com/v1/3dtiles/root.json';
 const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(what + ' timed out after ' + Math.round(ms / 1000) + ' s')), ms))]);
 const noKey = (t) => String(t || '').replace(/([?&])key=[^&\s]+/g, '$1key=…');
 
-// createRegionTiles({ THREE, GLTFLoader, DRACOLoader, renderer, camera, key, onStatus })
+// createRegionTiles({ THREE, GLTFLoader, DRACOLoader, renderer, camera, key, frame, onStatus })
 //   -> { group, update(), setErrorTarget(n), setTint(hex), stats(), credits(), dispose() }
-export async function createRegionTiles({ THREE, GLTFLoader, DRACOLoader, renderer, camera, key, onStatus = () => {} }) {
+export async function createRegionTiles({ THREE, GLTFLoader, DRACOLoader, renderer, camera, key, frame, onStatus = () => {} }) {
   if (!key) throw new Error('no Google key');
+  if (!frame || frame.length !== 16) throw new Error('no world frame');
   const say = (t) => { try { onStatus(t); } catch (e) { /* ignore */ } };
   say('Checking Google 3D Tiles access…');
   let pre;
@@ -42,7 +42,7 @@ export async function createRegionTiles({ THREE, GLTFLoader, DRACOLoader, render
   let tileCam = camera; tiles.setCamera(camera); tiles.setResolutionFromRenderer(camera, renderer);
 
   const group = new THREE.Group(); group.name = 'google-3d-tiles'; group.add(tiles.group);
-  const M = new THREE.Matrix4().fromArray(FRAME);
+  const M = new THREE.Matrix4().fromArray(frame);
   M.decompose(tiles.group.position, tiles.group.quaternion, tiles.group.scale); tiles.group.updateMatrixWorld(true);
 
   let loaded = 0, lastError = '', tint = new THREE.Color(0xffffff);

@@ -5,15 +5,48 @@
 // the Exit VR row on the card, the crash-proof loop and the frame-cost watchdog.
 // Scenery: Google Photorealistic 3D Tiles on the GitHub site (the key is restricted to it); elsewhere, or if it fails, a
 // rendered approximation (terrain.js), labelled as such. Weather: Open-Meteo, live. Planes: shared/layer-planes.js (off).
+// I'M HERE Travel Desk · the tour page every park shares, aboard XR Aurora (placeholder frame until shared/aurora/).
+// A park's index.html loads its own tour.js (stops + PARK settings, maths from tour-core.js), guide.js (field guide) and
+// terrain.js (fallback scenery), then calls startTourPage({ T, guide, buildTerrain }).
+// Screens: a slow, eased glide between stops (10-20 s; longer on tours that cross a country), a still, gently drifting
+// viewpoint at each stop, Auto-play ~25 s a stop.
+// VR: comfort first: a blink (fade to black and back) between stops and views, a slow slide at each stop, nothing turns you;
+// the controls are world-mounted (shared/imhere-topbar.js), point + select only; shared/xr-safety.js gives B / Y exit,
+// the Exit VR row on the card, the crash-proof loop and the frame-cost watchdog.
+// Scenery: Google Photorealistic 3D Tiles on the GitHub site (the key is restricted to it); elsewhere, or if it fails, a
+// rendered approximation (the park's terrain.js), labelled as such. Weather: Open-Meteo, live. Planes: shared/layer-planes.js (off).
+// Night stops (s.night) and golden-hour stops (s.golden) are rendered grades over the imagery, labelled in Details.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import * as T from './tour.js';
-import { SPECIES, SPECIES_ORDER } from './guide.js';
-import { buildTerrain } from './terrain.js';
 import { createAuroraFrame } from './aurora-placeholder.js';
+import { createNightSky } from './night-sky.js';
 
 const GOOGLE_KEY = 'AIzaSyD5_qsBFe74zBURZ8UTYFzz_7es3dPSM9A';   // same key as 737/: restricted to dareklaviolette-eng.github.io
+
+// The page's markup (the same for every park; ids are what the tests and the shared controls use)
+function buildMarkup(P, first, n) {
+  const body = document.body;
+  const html = '<div id="view"></div>' +
+    '<section id="cap" aria-live="polite"><div id="capHead"><span id="capStep"></span><span id="capTitle"></span><span id="capWx"></span></div>' +
+    '<p id="capText"></p><p id="capNote" hidden></p><div id="capCtl">' +
+    '<button class="cb" id="prevBtn" type="button" aria-label="Previous stop">‹ Prev</button>' +
+    '<button class="cb" id="autoBtn" type="button" aria-pressed="true">❚❚ Auto</button>' +
+    '<button class="cb" id="nextBtn" type="button" aria-label="Next stop">Next ›</button><span class="sp"></span>' +
+    '<button class="cb" id="guideBtn" type="button" aria-pressed="false">Field guide</button>' +
+    '<button class="cb" id="vrBtn" type="button" hidden>Enter VR</button></div><div id="prog"><i></i></div></section>' +
+    '<aside id="efb" hidden aria-label="Field guide"><div id="efbHead"><span id="efbTitle"></span><button class="cb x" id="efbClose" type="button" aria-label="Close the field guide">✕</button></div>' +
+    '<div id="efbTabs"><button class="cb" id="tabHere" type="button" aria-pressed="true">Here</button><button class="cb" id="tabAll" type="button" aria-pressed="false">All species</button></div>' +
+    '<div id="efbList"></div></aside><div id="status" role="status"></div><div id="blink" aria-hidden="true"></div>';
+  body.insertAdjacentHTML('afterbegin', html);
+  document.getElementById('capStep').textContent = `STOP 1 / ${n}`; document.getElementById('capTitle').textContent = first.name;
+  document.getElementById('efbTitle').textContent = 'FIELD GUIDE · ' + P.guideTitle;
+}
+
+export function startTourPage({ T, guide, buildTerrain }) {
+const { SPECIES, SPECIES_ORDER } = guide;
+const P = T.PARK, LOG = '[' + P.log + ']', METRIC = P.units === 'metric', CURVED = !!T.CURVED;
+buildMarkup(P, T.STOPS[0], T.STOPS.length);
 const QS = new URLSearchParams(location.search);
 const ON_SITE = /github\.io$/i.test(location.hostname);
 const USE_TILES = QS.get('tiles') === '0' ? false : (ON_SITE || QS.get('tiles') === '1');
@@ -21,6 +54,13 @@ const $ = (id) => document.getElementById(id);
 const STOPS = T.STOPS, NSTOP = STOPS.length, D2R = Math.PI / 180;
 const COARSE = matchMedia('(pointer: coarse)').matches;
 const POV_NAME = Object.fromEntries(T.POVS);
+// the local horizon at a world point, as a quaternion (identity for parks that keep one horizon: Yosemite)
+const _bm = new THREE.Matrix4(), _bw = new THREE.Vector3(), _bu = new THREE.Vector3(), _bn = new THREE.Vector3();
+function basisQuat(pos, q) {
+  if (!CURVED) return q.identity();
+  const B = T.basisAt(pos); _bm.makeBasis(_bw.fromArray(B.w), _bu.fromArray(B.u), _bn.fromArray(B.n)); return q.setFromRotationMatrix(_bm);
+}
+const qBasis = new THREE.Quaternion();
 
 // ------------------------------------------------------------------------------------------------ renderer, scene
 const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
@@ -48,12 +88,15 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(300000, 32, 16), new THREE.S
 }));
 sky.renderOrder = -1000; sky.frustumCulled = false; scene.add(sky);
 const SKY = { day: { zen: 0x3f6fa8, hor: 0xc9dbea, low: 0x9fb1c0, sun: 0xfff3dc, fog: 0xbfd3e6, tint: 0xffffff },
-  gold: { zen: 0x3b4f80, hor: 0xf2c58e, low: 0xb08a6a, sun: 0xffc27a, fog: 0xe8c39a, tint: 0xffd9ae } };
+  gold: { zen: 0x3b4f80, hor: 0xf2c58e, low: 0xb08a6a, sun: 0xffc27a, fog: 0xe8c39a, tint: 0xffd9ae },
+  night: { zen: 0x02040b, hor: 0x0b1326, low: 0x04070e, sun: 0x000000, fog: 0x0a1121, tint: 0x3a4766 } };
 const tmpA = new THREE.Color(), tmpB = new THREE.Color();
-const sunDir = new THREE.Vector3(0.5, 0.55, -0.66);   // x = west: afternoon sun from the south-west
+const sunDir = new THREE.Vector3().fromArray(P.sun || [0.5, 0.55, -0.66]);   // x = west (Yosemite: afternoon sun from the south-west)
+// night stops: stars and (where the park asks for it) the aurora, a rendered sky around the eye
+const nightSky = createNightSky(THREE, P.nightSky || {}); scene.add(nightSky.group);
 
 // fallback terrain (rendered approximation) until Google 3D shows
-const fallback = buildTerrain(THREE, { n: COARSE ? 256 : 320 });
+const fallback = buildTerrain(THREE, { n: COARSE ? (P.terrainN || [320, 256])[1] : (P.terrainN || [320, 256])[0] });
 scene.add(fallback);
 // route line + stop pins: shown in God's eye (drawn by I'M HERE)
 const routeGeo = new THREE.BufferGeometry(); routeGeo.setAttribute('position', new THREE.Float32BufferAttribute(T.routeLine(48), 3));
@@ -76,14 +119,14 @@ function applyDetail() {
 }
 if (USE_TILES) {
   status('Loading Google 3D…', 0);
-  import('./scenery.js').then((m) => m.createRegionTiles({ THREE, GLTFLoader, DRACOLoader, renderer, camera, key: GOOGLE_KEY, onStatus: (t) => status(t, 0) }))
+  import('./scenery.js').then((m) => m.createRegionTiles({ THREE, GLTFLoader, DRACOLoader, renderer, camera, key: GOOGLE_KEY, frame: T.FRAME, onStatus: (t) => status(t, 0) }))
     .then((t) => { tiles = t; scene.add(t.group); tilesState = 'on'; applyDetail(); status('Streaming Google 3D…', 0); })
-    .catch((e) => { tilesState = 'failed'; tilesWhy = String((e && e.message) || e).replace(/key=[^&\s]+/g, 'key=…'); console.warn('[yosemite] Google 3D unavailable:', tilesWhy); status('Google 3D unavailable: rendered terrain shown'); });
+    .catch((e) => { tilesState = 'failed'; tilesWhy = String((e && e.message) || e).replace(/key=[^&\s]+/g, 'key=…'); console.warn(LOG, 'Google 3D unavailable:', tilesWhy); status('Google 3D unavailable: rendered terrain shown'); });
 } else status('Rendered terrain (Google 3D loads on the GitHub site)');
 
 // ------------------------------------------------------------------------------------------------ tour state
 const S = { i: 0, mode: 'hold', holdT: 0, leg: null, legT: 0, auto: QS.get('auto') !== '0', pov: 'deck', guide: false, guideTab: 'here',
-  look: { yaw: 0, pitch: 0, at: 0 }, gold: 0, haze: STOPS[0].haze, vrGuide: false };
+  look: { yaw: 0, pitch: 0, at: 0 }, gold: 0, night: 0, haze: STOPS[0].haze, vrGuide: false, momentAt: {} };
 const cur = { pos: [0, 0, 0], heading: 0, pitch: 0 };   // the camera now (screens), before the drag-to-look offset
 const poseFor = (i, pov = S.pov) => T.povPose(STOPS[i], pov);
 Object.assign(cur, poseFor(0)); cur.pos = cur.pos.slice();
@@ -91,7 +134,7 @@ const xrNow = () => renderer.xr.isPresenting;
 
 function goTo(i, why = 'user') {
   i = ((i % NSTOP) + NSTOP) % NSTOP;
-  if (xrNow()) { blink(() => { S.i = i; S.mode = 'hold'; S.holdT = 0; S.leg = null; placeRig(); }); }
+  if (xrNow()) { blink(() => { S.i = i; S.mode = 'hold'; S.holdT = 0; S.leg = null; placeRig(); moment(STOPS[i]); }); }
   else if (i === S.i && S.mode === 'hold') { S.holdT = 0; }
   else {
     const from = { pos: cur.pos.slice(), heading: cur.heading, pitch: cur.pitch };
@@ -109,6 +152,17 @@ function setPov(p) {
 }
 function setAuto(on) { S.auto = !!on; if (S.auto && S.mode === 'hold' && S.holdT > T.HOLD_S) S.holdT = T.HOLD_S - 3; renderCaption(); uiDirty(); }
 
+// a stop's own moment on arrival (s.moment = { k, t, s }): screens only, at most once every 10 minutes per stop
+function moment(s) {
+  if (!s || !s.moment || xrNow()) return;
+  const now = performance.now(); if (S.momentAt[s.id] && now - S.momentAt[s.id] < 600000) return; S.momentAt[s.id] = now;
+  const d = document.createElement('div'); d.className = 'tourMoment'; d.setAttribute('role', 'status');
+  d.innerHTML = '<div class="aw-k"></div><div class="aw-t"></div><div class="aw-s"></div>';
+  d.querySelector('.aw-k').textContent = s.moment.k || ''; d.querySelector('.aw-t').textContent = s.moment.t || ''; d.querySelector('.aw-s').textContent = s.moment.s || '';
+  document.body.appendChild(d); requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('on')));
+  setTimeout(() => { d.classList.remove('on'); setTimeout(() => d.remove(), 1500); }, 6500);
+}
+
 // ------------------------------------------------------------------------------------------------ blink (VR comfort)
 const blinkMesh = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 8), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false, depthWrite: false, fog: false }));
 blinkMesh.renderOrder = 100000; blinkMesh.visible = false; blinkMesh.frustumCulled = false; camera.add(blinkMesh);
@@ -123,7 +177,7 @@ function blinkStep(t) {
   const e = t - BL.t0; let a;
   if (e < BL_OUT) a = e / BL_OUT;
   else {   // fire at full black; a slow frame that skips the hold still fires (then fades in from black)
-    if (!BL.fired) { BL.fired = true; BL.t0 = t - BL_OUT; try { BL.fn && BL.fn(); } catch (err) { console.error('[yosemite] blink', err); } }
+    if (!BL.fired) { BL.fired = true; BL.t0 = t - BL_OUT; try { BL.fn && BL.fn(); } catch (err) { console.error(LOG, 'blink', err); } }
     const e2 = t - BL.t0; a = e2 < BL_OUT + BL_HOLD ? 1 : Math.max(0, 1 - (e2 - BL_OUT - BL_HOLD) / BL_IN); if (a <= 0) BL.on = false;
   }
   const xr = xrNow(); blinkMesh.visible = xr && a > 0; blinkMesh.material.opacity = a;
@@ -135,7 +189,7 @@ const VR_EYE = 1.4;   // the deck viewpoint sits this far above the rig floor (u
 function placeRig(t = 0) {   // VR: the rig at the stop's viewpoint (+ a slow slide), facing the stop's heading; no rotation after
   const p = poseFor(S.i), d = T.drift(STOPS[S.i], S.holdT, true);
   rig.position.set(p.pos[0] + d.off[0], p.pos[1] - VR_EYE + d.off[1], p.pos[2] + d.off[2]);
-  rig.rotation.set(0, Math.PI - p.heading, 0);
+  rig.rotation.set(0, Math.PI - p.heading, 0); if (CURVED) rig.quaternion.premultiply(basisQuat(p.pos, qBasis));
   cur.pos[0] = p.pos[0]; cur.pos[1] = p.pos[1]; cur.pos[2] = p.pos[2]; cur.heading = p.heading; cur.pitch = 0;
 }
 
@@ -156,15 +210,21 @@ function placeRig(t = 0) {   // VR: the rig at the stop's viewpoint (+ a slow sl
 const WX = { list: null, at: 0, err: '' };
 async function refreshWeather() {
   try { const w = await T.fetchWeather(); if (w && w.some(Boolean)) { WX.list = w; WX.at = Date.now(); WX.err = ''; } }
-  catch (e) { WX.err = String((e && e.message) || e); console.warn('[yosemite] weather:', WX.err); }
+  catch (e) { WX.err = String((e && e.message) || e); console.warn(LOG, 'weather:', WX.err); }
   renderCaption(); uiDirty();
 }
 refreshWeather(); setInterval(refreshWeather, 15 * 60000);
 const wxNow = (i = S.i) => (WX.list && Date.now() - WX.at < 30 * 60000 ? WX.list[i] : null);
-const wxLine = (w) => w ? `${w.tempF}°F · ${w.text}${w.windMph ? ' · wind ' + (w.windDir ? w.windDir + ' ' : '') + w.windMph + ' mph' : ''}` : '';
+const wxLine = (w) => !w ? '' : METRIC ? `${w.tempC}°C (${w.tempF}°F) · ${w.text}${w.windKmh ? ' · wind ' + (w.windDir ? w.windDir + ' ' : '') + w.windKmh + ' km/h' : ''}`
+  : `${w.tempF}°F · ${w.text}${w.windMph ? ' · wind ' + (w.windDir ? w.windDir + ' ' : '') + w.windMph + ' mph' : ''}`;
+const wxTemp = (w) => (METRIC ? `${w.tempC}°C · ${w.tempF}°F` : w.tempF + '°F');
+const wxWind = (w) => (METRIC ? (w.windDir + ' ' + w.windKmh + ' km/h') : (w.windDir + ' ' + w.windMph + ' mph')).trim();
 
 // ------------------------------------------------------------------------------------------------ caption, field guide
-function stopElev(s) { return s.elevNote || T.fmtFt(s.elevFt); }
+// elevations: Yosemite in feet; metric parks in metres, with feet alongside in the card's Details
+const elevShort = (s) => (METRIC ? T.fmtM(s.elevM) : T.fmtFt(s.elevFt));
+const altWords = (m) => (METRIC ? T.fmtM(m) + ' (' + T.fmtFt(m / T.FT) + ')' : T.fmtFt(m / T.FT));
+function stopElev(s) { return s.elevNote || (METRIC ? altWords(s.elevM) : T.fmtFt(s.elevFt)); }
 function renderCaption() {
   const s = STOPS[S.i], w = wxNow();
   $('capStep').textContent = `STOP ${S.i + 1} / ${NSTOP}`;
@@ -208,15 +268,13 @@ addEventListener('keydown', (e) => {
 // sidebar (☰): Stops · Field guide · About
 const sbStops = document.createElement('div'); sbStops.className = 'sb-list';
 STOPS.forEach((s, i) => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = '<span class="n"></span><span class="t"></span><span class="s"></span>';
-  b.querySelector('.n').textContent = i + 1; b.querySelector('.t').textContent = s.name; b.querySelector('.s').textContent = T.fmtFt(s.elevFt);
+  b.querySelector('.n').textContent = i + 1; b.querySelector('.t').textContent = s.name; b.querySelector('.s').textContent = elevShort(s);
   b.onclick = () => { goTo(i); ImHereTopbar.setSide(false); }; sbStops.appendChild(b); });
 const sbGuide = document.createElement('div'); sbGuide.className = 'sb-list';
 const gHere = document.createElement('button'); gHere.type = 'button'; gHere.onclick = () => openGuide(true, 'here'); sbGuide.appendChild(gHere);
-const gAll = document.createElement('button'); gAll.type = 'button'; gAll.textContent = 'All species (8)'; gAll.onclick = () => openGuide(true, 'all'); sbGuide.appendChild(gAll);
+const gAll = document.createElement('button'); gAll.type = 'button'; gAll.textContent = 'All species (' + SPECIES_ORDER.length + ')'; gAll.onclick = () => openGuide(true, 'all'); sbGuide.appendChild(gAll);
 const sbAbout = document.createElement('div'); sbAbout.className = 'sb-about';
-sbAbout.innerHTML = '<p><b>Yosemite National Park</b>, aboard XR Aurora (IH-0000). Seven stops, from Tunnel View to the high country.</p>' +
-  '<p>Screens: the tour glides between stops; drag to look around. Arrow keys: previous / next; space: auto-play. In VR the view blinks between stops; point and select.</p>' +
-  '<p>Scenery: Google Photorealistic 3D Tiles (on the GitHub site), otherwise a rendered approximation. Weather: Open-Meteo, live. Facts: National Park Service.</p>';
+sbAbout.innerHTML = P.about;   // the park's own words (static HTML from its tour.js)
 function renderSidebar() {
   [...sbStops.children].forEach((b, i) => b.setAttribute('aria-current', String(i === S.i)));
   gHere.textContent = 'Here · ' + STOPS[S.i].name + ' (' + STOPS[S.i].species.length + ')';
@@ -224,7 +282,7 @@ function renderSidebar() {
 
 // ------------------------------------------------------------------------------------------------ the card + top bar
 const MARK = window.ImHereCard, TB = window.ImHereTopbar;
-const ICON = { d: 'M4 54 H116 M10 54 L34 30 L44 38 L62 14 Q80 6 86 26 L86 54 M86 30 L100 40 L112 54', w: 120, h: 60 };
+const ICON = P.icon;
 let LAY = null;   // { reg, LU, planes, markers, xr }: the shared Layers control (loaded below)
 function sceneryWords() { return tilesShown ? 'Google 3D' : 'Rendered terrain'; }
 function cardData() {
@@ -232,24 +290,25 @@ function cardData() {
   const prev = gl && S.leg ? STOPS.find((x) => x !== s && Math.hypot(...T.povPose(x, S.pov).pos.map((v, k) => v - S.leg.a.pos[k])) < 50) : null;
   const ll = T.fromLocal(...cur.pos);
   const rows = [['Aboard', 'XR Aurora (IH-0000)'], ['Stop', `${S.i + 1} of ${NSTOP} · ${s.name}`], ['Elevation', stopElev(s)],
-    ['Position', `${ll.lat.toFixed(4)}°, ${ll.lon.toFixed(4)}° · ${T.fmtFt(ll.altMsl / T.FT)}`]];
-  if (w) rows.push(['Weather', wxLine(w)], ['Observed', (w.time || '').replace('T', ' ') + ' PT · Open-Meteo']);
+    ['Position', `${ll.lat.toFixed(4)}°, ${ll.lon.toFixed(4)}° · ${altWords(ll.altMsl)}`]];
+  if (w) rows.push(['Weather', wxLine(w)], ['Observed', (w.time || '').replace('T', ' ') + ' ' + tzLabel() + ' · Open-Meteo']);
   else rows.push(['Weather', WX.err ? 'not reachable right now' : 'loading…']);
   rows.push(['Scenery', tilesShown ? 'Google Photorealistic 3D Tiles (real imagery, not live)' : tilesState === 'on' ? 'Google 3D streaming…' : 'Rendered approximation (I\'M HERE): ' + (tilesWhy || 'Google 3D not loaded')]);
-  if (S.gold > 0.05) rows.push(['Light', 'Golden-hour grade: rendered over the imagery']);
+  if (S.gold > 0.05) rows.push(['Light', (s.goldenWords || 'Golden-hour') + ' grade: rendered over the imagery']);
+  if (S.night > 0.05) rows.push(['Light', 'Night grade, stars' + (P.nightSky && P.nightSky.aurora ? ' and southern lights' : '') + ': rendered by I\'M HERE']);
   if (S.pov === 'god') rows.push(['Route', 'Line and stop pins drawn by I\'M HERE']);
   if (S.pov === 'deck') rows.push(['Craft', 'Observation deck frame: placeholder render']);
   return {
-    thumb: { icon: ICON, label: 'Yosemite' }, flag: { iso2: 'us', name: 'USA' }, type: 'National park',
-    loc: s.loc, org: 'National Park Service', id: { label: 'STEP', value: `${S.i + 1}/${NSTOP} · ${s.name}` },
+    thumb: { icon: ICON, label: P.short }, flag: P.flag, type: P.type,
+    loc: s.loc, org: s.org || P.org, id: { label: 'STEP', value: `${S.i + 1}/${NSTOP} · ${s.name}` },
     rte: gl ? `${prev ? prev.name + ' ' : ''}→ ${s.name} · Glide` : `${s.name} · Hold`, route: (gl ? '→ ' : '') + s.name,
     pov: POV_NAME[S.pov], sig: live ? { source: sceneryWords() + ' · Open-Meteo weather' } : { source: sceneryWords(), tag: 'HIST' },
     time: live ? Date.now() : null,
     details: { rows, notes: [
       'Live: the weather only (Open-Meteo, refreshed every 15 min). The scenery is Google\'s captured imagery, not a live view.',
-      'TODO webcams: NPS Yosemite webcams (Yosemite Falls, Half Dome, Tuolumne Meadows…) not added; their image URLs could not be verified from the build sandbox.',
+      ...P.notes,
     ], credits: [{ text: 'Field guide ›', href: '#guide' }, { text: 'Map data: Google 3D Tiles', href: 'https://developers.google.com/maps/documentation/tile/policies' },
-      { text: 'Weather data by Open-Meteo.com (CC BY 4.0)', href: 'https://open-meteo.com/' }, { text: 'Facts: National Park Service', href: 'https://www.nps.gov/yose/' }, { text: 'Built with Claude AI' }] },
+      { text: 'Weather data by Open-Meteo.com (CC BY 4.0)', href: 'https://open-meteo.com/' }, ...P.credits, { text: 'Built with Claude AI' }] },
   };
 }
 let cardSig = '';
@@ -259,11 +318,16 @@ function updateCard() {
   if (sig !== cardSig) { cardSig = sig; MARK.update(d); }
   MARK.setLive(!!wxNow());
 }
-const localPT = () => { try { return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Los_Angeles' }) + ' PT'; } catch (e) { return ''; } };
+// the park's local time and zone words ('PT' for Yosemite; 'CET' / 'CEST', 'NZDT' / 'NZST' from the browser for the others)
+function tzLabel() {
+  if (P.tzLabel) return P.tzLabel;
+  try { const p = new Intl.DateTimeFormat(P.tzLocale || 'en-GB', { timeZone: P.timezone, timeZoneName: 'short' }).formatToParts(new Date()).find((x) => x.type === 'timeZoneName'); return p ? p.value : ''; } catch (e) { return ''; }
+}
+const localPT = () => { try { return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: P.timezone }) + ' ' + tzLabel(); } catch (e) { return ''; } };
 function dataCells() {
   const s = STOPS[S.i], w = wxNow();
-  return [['STOP', `${S.i + 1}/${NSTOP} ${s.name}`], ['ELEV', T.fmtFt(s.elevFt)], ['TEMP', w ? w.tempF + '°F' : '—'], ['WX', w ? w.text : '—'],
-    ['WIND', w ? (w.windDir + ' ' + w.windMph + ' mph').trim() : '—'], ['LOCAL', localPT()]];
+  return [['STOP', `${S.i + 1}/${NSTOP} ${s.name}`], ['ELEV', elevShort(s)], ['TEMP', w ? wxTemp(w) : '—'], ['WX', w ? w.text : '—'],
+    ['WIND', w ? wxWind(w) : '—'], ['LOCAL', localPT()]];
 }
 function povItems() { return T.POVS.map(([id, n]) => ['pov:' + id, n, '', id === S.pov ? 'sel' : '']).concat(xrNow() ? [['recenter', 'Recenter', '', '']] : []); }
 let creditText = '';
@@ -282,7 +346,7 @@ function onAction(id) {
 }
 function uiDirty() { if (TB) TB.update(); if (TBX) TBX.dirty = true; if (CAPX) CAPX.sig = ''; }
 if (MARK) MARK.init({ zIndex: 1500, ...cardData() });
-if (TB) TB.init({ model: tbModel, onAction, storageKey: 'imhere.travel', sections: [{ id: 'stops', title: 'Stops', el: sbStops, open: true }, { id: 'guide', title: 'Field guide', el: sbGuide }, { id: 'about', title: 'About', el: sbAbout }] });
+if (TB) TB.init({ model: tbModel, onAction, storageKey: P.storageKey || 'imhere.travel', sections: [{ id: 'stops', title: 'Stops', el: sbStops, open: true }, { id: 'guide', title: 'Field guide', el: sbGuide }, { id: 'about', title: 'About', el: sbAbout }] });
 renderCaption();
 
 // the shared Layers control: Planes (live ADS-B near the viewpoint; off by default for travel), Ships / Wildlife / ISS "soon"
@@ -296,7 +360,7 @@ async function loadLayers() {
     if (TB) TB.useExternalLayers((host) => LU.createLayersChip({ layers: reg, host }));
     LAY.markers = LU.createHoverMarkers({ THREE, scene, camera, renderer, layers: reg });
     if (TBX) { rig.add(renderer.xr.getController(0), renderer.xr.getController(1)); LAY.xr = LU.createLayersXR({ THREE, renderer, camera, layers: reg, anchor: TBX.layersAnchor }); }
-  } catch (e) { console.warn('[yosemite] shared Layers not loaded (Planes shows "soon"):', e && e.message); }
+  } catch (e) { console.warn(LOG, 'shared Layers not loaded (Planes shows "soon"):', e && e.message); }
 }
 function layersStep(dt) {
   if (!LAY) return;
@@ -305,12 +369,14 @@ function layersStep(dt) {
       const p = xrNow() ? rig.position : null, x = p ? p.x : cur.pos[0], y = p ? p.y + VR_EYE : cur.pos[1], z = p ? p.z : cur.pos[2];
       const ll = T.fromLocal(x, y, z), o = LAY.own;
       o.lat = ll.lat; o.lon = ll.lon; o.altFt = ll.altMsl / T.FT; o.fieldFt = o.altFt; o.gy = y;
-      LAY.parent.position.set(x, 0, z); LAY.parent.updateMatrixWorld();
+      if (CURVED) { o.gy = 0; LAY.parent.position.set(x, y, z); basisQuat([x, y, z], LAY.parent.quaternion); }   // the local horizon at the eye
+      else LAY.parent.position.set(x, 0, z);
+      LAY.parent.updateMatrixWorld();
     }
     LAY.reg.tick(LAY.parent, LAY.own, dt);
     LAY.markers.update();
     if (LAY.xr) { rig.updateMatrixWorld(true); LAY.xr.update(); }
-  } catch (e) { console.error('[yosemite] layers', e); }
+  } catch (e) { console.error(LOG, 'layers', e); }
 }
 
 // ------------------------------------------------------------------------------------------------ VR controls (world-mounted)
@@ -333,7 +399,7 @@ const CAPX = (() => {
   const cw = 1024, ch = 420, wm = 0.78, hm = wm * ch / cw, cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(wm, hm), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
-  mesh.renderOrder = 10000; mesh.frustumCulled = false; mesh.name = 'yosemite-caption-xr';
+  mesh.renderOrder = 10000; mesh.frustumCulled = false; mesh.name = P.log + '-caption-xr';
   // 30 deg below eye level, 0.95 m away, tilted to face you
   const y = -Math.sin(30 * D2R) * 0.95, z = -Math.cos(30 * D2R) * 0.95; mesh.position.set(0, y, z); mesh.rotation.set(-Math.atan2(y, -z), 0, 0);
   uiMount.add(mesh);
@@ -411,7 +477,7 @@ function onXRSelect(ev) {
     if (TBX && uiMount.visible && TBX.select(_O, _D)) return;   // top controls and the card (its Exit row belongs to xr-safety)
     if (LAY && LAY.xr && LAY.xr._regionAtRay && LAY.xr._regionAtRay(_O, _D)) return;   // the shared Layers chip handles its own select
     const c = capProbe(_O, _D); if (c) capAct(c);
-  } catch (e) { console.error('[yosemite] select', e); }
+  } catch (e) { console.error(LOG, 'select', e); }
 }
 renderer.xr.addEventListener('sessionstart', () => {
   const ses = renderer.xr.getSession(); ses.addEventListener('select', onXRSelect);
@@ -446,10 +512,10 @@ function tourStep(dt) {
     S.legT += dt;
     const u = Math.min(1, S.legT / S.leg.dur); T.legPose(S.leg, u, leg);
     cur.pos[0] = leg.pos[0]; cur.pos[1] = leg.pos[1]; cur.pos[2] = leg.pos[2]; cur.heading = leg.heading; cur.pitch = leg.pitch;
-    if (u >= 1) { S.mode = 'hold'; S.holdT = 0; S.leg = null; uiDirty(); }
+    if (u >= 1) { S.mode = 'hold'; S.holdT = 0; S.leg = null; uiDirty(); moment(STOPS[S.i]); }
   } else {
     S.holdT += dt;
-    if (xrNow()) { const p = poseFor(S.i), d = T.drift(STOPS[S.i], S.holdT, true); rig.position.set(p.pos[0] + d.off[0], p.pos[1] - VR_EYE, p.pos[2] + d.off[2]); }
+    if (xrNow()) { const p = poseFor(S.i), d = T.drift(STOPS[S.i], S.holdT, true); rig.position.set(p.pos[0] + d.off[0], p.pos[1] - VR_EYE + (CURVED ? d.off[1] : 0), p.pos[2] + d.off[2]); }
     else {
       const p = poseFor(S.i), d = S.pov === 'god' ? { off: [0, 0, 0], yaw: T.drift(STOPS[S.i], S.holdT).yaw * 0.5 } : T.drift(STOPS[S.i], S.holdT);
       cur.pos[0] = p.pos[0] + d.off[0]; cur.pos[1] = p.pos[1] + d.off[1]; cur.pos[2] = p.pos[2] + d.off[2]; cur.heading = p.heading + d.yaw; cur.pitch = p.pitch;
@@ -463,15 +529,17 @@ function lookStep(dt) {   // the drag offset eases home 5 s after you let go
 function atmosphereStep(dt) {
   const s = STOPS[S.i], k = 1 - Math.exp(-dt / 3);
   S.gold += ((s.golden && S.mode === 'hold' ? 1 : s.golden ? 0.6 : 0) - S.gold) * k;
+  S.night += ((s.night ? 1 : 0) - S.night) * k;
   S.haze += (s.haze - S.haze) * k;
-  const u = sky.material.uniforms, g = S.gold;
-  for (const key of ['zen', 'hor', 'low']) u[key].value.copy(tmpA.set(SKY.day[key])).lerp(tmpB.set(SKY.gold[key]), g);
-  u.sunCol.value.copy(tmpA.set(SKY.day.sun)).lerp(tmpB.set(SKY.gold.sun), g);
+  const u = sky.material.uniforms, g = S.gold, nt = S.night;   // nt = 0 everywhere but night stops: the day / golden grade as before
+  for (const key of ['zen', 'hor', 'low']) u[key].value.copy(tmpA.set(SKY.day[key])).lerp(tmpB.set(SKY.gold[key]), g).lerp(tmpB.set(SKY.night[key]), nt);
+  u.sunCol.value.copy(tmpA.set(SKY.day.sun)).lerp(tmpB.set(SKY.gold.sun), g).lerp(tmpB.set(SKY.night.sun), nt);
   u.sun.value.copy(sunDir); u.sun.value.y = 0.55 - 0.42 * g; u.sun.value.normalize();
-  scene.fog.color.copy(tmpA.set(SKY.day.fog)).lerp(tmpB.set(SKY.gold.fog), g);
-  const alt = Math.max(0, cur.pos[1] - 2500);   // high above the park the air thins: less haze
+  scene.fog.color.copy(tmpA.set(SKY.day.fog)).lerp(tmpB.set(SKY.gold.fog), g).lerp(tmpB.set(SKY.night.fog), nt);
+  const alt = Math.max(0, (CURVED ? T.fromLocal(...cur.pos).altMsl : cur.pos[1]) - (P.hazeTopM || 2500));   // high above the park the air thins: less haze
   scene.fog.density = (1e-5 + S.haze * S.haze * 6e-4) / (1 + alt / 4000);
-  const tint = tmpA.set(SKY.day.tint).lerp(tmpB.set(SKY.gold.tint), g);
+  nightSky.set(nt, clock.elapsedTime);
+  const tint = tmpA.set(SKY.day.tint).lerp(tmpB.set(SKY.gold.tint), g).lerp(tmpB.set(SKY.night.tint), nt);
   fallback.material.color.copy(tint);
   if (tiles && (frames % 15 === 0)) tiles.setTint(tint.getHex());
 }
@@ -482,10 +550,12 @@ function cameraStep() {
     rig.position.set(0, 0, 0); rig.rotation.set(0, 0, 0);
     camera.position.set(cur.pos[0], cur.pos[1], cur.pos[2]);
     eul.set(T.clamp(cur.pitch + S.look.pitch, -1.5, 1.2), Math.PI - cur.heading - S.look.yaw, 0, 'YXZ'); camera.quaternion.setFromEuler(eul);
+    if (CURVED) camera.quaternion.premultiply(basisQuat(cur.pos, qBasis));   // headings and pitches are in the local horizon
   }
   const vr = xrNow(), framed = T.POV_FRAMED[S.pov];
   aurora.setShown(framed);
   if (vr) aurora.place(rig.position.x, rig.position.y, rig.position.z, cur.heading, true); else aurora.place(cur.pos[0], cur.pos[1], cur.pos[2], cur.heading, false);
+  if (CURVED) aurora.group.quaternion.premultiply(basisQuat(vr ? rig.position.toArray() : cur.pos, qBasis));
   route.visible = pins.visible = S.pov === 'god';
   camera.updateMatrixWorld();
 }
@@ -510,12 +580,14 @@ function frame(time, xrFrame) {
   tourStep(dt); lookStep(dt); atmosphereStep(dt); cameraStep();
   blinkStep(t);
   sky.position.copy(camera.getWorldPosition(_lo));
+  if (CURVED) basisQuat(sky.position.toArray(), sky.quaternion);
+  nightSky.group.position.copy(sky.position); nightSky.group.quaternion.copy(sky.quaternion);
   if (xrNow()) {
     if (mountPending && xrFrames > 2) mountUI();
     if (TBX) TBX.step(t);
     drawCapXR(); xrHoverStep(t, xrFrame);
   }
-  if (tiles) { try { tiles.update(); } catch (e) { console.error('[yosemite] tiles', e); } }
+  if (tiles) { try { tiles.update(); } catch (e) { console.error(LOG, 'tiles', e); } }
   layersStep(dt);
   uiStep(t);
   renderer.render(scene, camera);
@@ -526,12 +598,13 @@ function resize() {
 }
 addEventListener('resize', resize); resize();
 renderer.setAnimationLoop(frame);
-aurora.welcome();
+aurora.welcome(document.body, P.name);
 loadLayers();
 
-// for tests and the console
-window.__yos = {
+// for tests and the console (__yos: the name the Yosemite harness has always used; __tour: the same object on every park)
+window.__tour = window.__yos = {
   S, cur, STOPS, goTo, setPov, setAuto, blinking: () => BL.on, tiles: () => tiles, tilesShown: () => tilesShown, frames: () => frames,
   renderer, camera, rig, aurora, mounted: () => uiMount.visible, tb: () => TBX, cap: CAPX, uiMount,
-  inRig: (o) => rig.matrixWorld.clone().invert().multiply(o.matrixWorld), card: () => TBX && TBX.card,
+  inRig: (o) => rig.matrixWorld.clone().invert().multiply(o.matrixWorld), card: () => TBX && TBX.card, nightSky, park: P,
 };
+}
