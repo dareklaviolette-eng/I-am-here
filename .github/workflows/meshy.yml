@@ -1,0 +1,31 @@
+name: Meshy model order desk
+on:
+  push:
+    branches: [prototype]
+    paths: ['meshy/requests/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: meshy-order-desk
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: prototype }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Generate pending models
+        env:
+          MESHY_API_KEY: ${{ secrets.MESHY_API_KEY }}
+          DAILY_CAP: '5'
+        run: node meshy/order-desk.mjs
+      - name: Commit results
+        run: |
+          git config user.name "I'M HERE XR agents"
+          git config user.email "agents@users.noreply.github.com"
+          git add meshy/models meshy/results
+          git diff --cached --quiet && exit 0
+          git commit -m "Meshy order desk: new model(s)"
+          git pull --rebase origin prototype && git push origin HEAD:prototype
