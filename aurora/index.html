@@ -392,7 +392,9 @@ $('view').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.05, 120000);
 scene.add(camera);
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+const fitCamera = () => { camera.aspect = innerWidth / innerHeight; camera.fov = camera.aspect < 0.8 ? 84 : 62; camera.updateProjectionMatrix(); };   // phones in portrait see more of the room
+fitCamera();
+addEventListener('resize', () => { fitCamera(); renderer.setSize(innerWidth, innerHeight); });
 
 // ---------------------------------------------------------------- the world: travel/yosemite/tour.js when it offers the WORLD interface, else ours
 async function loadWorld() {
