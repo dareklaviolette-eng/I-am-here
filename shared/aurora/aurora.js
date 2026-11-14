@@ -74,7 +74,8 @@ function createAurora() {
   let scene, camera, renderer, opts, M, fx, interior, exterior, craft, rig, uiMount, fade2D, fadeVR, lights = [], sun, meshy = null;
   let world = null, pose = null, yaw = 0, yawInit = false, time = 0, look = { yaw: 0, pitch: 0 }, screensAt = 0, extra = {};
   let blink = null, ring, screens, holo, toastP, toastMesh, toastUntil = 0, holoOpen = false, hover = { ring: null, holo: null, steps: false };
-  let xrMountPending = 0, xrFrames = 0, sessionRef = null;
+  let xrMountPending = 0, xrFrames = 0, sessionRef = null, xrRef = null;
+  const onRefReset = () => { xrMountPending = 1; xrFrames = 0; };
   // preallocated temporaries
   const vO = new THREE.Vector3(), vD = new THREE.Vector3(), vT = new THREE.Vector3(), mInv = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ');
   const rayO = [new THREE.Vector3(), new THREE.Vector3()], rayD = [new THREE.Vector3(), new THREE.Vector3()];
@@ -127,9 +128,12 @@ function createAurora() {
       const s = xr.getSession(); sessionRef = s; xrMountPending = 1; xrFrames = 0;
       camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
       if (s) s.addEventListener('selectstart', onSelectStart);
+      // the headset's own recenter (hold the Meta button) moves the floor's origin: mount the UI again in front of the head
+      try { xrRef = xr.getReferenceSpace(); if (xrRef && xrRef.addEventListener) xrRef.addEventListener('reset', onRefReset); } catch (er) { xrRef = null; }
       applyPOV(A.pov || 'deck');
     });
-    xr.addEventListener('sessionend', () => { sessionRef = null; fadeVR.visible = false; toastMesh.visible = false; applyPOV(A.pov || 'deck'); });
+    xr.addEventListener('sessionend', () => {
+      try { if (xrRef && xrRef.removeEventListener) xrRef.removeEventListener('reset', onRefReset); } catch (er) { /* ignore */ } xrRef = null; sessionRef = null; fadeVR.visible = false; toastMesh.visible = false; applyPOV(A.pov || 'deck'); });
     A.craft = craft; A.rig = rig; A.camera = camera; A.uiMount = uiMount; A.interior = interior; A.exterior = exterior; A.materials = M;
     A.setPOV(opts.pov || 'deck', { instant: true });
     // the Meshy hull: swap it in when it arrives; the procedural hull stays as the fallback
