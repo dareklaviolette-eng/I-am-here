@@ -375,11 +375,17 @@ import { createGoogleScenery } from '../737/google-scenery.js';
 import { Aurora, POVS } from '../shared/aurora/aurora.js';
 import { createBackdrop } from '../shared/aurora/backdrop.js';
 import { createYosemiteWorld, AXIS, DOMES, toLocal as yToLocal } from './yosemite-world.js';
-import { worldFromTour } from './tour-world.js';
+import { worldFromTour, basisInto } from './tour-world.js';
+import { createNightSky } from '../travel/shared/night-sky.js';
 
 const GOOGLE_KEY = 'AIzaSyD5_qsBFe74zBURZ8UTYFzz_7es3dPSM9A';   // domain-restricted to the GitHub Pages site
 const $ = (id) => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
+// the Travel Desk tours this craft flies (?tour=<id>; travel/<id>/tour.js + terrain.js). Glacier Bay: coming soon.
+const TOURS = { yosemite: 'Yosemite Valley, CA', 'swiss-alps': 'The Swiss Alps', 'new-zealand': 'Fiordland, New Zealand' };
+let TOUR = TOURS[Q.get('tour')] ? Q.get('tour') : 'yosemite';
+const WX = { list: null, at: 0 };   // Open-Meteo, every stop (see fetchWeather)
+const QUEST = /OculusBrowser|Quest/i.test(navigator.userAgent), COARSE = QUEST || matchMedia('(pointer: coarse)').matches;
 
 // ---------------------------------------------------------------- renderer, scene, camera
 const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, powerPreference: 'high-performance' });
@@ -396,40 +402,86 @@ const fitCamera = () => { camera.aspect = innerWidth / innerHeight; camera.fov =
 fitCamera();
 addEventListener('resize', () => { fitCamera(); renderer.setSize(innerWidth, innerHeight); });
 
-// ---------------------------------------------------------------- the world: travel/yosemite/tour.js when it offers the WORLD interface, else ours
-async function loadWorld() {
+// ---------------------------------------------------------------- the world: travel/<tour>/tour.js (adapted to Aurora's WORLD), else the Yosemite demo
+async function loadWorld(id) {
   try {
-    const m = await import('../travel/yosemite/tour.js');
-    const w = m.world || m.default || (m.createWorld && m.createWorld()) || worldFromTour(m, { name: 'Yosemite' });
-    if (w && Array.isArray(w.stops) && w.stops.length && typeof w.update === 'function' && w.origin) return { w, from: 'travel/yosemite/tour.js' };
-  } catch (e) { /* not on the site (yet): use the demo world */ }
-  return { w: createYosemiteWorld(), from: 'aurora/yosemite-world.js' };
+    const m = await import(`../travel/${id}/tour.js`);
+    const w = m.world || m.default || (m.createWorld && m.createWorld()) || worldFromTour(m, { name: (m.PARK && m.PARK.short) || 'Yosemite' });
+    if (w && Array.isArray(w.stops) && w.stops.length && typeof w.update === 'function' && w.origin) return { w, from: `travel/${id}/tour.js` };
+  } catch (e) { console.warn('[Aurora] tour ' + id + ' did not load:', e && e.message || e); }
+  return null;
 }
-const { w: world, from: worldFrom } = await loadWorld();
+let loaded = await loadWorld(TOUR);
+if (!loaded && TOUR !== 'yosemite') { TOUR = 'yosemite'; loaded = await loadWorld(TOUR); }   // a broken tour still flies Yosemite
+if (!loaded) loaded = { w: createYosemiteWorld(), from: 'aurora/yosemite-world.js' };
+const { w: world, from: worldFrom } = loaded;
 const toLocal = world.toLocal || yToLocal;
+const YOS = TOUR === 'yosemite', PARK = world.park || null, METRIC = !!PARK && PARK.units === 'metric', CURVED = !!world.curved;
+if (PARK) document.title = "I'M HERE · XR Aurora · " + PARK.short;
 
-// ---------------------------------------------------------------- fallback outside (sky always; valley until real scenery is near)
-const s0 = toLocal(world.stops[0].lat, world.stops[0].lon, 1200);
-const clear = world.stops.map((s) => { const p = toLocal(s.lat, s.lon, s.alt); return [p[0], p[2], p[1] - 140, 700]; });
-const backdrop = createBackdrop({ axis: AXIS, domes: DOMES, clear, floorY: 1188, rimY: 2240, centre: [s0[0], s0[2]] });
+// ---------------------------------------------------------------- fallback outside (sky always; rendered land until real scenery is near)
+// Yosemite: the stylised valley (shared/aurora/backdrop.js), as before. Other tours: their own rendered terrain
+// (travel/<tour>/terrain.js, built with travel/shared/terrain-kit.js, as the classic tour page does), with haze and the
+// tour's rendered golden-hour / night grades.
+let backdrop, nightSky = null, landWords = 'Rendered valley';
+if (YOS) {
+  const s0 = toLocal(world.stops[0].lat, world.stops[0].lon, 1200);
+  const clear = world.stops.map((s) => { const p = toLocal(s.lat, s.lon, s.alt); return [p[0], p[2], p[1] - 140, 700]; });
+  backdrop = createBackdrop({ axis: AXIS, domes: DOMES, clear, floorY: 1188, rimY: 2240, centre: [s0[0], s0[2]] });
+} else {
+  let land = null;
+  try {
+    const tm = await import(`../travel/${TOUR}/terrain.js`), N = (PARK && PARK.terrainN) || [300, 240];
+    land = tm.buildTerrain(THREE, { n: COARSE ? N[1] : N[0] });
+  } catch (e) { console.warn('[Aurora] rendered terrain did not build:', e && e.message || e); land = new THREE.Group(); }
+  land.name = 'tour-fallback-terrain';
+  backdrop = createBackdrop({ terrainMesh: land, sunDir: (PARK && PARK.sun) || undefined });
+  landWords = 'Rendered terrain';
+  scene.fog = new THREE.FogExp2(0xc7dbed, 1.4e-5);   // the tour spans 60-330 km: haze takes the far land before the far plane
+  camera.far = 200000; camera.updateProjectionMatrix();
+  if (world.stops.some((s) => s.src && s.src.night)) { nightSky = createNightSky(THREE, (PARK && PARK.nightSky) || {}); nightSky.group.scale.setScalar(0.25); scene.add(nightSky.group);
+    nightSky.group.traverse((o) => { if (o.renderOrder) o.renderOrder = o.renderOrder + 880; }); }   // after the sky dome (-20), before the land
+}
 scene.add(backdrop.group);
 
 // ---------------------------------------------------------------- I'M HERE card + top bar (shared)
 const STOPNAME = () => world.stops[world.index || 0].name;
 const CRAFT_ICON = { d: 'M2 12c3-3 9-4 15-4 3 0 5 1 5 4s-2 4-5 4c-6 0-12-1-15-4zm6-1h7', w: 24, h: 24 };
 let povLabel = 'Observation deck', tilesOn = false, credits = '';
+const G = { gold: 0, night: 0 };   // rendered sky grades (non-Yosemite tours), eased in the loop
+const fmtFt = (m) => Math.round(m / 0.3048).toLocaleString('en-US') + ' ft', fmtM = (m) => Math.round(m).toLocaleString('en-US') + ' m';
+function elevWords(src) {
+  if (!src) return '';
+  if (src.elevNote) return src.elevNote;
+  const m = src.elevM != null ? src.elevM : src.elevFt != null ? src.elevFt * 0.3048 : null; if (m == null) return '';
+  return METRIC ? fmtM(m) + ' (' + fmtFt(m) + ')' : fmtFt(m);
+}
 function cardData() {
-  const s = world.stops[world.index || 0];
-  return { thumb: { icon: CRAFT_ICON, label: 'XR Aurora' }, type: 'Aurora-class craft', reg: 'IH-0000', loc: s.loc || 'Yosemite Valley, CA', org: "I'M HERE",
+  const s = world.stops[world.index || 0], src = s.src, w = wxNow();
+  const rows = [['Craft', 'XR Aurora (Aurora-class lead ship)'], ['REG', 'IH-0000'], ['World', world.name + ' (' + worldFrom + ')'],
+    ['Scenery', tilesOn ? 'Google Photorealistic 3D Tiles' : YOS ? 'Rendered stand-in valley' : "Rendered approximation of the terrain (I'M HERE)"]];
+  if (!YOS) {
+    const ev = elevWords(src); if (ev) rows.push(['Elevation', ev]);
+    if (w) rows.push(['Weather', wxLine(w) + ' · Open-Meteo']);
+    if (G.gold > 0.05) rows.push(['Light', ((src && src.goldenWords) || 'Golden-hour') + ' grade: rendered']);
+    if (G.night > 0.05) rows.push(['Light', 'Night grade, stars' + (PARK && PARK.nightSky && PARK.nightSky.aurora ? ' and southern lights' : '') + ": rendered by I'M HERE"]);
+  }
+  const notes = ['The craft and its interior are rendered. Outside: Google Photorealistic 3D Tiles where they load; ' + (YOS ? 'a rendered valley' : 'rendered terrain') + ' until then.', ...Aurora.credits];
+  if (!YOS && PARK && PARK.notes) notes.push(...PARK.notes.filter((n) => !/^TODO/.test(n)));
+  return { thumb: { icon: CRAFT_ICON, label: 'XR Aurora' }, type: 'Aurora-class craft', reg: 'IH-0000', loc: s.loc || (PARK && PARK.name) || 'Yosemite Valley, CA', org: "I'M HERE",
     id: { label: 'CRAFT', value: 'XR Aurora' }, rte: world.name + ' · ' + s.name, route: '→ ' + s.name, pov: povLabel,
-    sig: { source: tilesOn ? 'Google 3D' : 'Rendered valley', tag: 'RENDERED CRAFT' }, time: Date.now(),
-    details: { rows: [['Craft', 'XR Aurora (Aurora-class lead ship)'], ['REG', 'IH-0000'], ['World', world.name + ' (' + worldFrom + ')'], ['Scenery', tilesOn ? 'Google Photorealistic 3D Tiles' : 'Rendered stand-in valley']],
-      notes: ['The craft and its interior are rendered. Outside: Google Photorealistic 3D Tiles where they load; a rendered valley until then.', ...Aurora.credits] } };
+    sig: { source: tilesOn ? 'Google 3D' : landWords, tag: 'RENDERED CRAFT' }, time: Date.now(),
+    details: { rows, notes } };
 }
 ImHereCard.init({ zIndex: 1500, ...cardData() });
 const stopList = document.createElement('div'); stopList.className = 'side-list';
 const about = document.createElement('div'); about.className = 'side-about';
-about.textContent = 'XR Aurora, Aurora-class lead ship (IH-0000). Lower level: the Observation Lounge and the globe table. Up the steps: the Helm and the Temporal Drive. Drag to look around; tap the ring menu or the steps. ' + Aurora.credits.join(' · ') + '.';
+about.textContent = 'XR Aurora, Aurora-class lead ship (IH-0000). Lower level: the Observation Lounge and the globe table. Up the steps: the Helm and the Temporal Drive. Drag to look around; tap the ring menu or the steps. ' + Aurora.credits.join(' · ') + '. ';
+{ const a = document.createElement('a'); a.href = `../travel/${TOUR}/?classic=1`; a.textContent = 'Classic tour page'; a.style.color = '#9fe8ff'; about.appendChild(a); }
+const tourList = document.createElement('div'); tourList.className = 'side-list';
+Object.entries(TOURS).forEach(([id, text]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; if (id === TOUR) b.setAttribute('aria-current', 'true');
+  b.onclick = () => switchTour(id); tourList.appendChild(b); });
+{ const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Glacier Bay, AK · coming soon'; b.disabled = true; b.style.opacity = '0.5'; tourList.appendChild(b); }
 function renderStops() {
   stopList.textContent = '';
   world.stops.forEach((s, i) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = s.name; if (i === (world.index || 0)) b.setAttribute('aria-current', 'true');
@@ -438,10 +490,10 @@ function renderStops() {
 renderStops();
 ImHereTopbar.init({
   zIndex: 1600, storageKey: 'imhere.aurora',
-  sections: [{ id: 'stops', title: world.name, el: stopList, open: true }, { id: 'about', title: 'XR Aurora', el: about, open: false }],
+  sections: [{ id: 'stops', title: world.name, el: stopList, open: true }, { id: 'tours', title: 'Destinations', el: tourList, open: false }, { id: 'about', title: 'XR Aurora', el: about, open: false }],
   model: () => ({
     live: false, tag: true,
-    data: [['LOC', STOPNAME()], ['CRAFT', 'XR Aurora'], ['REG', 'IH-0000'], ['POV', povLabel]],
+    data: [['LOC', STOPNAME()], ['CRAFT', 'XR Aurora'], ['REG', 'IH-0000'], ['POV', povLabel]].concat(wxNow() ? [['TEMP', wxTemp(wxNow())]] : []),
     pov: POVS.map(([id, l]) => ['pov:' + id, l, '', id === Aurora.pov ? 'sel' : '']),
     layers: [['lay:planes', 'Planes', 'soon', 'dis'], ['lay:ships', 'Ships', 'soon', 'dis'], ['lay:wildlife', 'Wildlife', 'soon', 'dis'], ['lay:iss', 'ISS', 'soon', 'dis']],
     sideTitle: world.name, sideItems: world.stops.map((s, i) => ['stop:' + i, s.name, i === (world.index || 0) ? 'here' : '', i === (world.index || 0) ? 'sel' : '']),
@@ -462,11 +514,28 @@ let welcomeArmed = false;   // the welcome fades 5 s after the first frame (buil
 // ---------------------------------------------------------------- the craft
 Aurora.mount({ scene, camera, renderer, topbarXR: TBX, onToast: toast,
   onPOV: (id, label) => { povLabel = label; ImHereCard.update({ pov: label }); ImHereTopbar.update(); },
-  destinations: [{ id: 'yosemite', text: 'Yosemite Valley, CA', sub: "You're here", sel: true }, { id: 'glacier-bay', text: 'Glacier Bay, AK', sub: 'Coming soon', dis: true }],
+  destinations: Object.entries(TOURS).map(([id, text]) => (id === TOUR ? { id, text, sub: "You're here", sel: true } : { id, text, sub: 'Fly there' }))
+    .concat([{ id: 'glacier-bay', text: 'Glacier Bay, AK', sub: 'Coming soon', dis: true }]),
+  onDestination: (id) => { if (TOURS[id] && id !== TOUR) { switchTour(id); return true; } return false; },
 });
+// another tour: fade to black (the blink sphere in VR), then reload with ?tour= (keeping the POV). A reload ends a VR
+// session, so in VR the session is ended first and the page asks you to enter VR again.
+let switching = false;
+function switchTour(id) {
+  if (switching || !TOURS[id] || id === TOUR) return; switching = true;
+  Aurora.toast('Setting course: ' + TOURS[id]);
+  const u = new URL(location.href); u.searchParams.set('tour', id); if (Aurora.pov) u.searchParams.set('pov', Aurora.pov);
+  setTimeout(() => Aurora.fadeOut(() => {
+    const go = () => location.assign(u.toString());
+    let s = null; try { s = renderer.xr.getSession(); } catch (e) { s = null; }
+    if (s) { try { sessionStorage.setItem('imhere.aurora.reenter', '1'); s.end().catch(() => {}).finally(() => setTimeout(go, 50)); } catch (e) { go(); } }
+    else go();
+  }), 500);
+}
+if (METRIC) Aurora.setScreens({ metric: true });
 Aurora.loadWorld(world);
 const startPov = Q.get('pov'); if (startPov) Aurora.setPOV(startPov, { instant: true });
-function goStop(i) { if (world.go) world.go(i); else if (i > (world.index || 0)) world.next(); else world.prev(); renderStops(); ImHereCard.update(cardData()); ImHereTopbar.update(); fetchWeather(); }
+function goStop(i) { if (world.go) world.go(i); else if (i > (world.index || 0)) world.next(); else world.prev(); renderStops(); ImHereCard.update(cardData()); ImHereTopbar.update(); if (WX.list) showWeather(); else fetchWeather(); }
 $('nextBtn').onclick = () => goStop((world.index || 0) + 1);
 $('prevBtn').onclick = () => goStop((world.index || 0) - 1);
 addEventListener('keydown', (e) => {
@@ -477,7 +546,20 @@ addEventListener('keydown', (e) => {
 
 // ---------------------------------------------------------------- weather on the helm screen (Open-Meteo, no key; skipped when offline)
 const WMO = { 0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Fog', 51: 'Drizzle', 53: 'Drizzle', 55: 'Drizzle', 61: 'Rain', 63: 'Rain', 65: 'Heavy rain', 71: 'Snow', 73: 'Snow', 75: 'Heavy snow', 80: 'Showers', 81: 'Showers', 82: 'Showers', 95: 'Thunderstorm' };
+// the tour's own Open-Meteo request (travel/shared/tour-core.js: every stop at once, °C / km/h for metric tours, °F / mph for Yosemite)
+function wxNow() { return WX.list && Date.now() - WX.at < 30 * 60000 ? WX.list[world.index || 0] : null; }
+function wxTemp(w) { return METRIC ? w.tempC + '°C · ' + w.tempF + '°F' : w.tempF + '°F'; }
+function wxLine(w) { return wxTemp(w) + ' · ' + w.text + (METRIC ? (w.windKmh ? ' · wind ' + (w.windDir ? w.windDir + ' ' : '') + w.windKmh + ' km/h' : '') : (w.windMph ? ' · wind ' + (w.windDir ? w.windDir + ' ' : '') + w.windMph + ' mph' : '')); }
+function showWeather() {
+  const w = wxNow(); if (!w) return;
+  Aurora.setScreens({ wx: w.text + ' · Open-Meteo', temp: wxTemp(w) }); ImHereCard.update(cardData()); ImHereTopbar.update();
+}
 async function fetchWeather() {
+  const T = world.tour;
+  if (T && T.fetchWeather) {
+    try { const l = await T.fetchWeather(); if (l && l.some(Boolean)) { WX.list = l; WX.at = Date.now(); showWeather(); } } catch (e) { /* offline or blocked: the screen keeps "—" */ }
+    return;
+  }
   const s = world.stops[world.index || 0];
   try {
     const ac = new AbortController(), to = setTimeout(() => ac.abort(), 8000);
@@ -486,14 +568,14 @@ async function fetchWeather() {
     Aurora.setScreens({ wx: (WMO[c.weather_code] || 'Code ' + c.weather_code) + ' · Open-Meteo', temp: Math.round(c.temperature_2m) + '°F' });
   } catch (e) { /* offline or blocked: the screen keeps "—" */ }
 }
-if (/github\.io$/i.test(location.hostname)) fetchWeather();
+if (/github\.io$/i.test(location.hostname)) { fetchWeather(); setInterval(fetchWeather, 15 * 60000); }
 
 // ---------------------------------------------------------------- Google Photorealistic 3D Tiles (same approach as 737/index.html)
 let scenery = null, sceneryT = 0, creditClock = 0;
 function sceneryFail(why) {
   console.warn('Real scenery unavailable:', String((why && why.message) || why || '').replace(/[?&]key=[^&\s]+/g, ''));
   if (scenery) { scenery.dispose(); scenery = null; }
-  tilesOn = false; backdrop.setTerrain(true); $('note').textContent = 'Outside: rendered valley (Google 3D scenery did not load).'; ImHereTopbar.update(); ImHereCard.update(cardData());
+  tilesOn = false; backdrop.setTerrain(true); $('note').textContent = 'Outside: ' + landWords.toLowerCase() + ' (Google 3D scenery did not load).'; ImHereTopbar.update(); ImHereCard.update(cardData());
 }
 async function startScenery() {
   if (!GOOGLE_KEY) { sceneryFail('no Google key'); return; }
@@ -536,6 +618,36 @@ async function setupVR() {
 renderer.xr.addEventListener('sessionstart', () => { ImHereTopbar.setXR(true); ImHereTopbar.setCard(true); $('vrBtn').hidden = true; setTimeout(() => Aurora.toast('Welcome aboard XR Aurora'), 600); });
 renderer.xr.addEventListener('sessionend', () => { ImHereTopbar.setXR(false); $('vrBtn').hidden = false; });
 setupVR();
+// after a tour switch from VR (the reload ended the session): say so, and offer the way back in
+try { if (sessionStorage.getItem('imhere.aurora.reenter')) { sessionStorage.removeItem('imhere.aurora.reenter'); setTimeout(() => toast('Now flying ' + TOURS[TOUR] + ' · press Enter VR to go back in'), 1200); } } catch (e) { /* ignore */ }
+
+// ---------------------------------------------------------------- non-Yosemite outside, per frame (no allocations): the sky (and stars) on the eye, in the
+// local horizon on curved tours; haze from the stop; rendered golden-hour / night grades (tour-page.js's values)
+const camW = new THREE.Vector3(), qSky = new THREE.Quaternion(), mSky = new THREE.Matrix4(), Bsky = { w: [1, 0, 0], u: [0, 1, 0], n: [0, 0, 1] };
+const C_DAY = new THREE.Color(0xc7dbed), C_GOLD = new THREE.Color(0xe8c39a), C_NIGHT = new THREE.Color(0x0a1121), T_GOLD = new THREE.Color(0xffd9ae), T_NIGHT = new THREE.Color(0x3a4766), tint = new THREE.Color();
+let haze = 0, tintClock = 0, tintHex = 0xffffff, gradeSig = '';
+function outsideStep(dt) {
+  camera.getWorldPosition(camW);
+  if (CURVED && world.tour && world.tour.FRAME) {
+    basisInto(world.tour.FRAME, camW.x, camW.y, camW.z, Bsky);
+    mSky.set(Bsky.w[0], Bsky.u[0], Bsky.n[0], 0, Bsky.w[1], Bsky.u[1], Bsky.n[1], 0, Bsky.w[2], Bsky.u[2], Bsky.n[2], 0, 0, 0, 0, 1); qSky.setFromRotationMatrix(mSky);
+    backdrop.update(camera, qSky);
+  } else backdrop.update(camera);
+  const s = world.stops[world.index || 0], src = s.src || {}, k = 1 - Math.exp(-dt / 3);
+  G.gold += ((src.golden ? 1 : 0) - G.gold) * k; G.night += ((src.night ? 1 : 0) - G.night) * k; haze += ((src.haze || 0.1) - haze) * k;
+  backdrop.setGrade(G.gold, G.night);
+  if (nightSky) { nightSky.group.position.copy(camW); if (CURVED) nightSky.group.quaternion.copy(qSky); nightSky.set(G.night, clock.elapsedTime); }
+  const alt = Math.max(0, s.alt - ((PARK && PARK.hazeTopM) || 2500));
+  scene.fog.density = Math.max(1.4e-5, (1e-5 + haze * haze * 6e-4) / (1 + alt / 4000));
+  scene.fog.color.copy(C_DAY).lerp(C_GOLD, G.gold).lerp(C_NIGHT, G.night);
+  tint.setRGB(1, 1, 1).lerp(T_GOLD, G.gold).lerp(T_NIGHT, G.night);
+  if (backdrop.terrain.material) backdrop.terrain.material.color.copy(tint);
+  if ((tintClock += dt) > 0.5) {   // the real scenery and the card follow the grade a couple of times a second, only while it changes
+    tintClock = 0; const h = tint.getHex();
+    if (scenery && h !== tintHex) { tintHex = h; try { scenery.setTint(h); } catch (e) { /* ignore */ } }
+    const sig = (G.gold > 0.05 ? 'g' : '') + (G.night > 0.05 ? 'n' : ''); if (sig !== gradeSig) { gradeSig = sig; ImHereCard.update(cardData()); }
+  }
+}
 
 // ---------------------------------------------------------------- loop
 const clock = new THREE.Clock();
@@ -544,13 +656,13 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(0.1, clock.getDelta());
   Aurora.update(dt);
   sceneryStep(dt);
-  backdrop.update(camera);
+  if (YOS) backdrop.update(camera); else outsideStep(dt);
   if ((cardClock += dt) > 1) { cardClock = 0; ImHereCard.update({ time: Date.now() }); }
   renderer.render(scene, camera);
   if (!welcomeArmed) { welcomeArmed = true; setTimeout(() => { $('welcome').style.opacity = '0'; }, 5000); }
 });
 
-window.__aurora = { Aurora, renderer, scene, camera, world, TBX, backdrop, XRS, scenery: () => scenery, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles }) };
+window.__aurora = { Aurora, renderer, scene, camera, world, TBX, backdrop, XRS, TOUR, nightSky, switchTour, scenery: () => scenery, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles }) };
 </script>
 </body>
 </html>
