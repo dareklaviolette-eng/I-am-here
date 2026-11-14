@@ -14,6 +14,7 @@
   a.tour:hover, a.tour:focus-visible { border-color: rgba(160,220,255,.8); outline: none; }
   a.tour b { font-size: 20px; font-weight: 600; } a.tour span { display: block; color: rgba(255,255,255,.7); font-size: 14px; margin-top: 4px; }
   a.tour i { font-style: normal; font: 12px ui-monospace, Menlo, monospace; color: rgba(110,220,235,.85); }
+  a.classic { display: inline-block; margin: -4px 0 14px 4px; font: 12px ui-monospace, Menlo, monospace; color: rgba(160,220,255,.6); }
   .soon { margin-top: 12px; font: 12px ui-monospace, Menlo, monospace; color: rgba(255,255,255,.45); }
 </style>
 </head>
@@ -21,10 +22,13 @@
 <main>
   <div class="k">I'M HERE · TRAVEL DESK · ABOARD XR AURORA</div>
   <h1>Where to today?</h1>
-  <p>Guided tours of real places in Google 3D, with live weather and a field guide. On screens, or in VR.</p>
-  <a class="tour" href="yosemite/"><i>TOUR 1 · CALIFORNIA</i><br><b>Yosemite National Park</b><span>Seven stops: Tunnel View, El Capitan, Yosemite Falls, Taft Point, Glacier Point at golden hour, Mariposa Grove, Tuolumne Meadows.</span></a>
-  <a class="tour" href="swiss-alps/"><i>TOUR 2 · SWITZERLAND</i><br><b>The Swiss Alps</b><span>Seven stops: Lake Oeschinen, the Lauterbrunnen Valley, the Eiger North Face, Jungfraujoch and the Aletsch Glacier, the Aletsch from above, the Matterhorn at sunrise, Gornergrat.</span></a>
-  <a class="tour" href="new-zealand/"><i>TOUR 3 · NEW ZEALAND</i><br><b>Fiordland and the Southern Alps</b><span>Six stops: Piopiotahi / Milford Sound, Stirling Falls, Doubtful Sound / Patea, Aoraki / Mount Cook, the Tasman Glacier, Lake Tekapo under the stars.</span></a>
+  <p>Guided tours of real places in Google 3D, with live weather, flown in the XR Aurora. On screens, or in VR.</p>
+  <a class="tour" href="../aurora/?tour=yosemite"><i>TOUR 1 · CALIFORNIA</i><br><b>Yosemite National Park</b><span>Seven stops: Tunnel View, El Capitan, Yosemite Falls, Taft Point, Glacier Point at golden hour, Mariposa Grove, Tuolumne Meadows.</span></a>
+  <a class="classic" href="yosemite/?classic=1">Classic tour page (field guide) ›</a>
+  <a class="tour" href="../aurora/?tour=swiss-alps"><i>TOUR 2 · SWITZERLAND</i><br><b>The Swiss Alps</b><span>Seven stops: Lake Oeschinen, the Lauterbrunnen Valley, the Eiger North Face, Jungfraujoch and the Aletsch Glacier, the Aletsch from above, the Matterhorn at sunrise, Gornergrat.</span></a>
+  <a class="classic" href="swiss-alps/?classic=1">Classic tour page (field guide) ›</a>
+  <a class="tour" href="../aurora/?tour=new-zealand"><i>TOUR 3 · NEW ZEALAND</i><br><b>Fiordland and the Southern Alps</b><span>Six stops: Piopiotahi / Milford Sound, Stirling Falls, Doubtful Sound / Patea, Aoraki / Mount Cook, the Tasman Glacier, Lake Tekapo under the stars.</span></a>
+  <a class="classic" href="new-zealand/?classic=1">Classic tour page (field guide) ›</a>
   <div class="soon">More places soon.</div>
 </main>
 </body>
