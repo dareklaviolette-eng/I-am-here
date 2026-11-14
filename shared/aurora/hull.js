@@ -56,7 +56,7 @@ function plateGeometry(geo, side, cy, cz, w, h) {
   g.computeBoundingSphere(); return g;
 }
 
-// load the hull: resolves { root, mesh, glows, envMap } (not yet in the scene) or rejects (the caller keeps the fallback)
+// load the hull: resolves { root, mesh, glows, envMap, envRT } (not yet in the scene) or rejects (the caller keeps the fallback)
 export function loadHull(renderer, { url = HULL_URL, name = 'XR AURORA', reg = 'IH-0000', timeout = 45000 } = {}) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('hull load timed out')), timeout);
@@ -66,7 +66,8 @@ export function loadHull(renderer, { url = HULL_URL, name = 'XR AURORA', reg = '
         let mesh = null; gltf.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
         if (!mesh) throw new Error('no mesh in ' + url);
         // reflections: a studio room (soft boxes) so the chrome reads as chrome from any side
-        const pm = new THREE.PMREMGenerator(renderer), envMap = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose();
+        const pm = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment(), envRT = pm.fromScene(room, 0.04), envMap = envRT.texture; pm.dispose();
+        if (room.dispose) room.dispose(); else room.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });   // only needed to bake the reflections
         const m = mesh.material;
         m.envMap = envMap; m.envMapIntensity = 1.0; m.emissive.set(0xffffff); m.emissiveIntensity = 1.1;
         m.side = THREE.FrontSide;   // the shell is closed; back faces only cost fill rate
@@ -86,7 +87,7 @@ export function loadHull(renderer, { url = HULL_URL, name = 'XR AURORA', reg = '
         const sm = new THREE.SpriteMaterial({ map: gt, color: 0x7fd2ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false, opacity: 0.9 });
         for (const [x, y, z, s] of NOZZLES) { const sp = new THREE.Sprite(sm); sp.position.set(x, y, z); sp.scale.setScalar(s); sp.renderOrder = 6; glows.add(sp); }
         root.add(glows);
-        resolve({ root, mesh, glows, envMap });
+        resolve({ root, mesh, glows, envMap, envRT });   // envRT: dispose it (not just envMap) to free the GPU memory
       } catch (er) { reject(er); }
     }, undefined, (er) => { clearTimeout(timer); reject(er); });
   });

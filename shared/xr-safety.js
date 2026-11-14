@@ -111,6 +111,9 @@
       }, 1200);
     }
     api.exit = exit;
+    // api.grace(ms): a page about to do heavy work under a fade (e.g. the XR shell swapping worlds) asks the watchdog to
+    // look away for up to 5 s. Exits (B / Y, Exit VR) keep working; frames are watched again afterwards.
+    api.grace = function (ms) { var t = performance.now(), g = Math.max(0, Math.min(5000, ms || 0)); W.start = Math.max(W.start, t - 4000 + g); W.last = 0; resetHist(); };
 
     // ---- per-frame: button placement, input, hit testing (all in the rig's local space; preallocated temporaries)
     var Minv = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(),

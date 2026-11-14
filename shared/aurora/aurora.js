@@ -8,7 +8,12 @@
 //   import { Aurora } from '../shared/aurora/aurora.js';
 //   Aurora.mount({ scene, camera, renderer, dom?, onToast?(text), onPOV?(id, label), onRing?(id) -> true to take over,
 //                  onDestination?(id), destinations?: [{ id, text, sub, dis, sel }], topbarXR?: ImHereTopbar.xr(...) })
-//       Adds the craft to the scene and puts the camera inside it (camera -> rig -> craft). Call once.
+//       Adds the craft to the scene and puts the camera inside it (camera -> rig -> craft). Call once per instance.
+//       Hosts that own the camera rig (the XR shell) pass hostRig: the craft carries that rig (with the camera already in it)
+//       instead of making its own; xrSelect: false leaves VR select to the host (it calls Aurora.select with world rays);
+//       pointer: false leaves screen taps / drags to the host.
+//   Aurora.unmount()          remove the craft and free everything it made (listeners, GPU memory, DOM); hostRig goes back
+//                             to the host untouched. createAurora() makes a fresh instance (the shell makes one per visit).
 //   Aurora.loadWorld(world)   ride a world (see WORLD below). Aurora calls world.update(dt) every frame.
 //   Aurora.setPOV(id)         'deck' | 'helm' | 'command' | 'bethere' | 'chase' | 'god'  (fade-blink; instant on first call)
 //   Aurora.update(dt)         call once per frame BEFORE renderer.render (the host owns the loop)
@@ -44,7 +49,7 @@ import { staticAtlas, ringMenu, screensAtlas, holoPanel, toastPanel, globeTextur
 import { L, makeMaterials, makeFxMaterials, buildInterior, buildExterior } from './build.js';
 import { loadHull, HULL_CREDIT } from './hull.js';
 
-const D2R = Math.PI / 180;
+const D2R = Math.PI / 180, AXES = ['x', 'y', 'z'];
 export const POVS = [['deck', 'Observation deck'], ['helm', 'Helm'], ['command', 'Command'], ['bethere', 'Be There'], ['chase', 'Chase'], ['god', "God's eye"]];
 // rig pose per POV in the craft frame: floor point p, facing yaw (0 = toward the bow), seated / standing eye height (screens),
 // default pitch (screens); look: a point the camera aims at (outside POVs)
@@ -71,7 +76,22 @@ function envRoom() {
   return sc;
 }
 
-function createAurora() {
+// free a tree's geometries, materials and textures (unmount)
+function disposeTree(root, seen = new Set()) {
+  root.traverse((o) => {
+    if (o.geometry && !seen.has(o.geometry)) { seen.add(o.geometry); o.geometry.dispose(); }
+    if (o.isInstancedMesh && o.dispose) o.dispose();
+    for (const m of o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []) disposeMat(m, seen);
+  });
+}
+function disposeMat(m, seen) {
+  if (!m || seen.has(m)) return; seen.add(m);
+  for (const k in m) { const v = m[k]; if (v && v.isTexture && !seen.has(v)) { seen.add(v); v.dispose(); } }
+  if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture && !seen.has(v)) { seen.add(v); v.dispose(); } }
+  m.dispose();
+}
+
+export function createAurora() {
   const A = { povs: POVS, pov: null, mounted: false, quality: 0, hull: 'procedural', credits: [HULL_CREDIT], hullReady: null };
   let scene, camera, renderer, opts, M, fx, interior, exterior, craft, rig, uiMount, fade2D, fadeVR, lights = [], sun, meshy = null;
   let world = null, pose = null, yaw = 0, yawInit = false, time = 0, look = { yaw: 0, pitch: 0 }, screensAt = 0, extra = {};
@@ -83,22 +103,26 @@ function createAurora() {
   const rayO = [new THREE.Vector3(), new THREE.Vector3()], rayD = [new THREE.Vector3(), new THREE.Vector3()];
   const mBasis = new THREE.Matrix4(), qBasis = new THREE.Quaternion(), Y_AXIS = new THREE.Vector3(0, 1, 0);
   let fadeHold = null;   // A.fadeOut: fade to black, call fn, stay black
+  let ownRig = true, envTex = null /* the PMREM render target */, hemi = null, panelsAll = [], domEl = null, H = {};   // unmount bookkeeping
 
   A.mount = function (o) {
     if (A.mounted) return A; A.mounted = true; opts = o || {};
     scene = o.scene; camera = o.camera; renderer = o.renderer;
-    const pm = new THREE.PMREMGenerator(renderer), envScene = envRoom(), env = pm.fromScene(envScene, 0.02).texture; pm.dispose();
+    const pm = new THREE.PMREMGenerator(renderer), envScene = envRoom(), envRT = pm.fromScene(envScene, 0.02), env = envRT.texture; pm.dispose();
+    disposeTree(envScene); envTex = envRT;   // the room was only needed to bake the reflections
     M = makeMaterials(env);
-    ring = ringMenu(); screens = screensAtlas(); holo = holoPanel(); toastP = toastPanel();
+    ring = ringMenu(); screens = screensAtlas(); holo = holoPanel(); toastP = toastPanel(); panelsAll = [ring, screens, holo, toastP];
     fx = makeFxMaterials(staticAtlas(), screens.tex, ring.tex, holo.tex, globeTexture());
     fx.ringMat.map = ring.tex;
     interior = buildInterior(M, fx); exterior = buildExterior(M, fx);
     craft = new THREE.Group(); craft.name = 'XR Aurora'; craft.add(interior.root, exterior.root); scene.add(craft);
-    rig = new THREE.Group(); rig.name = 'aurora-rig'; craft.add(rig);
-    if (camera.parent) camera.parent.remove(camera); rig.add(camera); camera.position.set(0, 1.2, 0); camera.rotation.set(0, 0, 0, 'YXZ');
+    if (o.hostRig) { rig = o.hostRig; ownRig = false; craft.add(rig); if (camera.parent !== rig) rig.add(camera); }
+    else if (o.deferRig) { rig = new THREE.Group(); rig.name = 'aurora-rig-pending'; craft.add(rig); ownRig = false; }   // attachRig(hostRig) later
+    else { rig = new THREE.Group(); rig.name = 'aurora-rig'; craft.add(rig); if (camera.parent) camera.parent.remove(camera); rig.add(camera); }
+    if (!renderer.xr.isPresenting && camera.parent === rig) { camera.position.set(0, 1.2, 0); camera.rotation.set(0, 0, 0, 'YXZ'); }
     uiMount = new THREE.Group(); uiMount.name = 'aurora-ui-mount'; rig.add(uiMount);
     // lights: soft sky fill, a sun (direction fixed in the world, follows the craft), warm lounge + cool drive accents
-    const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x3a3128, 1.1); craft.add(hemi);
+    hemi = new THREE.HemisphereLight(0xcfe6ff, 0x3a3128, 1.1); craft.add(hemi);
     sun = new THREE.DirectionalLight(0xfff1dc, 2.2); scene.add(sun); scene.add(sun.target);
     const warm = new THREE.PointLight(0xffb36b, 30, 16, 2); warm.position.set(L.table.x, 4.2, L.table.z); craft.add(warm);
     const warm2 = new THREE.PointLight(0xffc285, 22, 10, 2); warm2.position.set(0, 4.2, 3.0); craft.add(warm2);
@@ -116,36 +140,73 @@ function createAurora() {
     toastMesh.renderOrder = 10001; toastMesh.visible = false; toastMesh.position.set(0, -0.1, -0.85); toastMesh.rotation.x = 0.12; uiMount.add(toastMesh);
     if (opts.topbarXR) opts.topbarXR.attach(uiMount);
     // pointer (screens): drag to look, tap to select, hover highlights
-    const dom = opts.dom || renderer.domElement; let down = null;
-    dom.addEventListener('pointerdown', (ev) => { down = { x: ev.clientX, y: ev.clientY, yaw: look.yaw, pitch: look.pitch, moved: false, id: ev.pointerId }; try { dom.setPointerCapture(ev.pointerId); } catch (er) { /* */ } });
-    dom.addEventListener('pointermove', (ev) => {
+    const dom = opts.dom || renderer.domElement; let down = null; domEl = dom;
+    H.down = (ev) => { down = { x: ev.clientX, y: ev.clientY, yaw: look.yaw, pitch: look.pitch, moved: false, id: ev.pointerId }; try { dom.setPointerCapture(ev.pointerId); } catch (er) { /* */ } };
+    H.move = (ev) => {
       if (down && ev.pointerId === down.id) {
         const dx = ev.clientX - down.x, dy = ev.clientY - down.y; if (Math.hypot(dx, dy) > 6) down.moved = true;
         if (down.moved) { const k = 2.2 / Math.max(300, dom.clientHeight); look.yaw = down.yaw + dx * k; look.pitch = THREE.MathUtils.clamp(down.pitch + dy * k, -1.25, 1.1); }
       } else if (ev.pointerType === 'mouse') { screenRay(ev, vO, vD); A.hover(vO, vD); hoverEnd(); dom.style.cursor = hover.ring || hover.holo || hover.steps ? 'pointer' : ''; }
-    });
-    const up = (ev) => { if (!down || ev.pointerId !== down.id) return; const tap = !down.moved; down = null; if (tap) { screenRay(ev, vO, vD); A.select(vO, vD); } };
-    dom.addEventListener('pointerup', up); dom.addEventListener('pointercancel', () => { down = null; });
+    };
+    H.up = (ev) => { if (!down || ev.pointerId !== down.id) return; const tap = !down.moved; down = null; if (tap) { screenRay(ev, vO, vD); A.select(vO, vD); } };
+    H.cancel = () => { down = null; };
+    if (opts.pointer !== false) { dom.addEventListener('pointerdown', H.down); dom.addEventListener('pointermove', H.move); dom.addEventListener('pointerup', H.up); dom.addEventListener('pointercancel', H.cancel); }
     // VR
     const xr = renderer.xr;
-    xr.addEventListener('sessionstart', () => {
+    H.ss = () => {
       const s = xr.getSession(); sessionRef = s; xrMountPending = 1; xrFrames = 0;
       camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
-      if (s) s.addEventListener('selectstart', onSelectStart);
+      if (s && opts.xrSelect !== false) s.addEventListener('selectstart', onSelectStart);
       // the headset's own recenter (hold the Meta button) moves the floor's origin: mount the UI again in front of the head
       try { xrRef = xr.getReferenceSpace(); if (xrRef && xrRef.addEventListener) xrRef.addEventListener('reset', onRefReset); } catch (er) { xrRef = null; }
       applyPOV(A.pov || 'deck');
-    });
-    xr.addEventListener('sessionend', () => {
-      try { if (xrRef && xrRef.removeEventListener) xrRef.removeEventListener('reset', onRefReset); } catch (er) { /* ignore */ } xrRef = null; sessionRef = null; fadeVR.visible = false; toastMesh.visible = false; applyPOV(A.pov || 'deck'); });
+    };
+    H.se = () => {
+      try { if (xrRef && xrRef.removeEventListener) xrRef.removeEventListener('reset', onRefReset); } catch (er) { /* ignore */ } xrRef = null;
+      if (sessionRef) sessionRef.removeEventListener('selectstart', onSelectStart); sessionRef = null; fadeVR.visible = false; toastMesh.visible = false; applyPOV(A.pov || 'deck'); };
+    xr.addEventListener('sessionstart', H.ss); xr.addEventListener('sessionend', H.se);
     A.craft = craft; A.rig = rig; A.camera = camera; A.uiMount = uiMount; A.interior = interior; A.exterior = exterior; A.materials = M;
     A.setPOV(opts.pov || 'deck', { instant: true });
+    if (xr.isPresenting && !o.deferRig) H.ss();   // mounted inside a running VR session (the shell jumps between worlds without ending it)
     // the Meshy hull: swap it in when it arrives; the procedural hull stays as the fallback
     const proc = exterior.root.children.filter((o) => o !== exterior.field);
     A.hullReady = loadHull(renderer, { url: opts.hullUrl }).then((h) => {
+      if (!A.mounted) { disposeTree(h.root); if (h.envRT) h.envRT.dispose(); else if (h.envMap) h.envMap.dispose(); return 'procedural'; }   // unmounted while it loaded
       meshy = h; proc.forEach((o) => { o.visible = false; }); exterior.root.add(h.root); h.glows.visible = A.quality < 2;
       A.hull = 'meshy'; if (A.pov) applyVisibility(A.pov); return 'meshy';
     }).catch((er) => { console.warn('[Aurora] Meshy hull did not load; procedural hull stays:', er && er.message || er); return 'procedural'; });
+    return A;
+  };
+
+  // deferRig: build now (in the background), take the host's rig when the world is shown
+  A.attachRig = function (hostRig) {
+    const old = rig; old.remove(uiMount); old.remove(fadeVR); if (old.parent === craft) craft.remove(old);
+    rig = hostRig; craft.add(rig); rig.add(uiMount); rig.add(fadeVR); if (camera.parent !== rig) rig.add(camera);
+    A.rig = rig; ownRig = false; applyPOV(A.pov || 'deck');
+    if (renderer.xr.isPresenting) H.ss();
+    return A;
+  };
+  A.unmount = function () {
+    if (!A.mounted) return A; A.mounted = false;
+    const xr = renderer.xr;
+    if (domEl) { domEl.removeEventListener('pointerdown', H.down); domEl.removeEventListener('pointermove', H.move); domEl.removeEventListener('pointerup', H.up); domEl.removeEventListener('pointercancel', H.cancel); domEl.style.cursor = ''; }
+    xr.removeEventListener('sessionstart', H.ss); xr.removeEventListener('sessionend', H.se);
+    if (sessionRef) sessionRef.removeEventListener('selectstart', onSelectStart); sessionRef = null;
+    try { if (xrRef && xrRef.removeEventListener) xrRef.removeEventListener('reset', onRefReset); } catch (er) { /* ignore */ } xrRef = null;
+    const seen = new Set();
+    // the rig's own children that Aurora added (the UI mount, the VR fade); a host rig goes back untouched
+    for (const o of [uiMount, fadeVR]) { o.removeFromParent(); disposeTree(o, seen); }
+    if (opts.topbarXR && opts.topbarXR.detach) opts.topbarXR.detach();
+    if (rig.parent === craft) craft.remove(rig);
+    craft.removeFromParent(); scene.remove(sun); scene.remove(sun.target); if (sun.dispose) sun.dispose();
+    disposeTree(craft, seen);
+    if (meshy) { if (meshy.envRT) meshy.envRT.dispose(); else if (meshy.envMap) meshy.envMap.dispose(); }
+    for (const k in M) if (M[k] && M[k].isMaterial) disposeMat(M[k], seen);
+    for (const k in fx) if (fx[k] && fx[k].isMaterial) disposeMat(fx[k], seen);
+    for (const p of panelsAll) if (p && p.tex && p.tex.dispose) p.tex.dispose();
+    if (envTex) envTex.dispose();
+    if (fade2D) fade2D.remove();
+    world = null; meshy = null; blink = null; fadeHold = null;
     return A;
   };
 
@@ -180,7 +241,7 @@ function createAurora() {
     if (P.look) { const dx = P.look[0] - P.p[0], dy = P.look[1] - P.p[1] - (vr ? 1.6 : 0), dz = P.look[2] - P.p[2]; yw = Math.atan2(-dx, -dz); pitch = Math.atan2(dy, Math.hypot(dx, dz)); }
     rig.rotation.set(0, yw, 0);
     look.yaw = 0; look.pitch = pitch;
-    if (!vr) { camera.position.set(0, P.eye, 0); camera.rotation.set(pitch, 0, 0, 'YXZ'); }
+    if (!vr && camera.parent === rig) { camera.position.set(0, P.eye, 0); camera.rotation.set(pitch, 0, 0, 'YXZ'); }
     applyVisibility(id);
     // Observation deck is calm: the helm screens dim; Helm / Command: live
     fx.screenMat.color.setScalar(id === 'deck' || id === 'bethere' ? 0.28 : 1);
@@ -225,7 +286,7 @@ function createAurora() {
   function hitSteps(O, D) {
     if (!interior.root.visible) return -1;
     const b = interior.dyn.steps; let t0 = 0, t1 = 60;
-    for (const ax of ['x', 'y', 'z']) {
+    for (let ai = 0; ai < 3; ai++) { const ax = AXES[ai];
       if (Math.abs(D[ax]) < 1e-9) { if (O[ax] < b.min[ax] || O[ax] > b.max[ax]) return -1; continue; }
       let a = (b.min[ax] - O[ax]) / D[ax], c = (b.max[ax] - O[ax]) / D[ax]; if (a > c) { const s = a; a = c; c = s; }
       t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) return -1;
@@ -238,8 +299,8 @@ function createAurora() {
     const b = (L.ringR1 - L.ringR0) / (L.ringY1 - L.ringY0), a = L.ringR0 - b * L.ringY0;
     const A2 = D.x * D.x + D.z * D.z - b * b * D.y * D.y, B2 = 2 * (ox * D.x + oz * D.z - (a + b * oy) * b * D.y), C2 = ox * ox + oz * oz - (a + b * oy) * (a + b * oy);
     const disc = B2 * B2 - 4 * A2 * C2; if (disc < 0 || Math.abs(A2) < 1e-9) return null;
-    const sq = Math.sqrt(disc);
-    for (const t of [(-B2 - sq) / (2 * A2), (-B2 + sq) / (2 * A2)].sort((x, y) => x - y)) {
+    const sq = Math.sqrt(disc), ta = (-B2 - sq) / (2 * A2), tb = (-B2 + sq) / (2 * A2);
+    for (let k = 0; k < 2; k++) { const t = k === 0 ? Math.min(ta, tb) : Math.max(ta, tb);   // nearest first (no allocations)
       if (t <= 0) continue; const y = oy + D.y * t; if (y < L.ringY0 || y > L.ringY1) continue;
       let phi = Math.atan2(ox + D.x * t, oz + D.z * t); phi = (phi - L.ringPhi0 + Math.PI * 4) % (Math.PI * 2);
       if (phi > L.ringPhiLen) return null;   // the back of the band: no item (and it hides nothing behind it)
