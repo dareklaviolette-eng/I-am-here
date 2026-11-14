@@ -424,12 +424,12 @@ function cardData() {
     id: { label: 'CRAFT', value: 'XR Aurora' }, rte: world.name + ' · ' + s.name, route: '→ ' + s.name, pov: povLabel,
     sig: { source: tilesOn ? 'Google 3D' : 'Rendered valley', tag: 'RENDERED CRAFT' }, time: Date.now(),
     details: { rows: [['Craft', 'XR Aurora (Aurora-class lead ship)'], ['REG', 'IH-0000'], ['World', world.name + ' (' + worldFrom + ')'], ['Scenery', tilesOn ? 'Google Photorealistic 3D Tiles' : 'Rendered stand-in valley']],
-      notes: ['The craft and its interior are rendered. Outside: Google Photorealistic 3D Tiles where they load; a rendered valley until then.'] } };
+      notes: ['The craft and its interior are rendered. Outside: Google Photorealistic 3D Tiles where they load; a rendered valley until then.', ...Aurora.credits] } };
 }
 ImHereCard.init({ zIndex: 1500, ...cardData() });
 const stopList = document.createElement('div'); stopList.className = 'side-list';
 const about = document.createElement('div'); about.className = 'side-about';
-about.textContent = 'XR Aurora, Aurora-class lead ship (IH-0000). Lower level: the Observation Lounge and the globe table. Up the steps: the Helm and the Temporal Drive. Drag to look around; tap the ring menu or the steps.';
+about.textContent = 'XR Aurora, Aurora-class lead ship (IH-0000). Lower level: the Observation Lounge and the globe table. Up the steps: the Helm and the Temporal Drive. Drag to look around; tap the ring menu or the steps. ' + Aurora.credits.join(' · ') + '.';
 function renderStops() {
   stopList.textContent = '';
   world.stops.forEach((s, i) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = s.name; if (i === (world.index || 0)) b.setAttribute('aria-current', 'true');

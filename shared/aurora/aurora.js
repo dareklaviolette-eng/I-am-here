@@ -1,7 +1,8 @@
 // I'M HERE · XR Aurora (Aurora-class lead ship, REG IH-0000), v1: the shared craft every tour and department loads into.
 // Procedural three.js r165 (no downloads). One room, two levels: the Observation Lounge (globe table + ring menu, curved
 // sofas, glass dome) and, up three glowing steps, the Helm (pilot seat + two, curved console with five live screens),
-// with the Temporal Drive behind it. Exterior hull + energy field for Chase and God's eye.
+// with the Temporal Drive behind it. Exterior hull + energy field for Chase and God's eye: the founder's Meshy model
+// (models/xr-aurora-hull.glb via hull.js, loaded after mount); the procedural hull shows until then, and if it fails.
 //
 // HOST API
 //   import { Aurora } from '../shared/aurora/aurora.js';
@@ -16,6 +17,8 @@
 //   Aurora.setQuality(level)  0 full, 1 lighter (no field / point lights), 2 lightest; wire it to xr-safety onQuality
 //   Aurora.hover(o, d) / Aurora.select(o, d)   world-space ray (THREE.Vector3s) against the craft's controls
 //   Aurora.povs               [[id, label]]   Aurora.pov  current id   Aurora.craft / rig / camera / uiMount
+//   Aurora.hull               'procedural' until the Meshy hull is in, then 'meshy'   Aurora.hullReady  a Promise of that
+//   Aurora.credits            credit lines for the host's Details (the Meshy hull line)
 //
 // WORLD (a small interface a tour module exports; e.g. travel/<place>/tour.js or aurora/yosemite-world.js)
 //   {
@@ -37,6 +40,7 @@
 import * as THREE from 'three';
 import { staticAtlas, ringMenu, screensAtlas, holoPanel, toastPanel, globeTexture, RING_ITEMS } from './panels.js';
 import { L, makeMaterials, makeFxMaterials, buildInterior, buildExterior } from './build.js';
+import { loadHull, HULL_CREDIT } from './hull.js';
 
 const D2R = Math.PI / 180;
 export const POVS = [['deck', 'Observation deck'], ['helm', 'Helm'], ['command', 'Command'], ['bethere', 'Be There'], ['chase', 'Chase'], ['god', "God's eye"]];
@@ -66,8 +70,8 @@ function envRoom() {
 }
 
 function createAurora() {
-  const A = { povs: POVS, pov: null, mounted: false, quality: 0 };
-  let scene, camera, renderer, opts, M, fx, interior, exterior, craft, rig, uiMount, fade2D, fadeVR, lights = [], sun;
+  const A = { povs: POVS, pov: null, mounted: false, quality: 0, hull: 'procedural', credits: [HULL_CREDIT], hullReady: null };
+  let scene, camera, renderer, opts, M, fx, interior, exterior, craft, rig, uiMount, fade2D, fadeVR, lights = [], sun, meshy = null;
   let world = null, pose = null, yaw = 0, yawInit = false, time = 0, look = { yaw: 0, pitch: 0 }, screensAt = 0, extra = {};
   let blink = null, ring, screens, holo, toastP, toastMesh, toastUntil = 0, holoOpen = false, hover = { ring: null, holo: null, steps: false };
   let xrMountPending = 0, xrFrames = 0, sessionRef = null;
@@ -128,6 +132,12 @@ function createAurora() {
     xr.addEventListener('sessionend', () => { sessionRef = null; fadeVR.visible = false; toastMesh.visible = false; applyPOV(A.pov || 'deck'); });
     A.craft = craft; A.rig = rig; A.camera = camera; A.uiMount = uiMount; A.interior = interior; A.exterior = exterior; A.materials = M;
     A.setPOV(opts.pov || 'deck', { instant: true });
+    // the Meshy hull: swap it in when it arrives; the procedural hull stays as the fallback
+    const proc = exterior.root.children.filter((o) => o !== exterior.field);
+    A.hullReady = loadHull(renderer, { url: opts.hullUrl }).then((h) => {
+      meshy = h; proc.forEach((o) => { o.visible = false; }); exterior.root.add(h.root); h.glows.visible = A.quality < 2;
+      A.hull = 'meshy'; if (A.pov) applyVisibility(A.pov); return 'meshy';
+    }).catch((er) => { console.warn('[Aurora] Meshy hull did not load; procedural hull stays:', er && er.message || er); return 'procedural'; });
     return A;
   };
 
@@ -163,14 +173,19 @@ function createAurora() {
     rig.rotation.set(0, yw, 0);
     look.yaw = 0; look.pitch = pitch;
     if (!vr) { camera.position.set(0, P.eye, 0); camera.rotation.set(pitch, 0, 0, 'YXZ'); }
-    interior.root.visible = id !== 'bethere';
-    exterior.root.visible = !!P.outside;
-    exterior.field.visible = !!P.outside && A.quality < 1;
+    applyVisibility(id);
     // Observation deck is calm: the helm screens dim; Helm / Command: live
     fx.screenMat.color.setScalar(id === 'deck' || id === 'bethere' ? 0.28 : 1);
     if (holoOpen && !(id === 'command' || id === 'deck')) setHolo(false);
     if (vr) xrMountPending = 1;
     if (prev !== id && opts.onPOV) try { opts.onPOV(id, POVS.find((x) => x[0] === id)[1]); } catch (er) { console.error('[Aurora] onPOV', er); }
+  }
+  function applyVisibility(id) {
+    const P = POV[id];
+    // outside, the Meshy hull is opaque: the interior inside it would only cost draw calls (the procedural hull has see-through glass)
+    interior.root.visible = id !== 'bethere' && !(P.outside && meshy);
+    exterior.root.visible = !!P.outside;
+    exterior.field.visible = !!P.outside && A.quality < 1;
   }
   function mountUI() {   // VR: the UI band sits where you look when the POV starts (rig space), and stays there
     e.setFromQuaternion(camera.quaternion, 'YXZ');
@@ -335,6 +350,7 @@ function createAurora() {
     lights.forEach((l) => { l.visible = n < 1; });
     exterior.field.visible = n < 1 && exterior.root.visible;
     interior.dyn.coreGlow.visible = n < 2;
+    if (meshy) meshy.glows.visible = n < 2;
     return A;
   };
 
