@@ -229,11 +229,12 @@
 
     // ---- watchdog (ring buffer of the last 2 s of frames; no allocations)
     var RING = 256, ringT = new Float64Array(RING), ringDt = new Float32Array(RING);
-    var W = { start: 0, last: 0, head: 0, n: 0, levelAt: 0, big0: 0, big1: 0, timer: 0, errRun: 0, errSince: 0 };
+    var W = { start: 0, last: 0, head: 0, n: 0, levelAt: 0, big0: 0, big1: 0, timer: 0, errRun: 0, errSince: 0, recoverWait: 12000, recovered: 0 };
     function resetHist() { W.head = 0; W.n = 0; W.last = 0; }
     function setLevel(n, why) {
       if (n <= api.level) return;
-      api.level = n; W.levelAt = performance.now(); resetHist();
+      var t = performance.now(); if (W.recovered && t - W.recovered < 20000) W.recoverWait = Math.min(W.recoverWait * 2, 120000);   // undid a recovery: wait longer next time
+      api.level = n; W.levelAt = t; resetHist();
       try { console.warn('[I\'M HERE VR] quality level ' + n + ': ' + why); } catch (e) { /* ignore */ }
       if (o.onQuality) try { o.onQuality(n); } catch (e) { logErr('onQuality', e); }
     }
@@ -250,11 +251,18 @@
         W.big0 = W.big1; W.big1 = now;
       }
       ringT[W.head] = now; ringDt[W.head] = dt; W.head = (W.head + 1) % RING; if (W.n < RING) W.n++;
-      if (now - W.levelAt < 2500 || api.level >= 2) return;
+      if (now - W.levelAt < 2500) return;
       // share of the last 2 s spent in frames over 50 ms (time-weighted, so it also works at a few frames per second)
-      var n = 0, all = 0, slow = 0;
-      for (var i = 1; i <= W.n; i++) { var j = (W.head - i + RING) % RING; if (now - ringT[j] > 2000) break; n++; all += ringDt[j]; if (ringDt[j] > 50) slow += ringDt[j]; }
-      if (n >= 3 && all > 1500 && slow / all > 0.6) setLevel(api.level + 1, 'frames over 50 ms');
+      var n = 0, all = 0, slow = 0, worst = 0;
+      for (var i = 1; i <= W.n; i++) { var j = (W.head - i + RING) % RING; if (now - ringT[j] > 2000) break; n++; all += ringDt[j]; if (ringDt[j] > 50) slow += ringDt[j]; if (ringDt[j] > worst) worst = ringDt[j]; }
+      if (api.level < 2 && n >= 3 && all > 1500 && slow / all > 0.6) { setLevel(api.level + 1, 'frames over 50 ms'); return; }
+      // recovery: smooth frames (none over 30 ms, average under 20 ms) for the whole wait -> one level back up in quality.
+      // The wait doubles each time a recovery had to be undone, so a heavy place does not flip back and forth.
+      if (api.level > 0 && n >= 20 && all > 1500 && worst < 30 && all / n < 20 && now - W.levelAt > W.recoverWait) {
+        api.level--; W.levelAt = now; W.recovered = now; resetHist();
+        try { console.info('[I\'M HERE VR] quality level ' + api.level + ': frames recovered'); } catch (e) { /* ignore */ }
+        if (o.onQuality) try { o.onQuality(api.level); } catch (e) { logErr('onQuality', e); }
+      }
     }
 
     // ---- the frame loop wrapper
@@ -283,7 +291,7 @@
     function onVis() { resetHist(); W.big1 = 0; }
     xr.addEventListener('sessionstart', function () {
       var s = xr.getSession();
-      api.level = 0; anchorYaw = null; hovered = false; hintPlaced = false; prevDown[0] = prevDown[1] = prevDown[2] = prevDown[3] = false;
+      api.level = 0; W.recoverWait = 12000; W.recovered = 0; anchorYaw = null; hovered = false; hintPlaced = false; prevDown[0] = prevDown[1] = prevDown[2] = prevDown[3] = false;
       W.start = performance.now(); resetHist(); W.big0 = W.big1 = 0; W.levelAt = 0; W.errRun = 0;
       try { xr.setFoveation(1); } catch (e) { /* ignore */ }
       api.shadow = renderer.shadowMap.enabled; renderer.shadowMap.enabled = false;

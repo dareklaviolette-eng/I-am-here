@@ -138,6 +138,15 @@
 //  - Watchdog: frames over 50 ms for most of 2 s -> onQuality(1), then 2.5 s later onQuality(2) (the page lightens its scene).
 //    Frames over 1 s (twice within 10 s), or no frame at all for 2.5 s -> the session ends and the page says why.
 //  - No allocations per frame (beyond what WebXR itself returns for poses).
+//  Per-page options (all optional; leaving them out keeps the behaviour above):
+//    panel: false        no big red Exit VR panel (the page offers its own exit target instead; B / Y still exit)
+//    exitTargets: [obj]  page meshes that exit like the panel (ray + trigger / pinch, fingertip poke). Each one's
+//                        obj.userData.exitRect = { cx, cy, w, h } is the hot area in the mesh's local plane (facing +z);
+//                        obj.userData.exitIgnore = 'left' ignores that hand (a wrist panel on that hand); hover calls
+//                        obj.userData.onExitHover(bool). Only counted while the object and its parents are visible.
+//                        api.exitTargets is the live array (push more later).
+//    exitButtons: [5]    gamepad buttons that exit (default [4, 5] = A/X and B/Y; [5] = B and Y only, so A/X stay free)
+//    hint: 'text'        a small hint shown ahead of you for ~4 s each time VR starts (fades out)
 (function () {
   'use strict';
   if (window.ImHereXR) return;
@@ -190,11 +199,27 @@
       var l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]), rayMat);
       l.visible = false; l.frustumCulled = false; l.renderOrder = 99998; l.matrixAutoUpdate = false; return l;
     });
+    var usePanel = o.panel !== false;
+    var exitBtns = o.exitButtons || [4, 5];
+    api.exitTargets = (o.exitTargets || []).slice();
+    // ---- optional entry hint (canvas drawn once; opacity fades)
+    var hint = null, hintAt = 0, hintPlaced = false;
+    if (o.hint) {
+      var hc = document.createElement('canvas'); hc.width = 512; hc.height = 72;
+      var hg = hc.getContext('2d');
+      hg.fillStyle = 'rgba(10,18,32,0.78)'; hg.beginPath(); if (hg.roundRect) hg.roundRect(2, 2, 508, 68, 34); else hg.rect(2, 2, 508, 68); hg.fill();
+      hg.fillStyle = '#fff'; hg.textAlign = 'center'; hg.textBaseline = 'middle'; hg.font = '500 30px system-ui, sans-serif';
+      hg.fillText(String(o.hint), 256, 37);
+      var htex = new THREE.CanvasTexture(hc); if (THREE.SRGBColorSpace) htex.colorSpace = THREE.SRGBColorSpace;
+      hint = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3 * 72 / 512), new THREE.MeshBasicMaterial({ map: htex, transparent: true, opacity: 1, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+      hint.name = 'imhere-exit-hint'; hint.renderOrder = 99997; hint.frustumCulled = false; hint.visible = false; hint.matrixAutoUpdate = false;
+      api.hint = hint;
+    }
     var holder = null;   // the camera's parent (the rig / dolly): WebXR poses are in its space
     function attach() {
       var p = (o.camera && o.camera.parent) || o.scene;
       if (!p || holder === p) return; holder = p;
-      p.add(btn); if (o.rays) rays.forEach(function (l) { p.add(l); });
+      p.add(btn); if (hint) p.add(hint); if (o.rays) rays.forEach(function (l) { p.add(l); });
     }
 
     // ---- exit
@@ -215,35 +240,74 @@
     api.exit = exit;
 
     // ---- per-frame: button placement, input, hit testing (all in the rig's local space; preallocated temporaries)
-    var Minv = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), d = new THREE.Vector3(),
+    var Minv = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(),
       lo = new THREE.Vector3(), ld = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), sc = new THREE.Vector3(), e3 = new THREE.Euler();
+    var TM = new THREE.Matrix4(), TMinv = new THREE.Matrix4();
     var PL = { right: 0.24, down: 0.24, ahead: 0.6 }; if (o.place) for (var k in o.place) PL[k] = o.place[k];
     var anchorYaw = null, prevDown = [false, false, false, false], hovered = false, invOk = false;
     function refSpace() { try { return xr.getReferenceSpace(); } catch (e) { return null; } }
     function inv() { if (!invOk) { Minv.copy(btn.matrix).invert(); invOk = true; } return Minv; }
-    function rayHit(frame, src, ref) {   // distance along the pointing ray to the Exit button, or -1
+    function shown(obj) { for (var x = obj; x; x = x.parent) { if (!x.visible) return false; if (x === holder) return true; } return true; }
+    function targetInv(obj) {   // a page target's matrix in the rig's space (from its last rendered matrixWorld), inverted
+      TM.copy(holder.matrixWorld).invert().multiply(obj.matrixWorld); return TMinv.copy(TM).invert();
+    }
+    // distance (rig units) along the pointing ray to the rectangle (cx, cy, hw, hh) in the plane of Mi's space, or -1
+    function rayHitIn(frame, src, ref, Mi, cx, cy, hw, hh) {
       var pose = frame.getPose(src.targetRaySpace, ref); if (!pose) return -1;
       var p = pose.transform.position, r = pose.transform.orientation;
       q.set(r.x, r.y, r.z, r.w);
-      lo.set(p.x, p.y, p.z).applyMatrix4(inv());
-      ld.set(0, 0, -1).applyQuaternion(q).transformDirection(Minv);
-      if (Math.abs(ld.z) < 1e-6) return -1;
+      lo.set(p.x, p.y, p.z); ld.set(0, 0, -1).applyQuaternion(q).add(lo);
+      lo.applyMatrix4(Mi); ld.applyMatrix4(Mi).sub(lo);   // unnormalised: t stays in rig units
+      if (Math.abs(ld.z) < 1e-9) return -1;
       var t = -lo.z / ld.z; if (t <= 0 || t > 6) return -1;
-      var x = lo.x + ld.x * t, y = lo.y + ld.y * t;
-      return Math.abs(x) <= BW / 2 + 0.01 && Math.abs(y) <= BH / 2 + 0.01 ? t : -1;
+      var x = lo.x + ld.x * t - cx, y = lo.y + ld.y * t - cy;
+      return Math.abs(x) <= hw + 0.01 && Math.abs(y) <= hh + 0.01 ? t : -1;
     }
-    function poke(frame, src, ref) {   // index fingertip pressed into the button (hand tracking)
+    function pokeIn(frame, src, ref, Mi, cx, cy, hw, hh) {   // index fingertip pressed into the rectangle (hand tracking)
       if (!src.hand || !frame.getJointPose) return false;
       var j = src.hand.get && src.hand.get('index-finger-tip'); if (!j) return false;
       var jp = frame.getJointPose(j, ref); if (!jp) return false;
-      var p = jp.transform.position; lo.set(p.x, p.y, p.z).applyMatrix4(inv());
-      return Math.abs(lo.x) <= BW / 2 && Math.abs(lo.y) <= BH / 2 && lo.z < 0.015 && lo.z > -0.04;
+      var p = jp.transform.position; lo.set(p.x, p.y, p.z).applyMatrix4(Mi);
+      return Math.abs(lo.x - cx) <= hw && Math.abs(lo.y - cy) <= hh && lo.z < 0.015 && lo.z > -0.04;
+    }
+    // what this input source points at / pokes: { t, obj } (obj null = the big panel); hit.t = -1 when nothing
+    var hit = { t: -1, obj: null, poke: false };
+    function probe(frame, src, ref) {
+      hit.t = -1; hit.obj = null; hit.poke = false;
+      if (usePanel && btn.visible) {
+        if (pokeIn(frame, src, ref, inv(), 0, 0, BW / 2, BH / 2)) { hit.poke = true; hit.t = 0.01; return hit; }
+        var t0 = rayHitIn(frame, src, ref, inv(), 0, 0, BW / 2, BH / 2); if (t0 > 0) { hit.t = t0; }
+      }
+      for (var i = 0; i < api.exitTargets.length && holder; i++) {
+        var ob = api.exitTargets[i], R = ob && ob.userData && ob.userData.exitRect;
+        if (!R || !shown(ob) || (ob.userData.exitIgnore && ob.userData.exitIgnore === src.handedness)) continue;
+        var Mi = targetInv(ob);
+        if (pokeIn(frame, src, ref, Mi, R.cx, R.cy, R.w / 2, R.h / 2)) { hit.poke = true; hit.t = 0.01; hit.obj = ob; return hit; }
+        var t1 = rayHitIn(frame, src, ref, Mi, R.cx, R.cy, R.w / 2, R.h / 2);
+        if (t1 > 0 && (hit.t < 0 || t1 < hit.t)) { hit.t = t1; hit.obj = ob; }
+      }
+      return hit;
+    }
+    function setTargetHover(ob, on) {
+      if (!!ob.userData._exitHov === on) return; ob.userData._exitHov = on;
+      if (ob.userData.onExitHover) try { ob.userData.onExitHover(on); } catch (e) { logErr('onExitHover', e); }
     }
     function placeButton(frame, ref) {   // follows the head's yaw lazily: about 0.6 m ahead, low and to the right
       var vp = frame.getViewerPose(ref); if (!vp) return;
       var tp = vp.transform.position, to = vp.transform.orientation;
       e3.setFromQuaternion(q.set(to.x, to.y, to.z, to.w), 'YXZ');
       var yaw = e3.y;
+      if (hint && !hintPlaced) {   // the entry hint: fixed in the rig, ahead of where you look when VR starts
+        hintPlaced = true; hintAt = performance.now();
+        v.set(tp.x - Math.sin(yaw) * 0.8, tp.y - 0.12, tp.z - Math.cos(yaw) * 0.8);
+        hint.matrix.compose(v, q.setFromEuler(e3.set(0.15, yaw, 0, 'YXZ')), one); hint.matrixWorldNeedsUpdate = true;
+        hint.material.opacity = 1; hint.visible = true;
+      }
+      if (hint && hint.visible) {
+        var age = performance.now() - hintAt;
+        if (age > 4000) hint.visible = false; else hint.material.opacity = age < 3000 ? 1 : 1 - (age - 3000) / 1000;
+      }
+      if (!usePanel) return;
       if (anchorYaw === null) anchorYaw = yaw;
       var dy = Math.atan2(Math.sin(yaw - anchorYaw), Math.cos(yaw - anchorYaw));
       if (Math.abs(dy) > 0.45) anchorYaw += dy - (dy > 0 ? 0.45 : -0.45);   // never more than ~26 deg from where you look
@@ -258,17 +322,18 @@
       var s = frame.session, ref = refSpace(); if (!ref) return;
       attach();
       placeButton(frame, ref);
-      var hov = false, ri = 0, srcs = s.inputSources;
+      var hov = false, ri = 0, srcs = s.inputSources, hovObj = null;
       for (var i = 0; i < srcs.length; i++) {
         var src = srcs[i];
-        // B / Y on xr-standard controllers (gamepad buttons 4 and 5): exit on press
+        // B / Y on xr-standard controllers (gamepad buttons 5, and 4 = A / X unless the page chose exitButtons): exit on press
         var gp = src.gamepad, down = false;
-        if (gp && !src.hand && gp.buttons) down = !!((gp.buttons[4] && gp.buttons[4].pressed) || (gp.buttons[5] && gp.buttons[5].pressed));
+        if (gp && !src.hand && gp.buttons) for (var b = 0; b < exitBtns.length; b++) { var gb = gp.buttons[exitBtns[b]]; if (gb && gb.pressed) down = true; }
         var was = i < 4 ? prevDown[i] : false; if (i < 4) prevDown[i] = down;
         if (down && !was) { exit('B/Y button'); return; }
-        if (btn.visible && poke(frame, src, ref)) { exit('fingertip on Exit VR'); return; }
-        var t = btn.visible ? rayHit(frame, src, ref) : -1;
-        if (t > 0) hov = true;
+        var h = probe(frame, src, ref);
+        if (h.poke) { exit('fingertip on Exit VR'); return; }
+        var t = h.t;
+        if (t > 0) { if (h.obj) hovObj = h.obj; else hov = true; }
         if (o.rays && ri < 2) {
           var l = rays[ri++], pose = frame.getPose(src.targetRaySpace, ref);
           if (pose) {
@@ -280,21 +345,23 @@
       }
       for (; ri < 2; ri++) rays[ri].visible = false;
       if (hov !== hovered) { hovered = hov; btn.material.color.setHex(hov ? 0xffd0d0 : 0xffffff); }
+      for (var k2 = 0; k2 < api.exitTargets.length; k2++) if (api.exitTargets[k2]) setTargetHover(api.exitTargets[k2], api.exitTargets[k2] === hovObj);
     }
-    function onSelectStart(ev) {   // trigger or pinch while pointing at Exit VR
+    function onSelectStart(ev) {   // trigger or pinch while pointing at Exit VR (the panel or a page exit target)
       try {
-        var ref = refSpace(); if (!ref || !ev.frame || !btn.visible) return;
-        if (rayHit(ev.frame, ev.inputSource, ref) > 0) exit('Exit VR pressed');
+        var ref = refSpace(); if (!ref || !ev.frame) return;
+        if (probe(ev.frame, ev.inputSource, ref).t > 0) exit('Exit VR pressed');
       } catch (e) { logErr('selectstart', e); }
     }
 
     // ---- watchdog (ring buffer of the last 2 s of frames; no allocations)
     var RING = 256, ringT = new Float64Array(RING), ringDt = new Float32Array(RING);
-    var W = { start: 0, last: 0, head: 0, n: 0, levelAt: 0, big0: 0, big1: 0, timer: 0, errRun: 0, errSince: 0 };
+    var W = { start: 0, last: 0, head: 0, n: 0, levelAt: 0, big0: 0, big1: 0, timer: 0, errRun: 0, errSince: 0, recoverWait: 12000, recovered: 0 };
     function resetHist() { W.head = 0; W.n = 0; W.last = 0; }
     function setLevel(n, why) {
       if (n <= api.level) return;
-      api.level = n; W.levelAt = performance.now(); resetHist();
+      var t = performance.now(); if (W.recovered && t - W.recovered < 20000) W.recoverWait = Math.min(W.recoverWait * 2, 120000);   // undid a recovery: wait longer next time
+      api.level = n; W.levelAt = t; resetHist();
       try { console.warn('[I\'M HERE VR] quality level ' + n + ': ' + why); } catch (e) { /* ignore */ }
       if (o.onQuality) try { o.onQuality(n); } catch (e) { logErr('onQuality', e); }
     }
@@ -311,11 +378,18 @@
         W.big0 = W.big1; W.big1 = now;
       }
       ringT[W.head] = now; ringDt[W.head] = dt; W.head = (W.head + 1) % RING; if (W.n < RING) W.n++;
-      if (now - W.levelAt < 2500 || api.level >= 2) return;
+      if (now - W.levelAt < 2500) return;
       // share of the last 2 s spent in frames over 50 ms (time-weighted, so it also works at a few frames per second)
-      var n = 0, all = 0, slow = 0;
-      for (var i = 1; i <= W.n; i++) { var j = (W.head - i + RING) % RING; if (now - ringT[j] > 2000) break; n++; all += ringDt[j]; if (ringDt[j] > 50) slow += ringDt[j]; }
-      if (n >= 3 && all > 1500 && slow / all > 0.6) setLevel(api.level + 1, 'frames over 50 ms');
+      var n = 0, all = 0, slow = 0, worst = 0;
+      for (var i = 1; i <= W.n; i++) { var j = (W.head - i + RING) % RING; if (now - ringT[j] > 2000) break; n++; all += ringDt[j]; if (ringDt[j] > 50) slow += ringDt[j]; if (ringDt[j] > worst) worst = ringDt[j]; }
+      if (api.level < 2 && n >= 3 && all > 1500 && slow / all > 0.6) { setLevel(api.level + 1, 'frames over 50 ms'); return; }
+      // recovery: smooth frames (none over 30 ms, average under 20 ms) for the whole wait -> one level back up in quality.
+      // The wait doubles each time a recovery had to be undone, so a heavy place does not flip back and forth.
+      if (api.level > 0 && n >= 20 && all > 1500 && worst < 30 && all / n < 20 && now - W.levelAt > W.recoverWait) {
+        api.level--; W.levelAt = now; W.recovered = now; resetHist();
+        try { console.info('[I\'M HERE VR] quality level ' + api.level + ': frames recovered'); } catch (e) { /* ignore */ }
+        if (o.onQuality) try { o.onQuality(api.level); } catch (e) { logErr('onQuality', e); }
+      }
     }
 
     // ---- the frame loop wrapper
@@ -344,7 +418,7 @@
     function onVis() { resetHist(); W.big1 = 0; }
     xr.addEventListener('sessionstart', function () {
       var s = xr.getSession();
-      api.level = 0; anchorYaw = null; hovered = false; prevDown[0] = prevDown[1] = prevDown[2] = prevDown[3] = false;
+      api.level = 0; W.recoverWait = 12000; W.recovered = 0; anchorYaw = null; hovered = false; hintPlaced = false; prevDown[0] = prevDown[1] = prevDown[2] = prevDown[3] = false;
       W.start = performance.now(); resetHist(); W.big0 = W.big1 = 0; W.levelAt = 0; W.errRun = 0;
       try { xr.setFoveation(1); } catch (e) { /* ignore */ }
       api.shadow = renderer.shadowMap.enabled; renderer.shadowMap.enabled = false;
@@ -360,7 +434,8 @@
     });
     xr.addEventListener('sessionend', function () {
       clearInterval(W.timer); clearTimeout(ending);
-      btn.visible = false; rays.forEach(function (l) { l.visible = false; });
+      btn.visible = false; if (hint) hint.visible = false; rays.forEach(function (l) { l.visible = false; });
+      api.exitTargets.forEach(function (t) { if (t) setTargetHover(t, false); });
       if (api.shadow) renderer.shadowMap.enabled = true;
       if (api.level && o.onQuality) try { o.onQuality(0); } catch (e) { logErr('onQuality', e); }
       api.level = 0;
@@ -829,12 +904,11 @@ const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.02, 2
 scene.add(camera);
 // VR safety (shared/xr-safety.js): Exit VR button, B / Y to exit, crash-proof frame loop, frame-cost watchdog.
 // In VR the cockpit displays redraw at 12 Hz (24 on screens) and the Google tiles are coarser; if frames stay slow the
-// watchdog lowers that further (level 1), then turns the real tiles off until you leave VR (level 2).
+// watchdog lowers that further (levels 1 and 2: coarser tiles, slower displays) and steps back up when frames recover.
 let xrLevel = 0, xrSceneryOff = false;
 const XRS = window.ImHereXR ? window.ImHereXR.install({ THREE, renderer, scene, camera, scale: 0.9, onQuality: (n) => {
-  xrLevel = n;
-  if (n >= 2 && sceneryOn) { xrSceneryOff = true; setScenery(false); }
-  else if (n === 0 && xrSceneryOff) { xrSceneryOff = false; setScenery(true); }
+  xrLevel = n;   // the real scenery stays on at every level: it only gets coarser (errorTarget below); levels step back down when frames recover
+  if (xrSceneryOff && !sceneryOn) { xrSceneryOff = false; setScenery(true); }
 } }) : null;
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.enablePan = false;
@@ -866,8 +940,8 @@ sky.renderOrder = -20; sky.frustumCulled = false; world.add(sky);
 function groundTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 1024; const x = c.getContext('2d');
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  x.fillStyle = '#5d6b45'; x.fillRect(0, 0, 1024, 1024);
-  const tones = ['#6b7a4b', '#7d8550', '#56693f', '#8b8158', '#9a8f63', '#4f6040', '#76804e', '#a39a70'];
+  x.fillStyle = '#7d7a72'; x.fillRect(0, 0, 1024, 1024);   // neutral: under real scenery that is still loading it reads as pavement / dry ground, not grass
+  const tones = ['#86837a', '#76736b', '#8f8a7c', '#6e6c66', '#9a9484', '#807a6c', '#727068', '#a19a88'];
   for (let i = 0; i < 260; i++) {
     x.fillStyle = tones[(rnd() * tones.length) | 0];
     x.save(); x.translate(rnd() * 1024, rnd() * 1024); x.rotate((rnd() - 0.5) * 0.3);
@@ -2089,7 +2163,7 @@ function frameStep(dt, now) {
   landing.intensity = mode === 'approach' ? 900 : 0;
   const vr = renderer.xr.isPresenting;
   if ((dispClock += dt) > (vr ? 1 / [12, 6, 3][xrLevel] : 1 / 24)) { dispClock = 0; redrawDisplays(); }   // ~24 Hz live displays (12 Hz in VR)
-  if (scenery && scenery.tiles) scenery.tiles.errorTarget = vr ? [16, 32, 64][xrLevel] : 12;   // coarser tiles in a headset
+  if (scenery && scenery.tiles) scenery.tiles.errorTarget = vr ? (F.altitude < 8000 ? [20, 40, 80] : [16, 32, 64])[xrLevel] : 12;   // coarser tiles in a headset (more so low, where cities are heaviest)
   if ((uiClock += dt) > 0.25) { uiClock = 0; sigNote(); guard('nearest airports', nearStep); guard('loc', locStep);
     $('readout').innerHTML = `<b>${r0(F.altitude).toLocaleString()}</b> ft · <b>${r0(F.airspeed)}</b> kt<br>HDG ${pad3(F.heading)}° · ${F.verticalSpeed >= 0 ? '+' : ''}${r0(F.verticalSpeed)} fpm<br>${F.phase}`; }
   if (live && (markClock += dt) > 1) { markClock = 0; refreshMark(); }   // SIGNAL drops "live" as soon as the feed goes quiet
