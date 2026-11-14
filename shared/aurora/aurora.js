@@ -13,7 +13,8 @@
 //   Aurora.setPOV(id)         'deck' | 'helm' | 'command' | 'bethere' | 'chase' | 'god'  (fade-blink; instant on first call)
 //   Aurora.update(dt)         call once per frame BEFORE renderer.render (the host owns the loop)
 //   Aurora.toast(text)        a short message (DOM via onToast on screens; an in-world panel in VR)
-//   Aurora.setScreens(data)   extra helm-screen data: { wx, temp, tracked: [{ name, info, live }] }
+//   Aurora.setScreens(data)   extra helm-screen data: { wx, temp, metric (altitude in metres), tracked: [{ name, info, live }] }
+//   Aurora.fadeOut(fn)        fade to black (blink sphere in VR), call fn, stay black (switching tours reloads the page)
 //   Aurora.setQuality(level)  0 full, 1 lighter (no field / point lights), 2 lightest; wire it to xr-safety onQuality
 //   Aurora.hover(o, d) / Aurora.select(o, d)   world-space ray (THREE.Vector3s) against the craft's controls
 //   Aurora.povs               [[id, label]]   Aurora.pov  current id   Aurora.craft / rig / camera / uiMount
@@ -27,7 +28,8 @@
 //     stops: [{ name, lat, lon, alt, heading, caption }],   // alt metres above sea level; heading degrees true
 //     index,                                // the current (or next) stop
 //     start(), next(), prev(), go?(i),      // begin / move along the tour
-//     update(dt) -> { x, y, z, heading, moving }            // where the craft is now (scene frame), heading in degrees true
+//     update(dt) -> { x, y, z, heading, moving, basis? }    // where the craft is now (scene frame), heading in degrees true;
+//                                           // basis { w, u, n }: the local horizon there (curved tours; heading is taken in it)
 //     mapPoints?() -> [{ name, x, z }]      // for the helm map (defaults to the stops through toLocal)
 //     toLocal?(lat, lon, alt) -> [x, y, z]
 //   }
@@ -79,6 +81,8 @@ function createAurora() {
   // preallocated temporaries
   const vO = new THREE.Vector3(), vD = new THREE.Vector3(), vT = new THREE.Vector3(), mInv = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ');
   const rayO = [new THREE.Vector3(), new THREE.Vector3()], rayD = [new THREE.Vector3(), new THREE.Vector3()];
+  const mBasis = new THREE.Matrix4(), qBasis = new THREE.Quaternion(), Y_AXIS = new THREE.Vector3(0, 1, 0);
+  let fadeHold = null;   // A.fadeOut: fade to black, call fn, stay black
 
   A.mount = function (o) {
     if (A.mounted) return A; A.mounted = true; opts = o || {};
@@ -337,7 +341,8 @@ function createAurora() {
     const d = { date: now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: '2-digit' }).toUpperCase(), time: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) };
     if (stop) {
       d.place = stop.name; d.lat = fmtLL(stop.lat, 'N', 'S'); d.lon = fmtLL(stop.lon, 'E', 'W');
-      d.alt = Math.round((pose ? world.altMsl ? world.altMsl() : stop.alt : stop.alt) / 0.3048).toLocaleString('en-US') + ' ft';
+      const am = pose ? world.altMsl ? world.altMsl() : stop.alt : stop.alt;   // metres above sea level
+      d.alt = extra.metric ? Math.round(am).toLocaleString('en-US') + ' m' : Math.round(am / 0.3048).toLocaleString('en-US') + ' ft';
       d.guideTitle = stop.name; d.guide = stop.caption || '';
       d.mapTitle = (world.name || 'ROUTE').toUpperCase();
       const pts = world.mapPoints ? world.mapPoints() : null; d.map = pts || []; d.stop = world.index || 0;
@@ -372,7 +377,11 @@ function createAurora() {
         if (!yawInit) { yaw = target; yawInit = true; }
         let dy = target - yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
         const maxRate = 0.35 * dt, step = THREE.MathUtils.clamp(dy * Math.min(1, dt * 1.6), -maxRate, maxRate);   // gentle: never faster than 20 deg/s
-        yaw += step; craft.rotation.set(0, yaw, 0);
+        yaw += step;
+        if (p.basis) {   // a curved tour: level in the local horizon there (as travel/shared/tour-page.js turns its rig)
+          const B = p.basis; mBasis.set(B.w[0], B.u[0], B.n[0], 0, B.w[1], B.u[1], B.n[1], 0, B.w[2], B.u[2], B.n[2], 0, 0, 0, 0, 1);
+          qBasis.setFromRotationMatrix(mBasis); craft.quaternion.setFromAxisAngle(Y_AXIS, yaw).premultiply(qBasis);
+        } else craft.rotation.set(0, yaw, 0);
       }
     }
     // sun: fixed direction in the world (afternoon, from the south-west), near the craft
@@ -398,6 +407,11 @@ function createAurora() {
       fade2D.style.opacity = vr ? '0' : String(a);
       fadeVR.visible = vr && a > 0; fadeVR.material.opacity = a;
     }
+    if (fadeHold) {
+      fadeHold.t += dt; const a = Math.min(1, fadeHold.t / 0.35);
+      fade2D.style.opacity = vr ? '0' : String(a); fadeVR.visible = vr; fadeVR.material.opacity = a;
+      if (a >= 1 && fadeHold.fn) { const f = fadeHold.fn; fadeHold.fn = null; try { f(); } catch (er) { console.error('[Aurora] fadeOut', er); } }
+    }
     // toast (VR panel)
     if (toastMesh.visible && time > toastUntil) toastMesh.visible = false;
     if (vr) xrStep(now);
@@ -405,6 +419,7 @@ function createAurora() {
     if (interior.root.visible && time - screensAt > 1) { screensAt = time; screens.update(screenData()); }
   };
   A.isBlinking = () => !!blink;
+  A.fadeOut = function (fn) { if (!fadeHold) fadeHold = { t: 0, fn }; return A; };   // e.g. before switching tours (the page reloads)
   A.hovered = () => ({ ring: hover.ring, holo: hover.holo, steps: hover.steps });
   A.screenData = () => screenData();
   return A;

@@ -1,7 +1,10 @@
 // XR Aurora · fallback outside world: a gradient sky dome (always) and a stylised glacial valley (only until real
 // scenery, e.g. Google Photorealistic 3D Tiles, shows near the camera). Rendered, not real: pages label it as such.
 // createBackdrop({ axis: [[x, z], ...] (the valley's centre line, scene metres), floorY, rimY, extent, centre: [x, z] })
-//   -> { group, sky, terrain, update(camera), setTerrain(bool) }
+//   -> { group, sky, terrain, update(camera, quat?), setTerrain(bool), setGrade(gold 0..1, night 0..1) }
+// createBackdrop({ terrainMesh, sunDir }): the sky only, with a tour's own fallback terrain (travel/<park>/terrain.js) in place
+//   of the stylised valley. update(camera, quat) also turns the sky into the local horizon (curved tours).
+// setGrade: rendered golden-hour / night grades of the sky (labelled by the page).
 import * as THREE from 'three';
 
 function hash(x, y) { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); }
@@ -13,22 +16,35 @@ function vnoise(x, y) {
 function fbm(x, y, o = 5) { let s = 0, a = 0.5; for (let i = 0; i < o; i++) { s += a * vnoise(x, y); x = x * 2.03 + 17.1; y = y * 2.03 + 9.2; a *= 0.5; } return s; }
 const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-export function createBackdrop({ axis, floorY = 1220, rimY = 2250, extent = 26000, centre = [0, 0], domes = [], clear = [], sunDir = [0.45, 0.62, -0.64] } = {}) {
+export function createBackdrop({ axis, floorY = 1220, rimY = 2250, extent = 26000, centre = [0, 0], domes = [], clear = [], sunDir = [0.45, 0.62, -0.64], terrainMesh = null } = {}) {
   const group = new THREE.Group(); group.name = 'aurora-backdrop';
   // ---- sky: big inverted sphere, gradient + sun glow; drawn first, never writes depth
   const sunV = new THREE.Vector3(...sunDir).normalize();
   const sky = new THREE.Mesh(new THREE.SphereGeometry(60000, 32, 16), new THREE.ShaderMaterial({
-    uniforms: { sun: { value: sunV } }, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+    uniforms: { sun: { value: sunV }, gold: { value: 0 }, night: { value: 0 } }, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
     vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }',
-    fragmentShader: `uniform vec3 sun; varying vec3 vD;
+    fragmentShader: `uniform vec3 sun; uniform float gold, night; varying vec3 vD;
       void main(){ float h = clamp(vD.y, -0.2, 1.0);
         vec3 zen = vec3(0.17, 0.38, 0.72), hor = vec3(0.78, 0.86, 0.93), gnd = vec3(0.42, 0.45, 0.43);
         vec3 c = h > 0.0 ? mix(hor, zen, pow(h, 0.55)) : mix(hor, gnd, min(1.0, -h * 6.0));
         float s = max(dot(normalize(vD), sun), 0.0); c += vec3(1.0, 0.86, 0.62) * (pow(s, 600.0) * 2.5 + pow(s, 12.0) * 0.18);
+        c = mix(c, h > 0.0 ? mix(vec3(0.95, 0.77, 0.56), vec3(0.23, 0.31, 0.5), pow(h, 0.55)) : vec3(0.69, 0.54, 0.42), gold * 0.85);
+        c = mix(c, h > 0.0 ? mix(vec3(0.045, 0.075, 0.15), vec3(0.008, 0.016, 0.045), pow(h, 0.5)) : vec3(0.016, 0.027, 0.055), night);
         gl_FragColor = vec4(c, 1.0); }`,
   }));
   sky.renderOrder = -20; sky.frustumCulled = false; sky.name = 'aurora-sky'; group.add(sky);
 
+  if (terrainMesh) {   // a tour's own fallback terrain: no stylised valley
+    group.add(terrainMesh);
+    const camW = new THREE.Vector3();
+    return {
+      group, sky, terrain: terrainMesh,
+      heightAt: () => 0,
+      update(camera, quat) { camera.getWorldPosition(camW); sky.position.copy(camW); if (quat) sky.quaternion.copy(quat); sky.updateMatrixWorld(); },
+      setTerrain(on) { terrainMesh.visible = !!on; },
+      setGrade(gold, night) { sky.material.uniforms.gold.value = gold; sky.material.uniforms.night.value = night; },
+    };
+  }
   // ---- terrain: one heightfield mesh (vertex colours; haze baked by distance from the centre)
   const N = 220, half = extent / 2, pos = new Float32Array((N + 1) * (N + 1) * 3), col = new Float32Array((N + 1) * (N + 1) * 3);
   const segs = []; for (let i = 0; i + 1 < axis.length; i++) segs.push([axis[i], axis[i + 1]]);
@@ -66,7 +82,8 @@ export function createBackdrop({ axis, floorY = 1220, rimY = 2250, extent = 2600
   return {
     group, sky, terrain,
     heightAt(x, z) { const i = Math.round((x - centre[0] + half) / extent * N), j = Math.round((z - centre[1] + half) / extent * N); if (i < 0 || j < 0 || i > N || j > N) return floorY; return H[j * (N + 1) + i]; },
-    update(camera) { camera.getWorldPosition(camW); sky.position.copy(camW); sky.updateMatrixWorld(); },
+    update(camera, quat) { camera.getWorldPosition(camW); sky.position.copy(camW); if (quat) sky.quaternion.copy(quat); sky.updateMatrixWorld(); },
     setTerrain(on) { terrain.visible = !!on; },
+    setGrade(gold, night) { sky.material.uniforms.gold.value = gold; sky.material.uniforms.night.value = night; },
   };
 }
